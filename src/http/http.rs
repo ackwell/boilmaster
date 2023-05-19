@@ -6,7 +6,7 @@ use futures::Future;
 use serde::Deserialize;
 use tower_http::trace::TraceLayer;
 
-use super::{admin, asset, search, service, sheets};
+use super::{admin, api1, asset, search, service, sheets};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -34,6 +34,8 @@ pub async fn serve(
 
 	let router = Router::new()
 		.nest("/admin", admin::router(config.admin))
+		.nest("/api/1", api1::router().with_state(()))
+		// old:
 		.nest("/asset", asset::router())
 		.nest("/sheets", sheets::router())
 		.nest("/search", search::router())
