@@ -1,4 +1,3 @@
-use anyhow::Context;
 use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Json, Router};
 
 use crate::utility::anyhow::Anyhow;
@@ -14,10 +13,7 @@ async fn list(
 	VersionQuery(version_key): VersionQuery,
 	State(data): State<service::Data>,
 ) -> Result<impl IntoResponse> {
-	let excel = data
-		.version(version_key)
-		.context("TODO: handle this better - the data isn't ready yet? 503?")?
-		.excel();
+	let excel = data.version(version_key)?.excel();
 
 	let list = excel.list().anyhow()?;
 	let mut names = list

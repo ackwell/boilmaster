@@ -1,7 +1,7 @@
 use axum::{extract::rejection::QueryRejection, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 
-use crate::{asset, schema, search};
+use crate::{asset, data, schema, search};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -10,6 +10,9 @@ pub enum Error {
 
 	#[error("invalid request: {0}")]
 	Invalid(String),
+
+	#[error("unavailable: {0}")]
+	Unavailable(String),
 
 	#[error("internal server error")]
 	Other(#[from] anyhow::Error),
@@ -24,6 +27,17 @@ impl From<asset::Error> for Error {
 				Self::Invalid(error.to_string())
 			}
 			AE::Failure(inner) => Self::Other(inner),
+		}
+	}
+}
+
+impl From<data::Error> for Error {
+	fn from(error: data::Error) -> Self {
+		use data::Error as DE;
+		match error {
+			DE::UnknownVersion(..) | DE::UnknownLanguage(..) => Self::Invalid(error.to_string()),
+			DE::PendingVersion(..) => Self::Unavailable(error.to_string()),
+			DE::Failure(inner) => Self::Other(inner),
 		}
 	}
 }
@@ -81,6 +95,7 @@ impl IntoResponse for Error {
 		let status_code = match self {
 			Self::NotFound(..) => StatusCode::NOT_FOUND,
 			Self::Invalid(..) => StatusCode::BAD_REQUEST,
+			Self::Unavailable(..) => StatusCode::SERVICE_UNAVAILABLE,
 			Self::Other(..) => StatusCode::INTERNAL_SERVER_ERROR,
 		};
 
