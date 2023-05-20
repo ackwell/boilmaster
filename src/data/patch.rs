@@ -9,13 +9,14 @@ use std::{
 	},
 };
 
-use anyhow::Result;
 use figment::value::magic::RelativePathBuf;
 use futures::future::try_join_all;
 use serde::Deserialize;
 use tokio::sync::{Notify, Semaphore};
 
-use crate::version::Patch;
+use crate::{utility::anyhow::Anyhow, version::Patch};
+
+use super::error::Result;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -48,7 +49,7 @@ impl Patcher {
 	) -> Result<HashMap<String, PathBuf>> {
 		// TODO: This seems silly to run on a regular basis given it'll only actually do something like 4 times ever.
 		let repository_directory = self.directory.join(repository_name);
-		fs::create_dir_all(&repository_directory)?;
+		fs::create_dir_all(&repository_directory).anyhow()?;
 
 		// Ensure each of the paths in the list exists.
 		let pending_patches = patches.iter().map(|patch| {
@@ -117,7 +118,7 @@ impl Patcher {
 		let metadata = match path.metadata() {
 			// NotFound implies the patch doesn't exist, and should be downloaded.
 			Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(true),
-			other => other?,
+			other => other.anyhow()?,
 		};
 
 		// If there's a size mismatch, it should be re-downloaded (likely a partial completion).
@@ -142,10 +143,10 @@ impl Patcher {
 		tracing::info!("downloading patch {}", patch.name);
 
 		// Create the target file before opening any connections.
-		let mut target_file = fs::File::create(target_path)?;
+		let mut target_file = fs::File::create(target_path).anyhow()?;
 
 		// Initiate a request to the patch file
-		let mut response = self.client.get(&patch.url).send().await?;
+		let mut response = self.client.get(&patch.url).send().await.anyhow()?;
 		let content_length = response.content_length().ok_or_else(|| {
 			anyhow::anyhow!("Could not find patch content length for {}.", patch.name)
 		})?;
@@ -153,9 +154,9 @@ impl Patcher {
 		// Stream the file to disk.
 		let mut position = 0;
 		let mut last_report = 0.;
-		while let Some(chunk) = response.chunk().await? {
+		while let Some(chunk) = response.chunk().await.anyhow()? {
 			// this is probably blocking - is it worth doing some of this on a spawn_blocking?
-			target_file.write_all(&chunk)?;
+			target_file.write_all(&chunk).anyhow()?;
 
 			position += u64::try_from(chunk.len()).unwrap();
 			let report_pos = f64::round((position as f64 / content_length as f64) * 20.) * 5.;

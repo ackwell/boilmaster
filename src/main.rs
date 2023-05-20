@@ -44,7 +44,8 @@ async fn main() {
 
 	tokio::try_join!(
 		version.start(shutdown_token.child_token()),
-		data.start(shutdown_token.child_token(), &version),
+		data.start(shutdown_token.child_token(), &version)
+			.map_err(anyhow::Error::from),
 		search
 			.start(shutdown_token.child_token())
 			.map_err(anyhow::Error::from),

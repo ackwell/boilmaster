@@ -3,7 +3,6 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
-use anyhow::{anyhow, Result};
 use futures::future::try_join_all;
 use ironworks::{
 	excel::{Excel, Language},
@@ -16,7 +15,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::version::{self, VersionKey};
 
-use super::{language::LanguageString, patch};
+use super::{
+	error::{Error, Result},
+	language::LanguageString,
+	patch,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -35,7 +38,12 @@ pub struct Data {
 
 	patcher: patch::Patcher,
 
-	versions: RwLock<HashMap<VersionKey, Arc<Version>>>,
+	versions: RwLock<HashMap<VersionKey, VersionState>>,
+}
+
+enum VersionState {
+	Pending,
+	Ready(Arc<Version>),
 }
 
 impl Data {
@@ -81,6 +89,7 @@ impl Data {
 		version: &version::Manager,
 		versions: Vec<VersionKey>,
 	) -> Result<()> {
+		// Filter the incoming version list down to the ones we're not already aware of.
 		let known_keys = self
 			.versions
 			.read()
@@ -89,12 +98,30 @@ impl Data {
 			.cloned()
 			.collect::<HashSet<_>>();
 
-		let prepares = versions
+		let to_prepare = versions
 			.into_iter()
 			.filter(|key| !known_keys.contains(key))
-			.map(|key| self.prepare_version(version, key));
+			.collect::<HashSet<_>>();
 
-		try_join_all(prepares).await?;
+		// Mark the versions as being prepared.
+		self.versions
+			.write()
+			.expect("poisoned")
+			.extend(to_prepare.iter().map(|key| (*key, VersionState::Pending)));
+
+		// Run the preparations.
+		let prepares = to_prepare
+			.iter()
+			.map(|key| self.prepare_version(version, *key));
+
+		if let Err(error) = try_join_all(prepares).await {
+			// An error occured, roll back any preparation markers for this batch that are still sitting around.
+			self.versions.write().expect("poisoned").retain(
+				|key, state| !matches!((key, state), (key, VersionState::Pending) if to_prepare.contains(key)),
+			);
+
+			return Err(error);
+		}
 
 		Ok(())
 	}
@@ -105,6 +132,7 @@ impl Data {
 		version: &version::Manager,
 		version_key: VersionKey,
 	) -> Result<()> {
+		// Preparation only happens when we're told that a version exists, so anything going wrong _here_ is a hefty failure.
 		let patch_list = version.patch_list(version_key)?;
 
 		// Start getting paths for all the patches required for this version, downloading if required.
@@ -118,7 +146,10 @@ impl Data {
 					.map(|patch| {
 						let zipatch_patch = zipatch::Patch {
 							path: patch_paths.remove(&patch.name).ok_or_else(|| {
-								anyhow!("patch {} missing in patcher path response", patch.name)
+								anyhow::anyhow!(
+									"patch {} missing in patcher path response",
+									patch.name
+								)
 							})?,
 							name: patch.name,
 						};
@@ -148,7 +179,7 @@ impl Data {
 		self.versions
 			.write()
 			.expect("poisoned")
-			.insert(version_key, Arc::new(version));
+			.insert(version_key, VersionState::Ready(Arc::new(version)));
 
 		// Broadcast the update.
 		// NOTE: This is performed after each version rather than when all versions
@@ -160,17 +191,26 @@ impl Data {
 	}
 
 	// TODO: this doesn't disambiguate between "version is unknown" and "version isn't ready yet", and there's a lot of consumers that are .context'ing this Option. Should probably disambiguate the two error cases and raise a proper error type that can be handled by other services appropriately
-	pub fn version(&self, version: VersionKey) -> Option<Arc<Version>> {
-		self.versions
-			.read()
-			.expect("poisoned")
+	pub fn version(&self, version: VersionKey) -> Result<Arc<Version>> {
+		let versions = self.versions.read().expect("poisoned");
+
+		let state = versions
 			.get(&version)
-			.cloned()
+			.ok_or_else(|| Error::UnknownVersion(version))?;
+
+		match state {
+			VersionState::Ready(version) => Ok(version.clone()),
+			VersionState::Pending => Err(Error::PendingVersion(version)),
+		}
 	}
 
 	fn broadcast_version_list(&self) {
 		let versions = self.versions.read().expect("poisoned");
-		let keys = versions.keys().cloned().collect::<Vec<_>>();
+		let keys = versions
+			.iter()
+			.filter(|(_, state)| matches!(state, VersionState::Ready(..)))
+			.map(|(key, _)| *key)
+			.collect::<Vec<_>>();
 
 		self.channel.send_if_modified(|value| {
 			if &keys != value {
