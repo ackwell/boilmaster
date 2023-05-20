@@ -34,7 +34,13 @@ pub async fn serve(
 
 	let router = Router::new()
 		.nest("/admin", admin::router(config.admin))
-		.nest("/api/1", api1::router().with_state(()))
+		.nest(
+			"/api/1",
+			api1::router().with_state(api1::State {
+				data: data.clone(),
+				version: version.clone(),
+			}),
+		)
 		// old:
 		.nest("/asset", asset::router())
 		.nest("/sheets", sheets::router())

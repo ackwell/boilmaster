@@ -1,10 +1,30 @@
-use axum::{debug_handler, response::IntoResponse, routing::get, Router};
+use anyhow::Context;
+use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Json, Router};
 
-pub fn router() -> Router {
+use crate::utility::anyhow::Anyhow;
+
+use super::{error::Result, extract::VersionQuery, service};
+
+pub fn router() -> Router<service::State> {
 	Router::new().route("/", get(list))
 }
 
-#[debug_handler]
-async fn list() -> impl IntoResponse {
-	"sheet list"
+#[debug_handler(state = service::State)]
+async fn list(
+	VersionQuery(version_key): VersionQuery,
+	State(data): State<service::Data>,
+) -> Result<impl IntoResponse> {
+	let excel = data
+		.version(version_key)
+		.context("TODO: handle this better - the data isn't ready yet? 503?")?
+		.excel();
+
+	let list = excel.list().anyhow()?;
+	let mut names = list
+		.iter()
+		.map(|name| name.into_owned())
+		.collect::<Vec<_>>();
+	names.sort();
+
+	Ok(Json(names))
 }
