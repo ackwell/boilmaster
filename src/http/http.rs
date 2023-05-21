@@ -38,6 +38,7 @@ pub async fn serve(
 			"/api/1",
 			api1::router().with_state(api1::State {
 				data: data.clone(),
+				schema: schema.clone(),
 				version: version.clone(),
 			}),
 		)
