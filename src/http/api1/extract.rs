@@ -46,5 +46,9 @@ where
 }
 
 #[derive(FromRequestParts)]
+#[from_request(via(axum::extract::Path), rejection(Error))]
+pub struct Path<T>(pub T);
+
+#[derive(FromRequestParts)]
 #[from_request(via(axum::extract::Query), rejection(Error))]
 pub struct Query<T>(pub T);

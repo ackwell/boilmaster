@@ -1,4 +1,9 @@
-use axum::{extract::rejection::QueryRejection, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+	extract::rejection::{PathRejection, QueryRejection},
+	http::StatusCode,
+	response::IntoResponse,
+	Json,
+};
 use serde::Serialize;
 
 use crate::{asset, data, schema, search};
@@ -63,6 +68,15 @@ impl From<search::Error> for Error {
 			| SE::SchemaGameMismatch(..)
 			| SE::UnknownCursor(..) => Self::Invalid(error.to_string()),
 			SE::Failure(inner) => Self::Other(inner),
+		}
+	}
+}
+
+impl From<PathRejection> for Error {
+	fn from(value: PathRejection) -> Self {
+		match value {
+			PathRejection::FailedToDeserializePathParams(error) => Self::Invalid(error.body_text()),
+			other => Self::Other(other.into()),
 		}
 	}
 }

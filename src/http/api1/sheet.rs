@@ -1,11 +1,32 @@
 use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Json, Router};
+use serde::Deserialize;
 
 use crate::utility::anyhow::Anyhow;
 
-use super::{error::Result, extract::VersionQuery, service};
+use super::{
+	error::Result,
+	extract::{Path, VersionQuery},
+	service,
+};
 
 pub fn router() -> Router<service::State> {
-	Router::new().route("/", get(list))
+	Router::new()
+		.route("/", get(list))
+		.route("/:sheet", get(sheet))
+		.route("/:sheet/:row", get(row))
+		.route("/:sheet/:row/:subrow", get(row))
+}
+
+#[derive(Deserialize)]
+struct SheetPath {
+	sheet: String,
+}
+
+#[derive(Deserialize)]
+struct RowPath {
+	sheet: String,
+	row: u32,
+	subrow: Option<u16>,
 }
 
 #[debug_handler(state = service::State)]
@@ -23,4 +44,14 @@ async fn list(
 	names.sort();
 
 	Ok(Json(names))
+}
+
+#[debug_handler(state = service::State)]
+async fn sheet(Path(path): Path<SheetPath>) -> impl IntoResponse {
+	"todo"
+}
+
+#[debug_handler(state = service::State)]
+async fn row(Path(path): Path<RowPath>) -> impl IntoResponse {
+	"todo"
 }
