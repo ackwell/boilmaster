@@ -25,7 +25,7 @@ pub struct Config {
 
 pub struct Patcher {
 	directory: PathBuf,
-	semaphore: Semaphore,
+	semaphore: Arc<Semaphore>,
 	client: reqwest::Client,
 	known_patches: Mutex<HashMap<PathBuf, Arc<(AtomicBool, Notify)>>>,
 }
@@ -34,8 +34,12 @@ impl Patcher {
 	pub fn new(config: Config) -> Self {
 		Self {
 			directory: config.directory.relative(),
-			semaphore: Semaphore::new(config.concurrency),
-			client: reqwest::Client::new(),
+			semaphore: Arc::new(Semaphore::new(config.concurrency)),
+			client: reqwest::Client::builder()
+				// TODO: make this constant/configurable?
+				.user_agent("FFXIV PATCH CLIENT")
+				.build()
+				.expect("Failed to build reqwest client."),
 			known_patches: Default::default(),
 		}
 	}
@@ -102,8 +106,16 @@ impl Patcher {
 		}
 
 		// This task is responsible for checking the patch file - check it and download if required.
+		// Perform downloads within a task to reduce contention on the outer context.
 		if self.should_fetch_patch(patch, path)? {
-			self.download_patch(patch, path).await?;
+			let semaphore = self.semaphore.clone();
+			let client = self.client.clone();
+			let patch = patch.clone();
+			let path = path.to_owned();
+			let handle = tokio::spawn(async move {
+				download_patch(semaphore, client, patch.clone(), path.to_owned()).await
+			});
+			handle.await??;
 		}
 
 		// The patch is ready by this point, mark it as such and notify any other tasks waiting on it.
@@ -135,41 +147,50 @@ impl Patcher {
 		// TODO: I _imagine_ this should probably actually do something about non-file paths, but for now it'll fail out somewhere else.
 		Ok(!(path.is_file() && size_matches))
 	}
+}
 
-	async fn download_patch(&self, patch: &Patch, target_path: &Path) -> Result<()> {
-		let permit = self.semaphore.acquire().await.unwrap();
+async fn download_patch(
+	semaphore: Arc<Semaphore>,
+	client: reqwest::Client,
+	patch: Patch,
+	target_path: PathBuf,
+) -> Result<()> {
+	let permit = semaphore.acquire().await.unwrap();
 
-		tracing::info!("downloading patch {}", patch.name);
+	tracing::info!("downloading patch {}", patch.name);
 
-		// Create the target file before opening any connections.
-		let mut target_file = fs::File::create(target_path)?;
+	// Create the target file before opening any connections.
+	let mut target_file = fs::File::create(target_path)?;
 
-		// Initiate a request to the patch file
-		let mut response = self.client.get(&patch.url).send().await?;
-		let content_length = response.content_length().ok_or_else(|| {
-			anyhow::anyhow!("Could not find patch content length for {}.", patch.name)
-		})?;
+	// Initiate a request to the patch file
+	let mut response = client.get(patch.url).send().await?;
 
-		// Stream the file to disk.
-		let mut position = 0;
-		let mut last_report = 0.;
-		while let Some(chunk) = response.chunk().await? {
-			// this is probably blocking - is it worth doing some of this on a spawn_blocking?
-			target_file.write_all(&chunk)?;
+	// uh oh
+	tracing::debug!("{} status: {}", patch.name, response.status());
 
-			position += u64::try_from(chunk.len()).unwrap();
-			let report_pos = f64::round((position as f64 / content_length as f64) * 20.) * 5.;
-			if report_pos > last_report {
-				tracing::debug!(
-					"{}: {position}/{content_length} ({report_pos}%)",
-					patch.name
-				);
-				last_report = report_pos;
-			}
+	let content_length = response.content_length().ok_or_else(|| {
+		anyhow::anyhow!("Could not find patch content length for {}.", patch.name)
+	})?;
+
+	// Stream the file to disk.
+	let mut position = 0;
+	let mut last_report = 0.;
+	while let Some(chunk) = response.chunk().await? {
+		// this is probably blocking - is it worth doing some of this on a spawn_blocking?
+		target_file.write_all(&chunk)?;
+
+		position += u64::try_from(chunk.len()).unwrap();
+		let report_pos = f64::round((position as f64 / content_length as f64) * 20.) * 5.;
+		if report_pos > last_report {
+			tracing::debug!(
+				"{}: {position}/{content_length} ({report_pos}%)",
+				patch.name
+			);
+			last_report = report_pos;
 		}
-
-		drop(permit);
-
-		Ok(())
 	}
+
+	drop(permit);
+
+	Ok(())
 }
