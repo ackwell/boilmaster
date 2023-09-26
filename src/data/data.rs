@@ -60,15 +60,20 @@ impl Data {
 	}
 
 	pub async fn start(&self, cancel: CancellationToken, version: &version::Manager) -> Result<()> {
+		let execute_prepare = |versions: Vec<VersionKey>| async {
+			select! {
+				result = self.prepare_new_versions(version, versions) => result,
+				_ = cancel.cancelled() => Ok(()),
+			}
+		};
+
 		let mut receiver = version.subscribe();
-		self.prepare_new_versions(version, receiver.borrow().clone())
-			.await?;
+
+		execute_prepare(receiver.borrow().clone()).await?;
 
 		loop {
 			select! {
-				Ok(_) = receiver.changed() => {
-					self.prepare_new_versions(version, receiver.borrow().clone()).await?
-				}
+				Ok(_) = receiver.changed() => execute_prepare(receiver.borrow().clone()).await?,
 				_ = cancel.cancelled() => break,
 			}
 		}
