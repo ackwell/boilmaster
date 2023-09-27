@@ -10,6 +10,8 @@ use graphql_client::{GraphQLQuery, Response};
 use serde::Deserialize;
 use tokio::sync::watch;
 
+use crate::version::Patch;
+
 // TODO: As-is this query can only fetch one repository per request. May be possible to programatically merge multiple into one query with a more struct-driven query system like cynic.
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -65,14 +67,70 @@ impl Provider {
 	}
 
 	/// Get the list of patch files for the specified repository that arrive at the specified version.
-	// pub async fn patch_list(&self, repository: &str, version: &str) -> Result<()> {
-	// 	// get the versions for the repository
-	// 	// check that the version specified exists in our current view
-	// 	// if it doesn't, invalidate + re-fetch
-	// 	// if it still doesn't, fail out
-	// 	// resolve to root patch and return
-	// 	Ok(())
-	// }
+	pub async fn patch_list(&self, repository: String, version: &str) -> Result<Vec<Patch>> {
+		let repository_data = self.repository_data(repository, false).await?;
+
+		// Build a lookup of versions by their name.
+		let versions = repository_data
+			.versions
+			.iter()
+			.map(|version| (version.version_string.clone(), version))
+			.collect::<HashMap<_, _>>();
+
+		// TODO: this next_version handling effectively results in erroneous links causing empty or partial patch lists. consider if that's a problem.
+		let mut patches = vec![];
+		let mut next_version = versions.get(version).copied();
+
+		while let Some(version) = next_version {
+			// Get this version's patch - if there's anything other than exactly one patch, something has gone funky.
+			let patch = match version.patches.as_slice() {
+				[patch] => patch,
+				_ => todo!("TODO: what even would cause this? i def. need to handle this as an exceptional case."),
+			};
+
+			// Record this patch file.
+			patches.push(Patch {
+				name: version.version_string.clone(),
+				url: patch.url.clone(),
+				size: patch.size.try_into().unwrap(),
+			});
+
+			// Grab the prerequsite versions data, split along is_active - we'll always
+			// priotitise selecting active versions.
+			let (mut active_versions, inactive_versions) = version
+				.prerequisite_versions
+				.iter()
+				.filter_map(|specifier| {
+					// Skip any patches that we've already seen, in case there's a dependency cycle.
+					if patches
+						.iter()
+						.any(|patch| patch.name == specifier.version_string)
+					{
+						return None;
+					}
+
+					versions.get(&specifier.version_string)
+				})
+				.partition::<Vec<&repository_query::RepositoryQueryRepositoryVersions>, _>(
+					|version| version.is_active,
+				);
+
+			// TODO: What does >1 active version imply? It seems to occur in places where it implies skipping a whole bunch of intermediary patches - i have to assume hotfixes. Is it skipping a bunch of .exe updates because they get bundled into the next main patch file as well?
+			// It seems like it _can_ just be a bug; for sanity purposes, we're sorting
+			// the array first to ensure that the "newest" active version is picked to
+			// avoid accidentally skipping a bunch of patches. Patch names are string-sortable.
+			active_versions.sort_by(|a, b| a.version_string.cmp(&b.version_string).reverse());
+
+			// Try to select the active version to record next. If the current version
+			// is inactive, allow falling back to inactive prerequesites as well.
+			next_version = active_versions.first().cloned();
+			if !version.is_active {
+				next_version = next_version.or_else(|| inactive_versions.first().cloned());
+			}
+		}
+
+		Ok(patches)
+	}
 
 	/// Fetch data for the specified repository from thaliak. Unless `bypass_cache: true`
 	/// is passed, values will be retrieved from a cache if available.

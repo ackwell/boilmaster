@@ -1,13 +1,25 @@
 use std::{
 	fmt,
+	hash::{Hash, Hasher},
 	num::ParseIntError,
 	str::FromStr,
 };
 
+use seahash::SeaHasher;
 use serde::{de, Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VersionKey(u64);
+
+impl VersionKey {
+	pub(super) fn from_latest_patches(latest_patches: &[impl Hash]) -> Self {
+		let mut hasher = SeaHasher::new();
+		latest_patches.hash(&mut hasher);
+		let hash = hasher.finish();
+
+		Self(hash)
+	}
+}
 
 impl fmt::Display for VersionKey {
 	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
