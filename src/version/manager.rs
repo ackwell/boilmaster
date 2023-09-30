@@ -1,12 +1,17 @@
-use std::{collections::HashMap, sync::RwLock};
+use std::{
+	collections::{BTreeMap, HashMap},
+	fs,
+	sync::RwLock,
+};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
+use figment::value::magic::RelativePathBuf;
 use futures::future::try_join_all;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use super::{key::VersionKey, patch::Patch, thaliak, version::Version};
+use super::{key::VersionKey, patch::Patch, persist::JsonFile, thaliak};
 
 pub type PatchList = Vec<(String, Vec<Patch>)>;
 
@@ -15,7 +20,7 @@ pub struct Config {
 	thaliak: thaliak::Config,
 
 	// interval
-	// directory
+	directory: RelativePathBuf,
 	repositories: Vec<String>,
 }
 
@@ -23,26 +28,32 @@ pub struct Config {
 pub struct Manager {
 	thaliak: thaliak::Provider,
 
+	file: JsonFile,
+
 	channel: watch::Sender<Vec<VersionKey>>,
 
 	repositories: Vec<String>,
-	versions: RwLock<HashMap<VersionKey, Version>>,
+	// TODO: Consider using PatchList in-memory - while the map is good on disk, i'm basically just mapping to a vector format constantly at runtime
+	versions: RwLock<HashMap<VersionKey, PatchList>>,
 }
 
 impl Manager {
 	pub fn new(config: Config) -> Result<Self> {
+		let directory = config.directory.relative();
+		fs::create_dir_all(&directory)?;
+
 		let (sender, _receiver) = watch::channel(vec![]);
 
-		let manager = Self {
+		Ok(Self {
 			thaliak: thaliak::Provider::new(config.thaliak),
+
+			file: JsonFile::new(directory.join("versions.json")),
 
 			channel: sender,
 
 			repositories: config.repositories,
 			versions: Default::default(),
-		};
-
-		Ok(manager)
+		})
 	}
 
 	/// Subscribe to changes to the version list.
@@ -63,25 +74,46 @@ impl Manager {
 			.get(&key)
 			.with_context(|| format!("unknown version {key}"))?;
 
-		// TODO: A version made on repository list [a, b] will create a patch list [a] on an updated repository list of [a, X, b]. I'm not convinced that's a problem.
-		let patch_list = self
-			.repositories
-			.iter()
-			.map_while(|repository_name| {
-				version
-					.patches()
-					.get(repository_name)
-					.map(|patches| (repository_name.clone(), patches.clone()))
-			})
-			.collect::<Vec<_>>();
-
-		Ok(patch_list)
+		Ok(version.clone())
 	}
 
 	/// Start the service.
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
+		self.hydrate().await?;
+
 		// TODO: timer and all that shmuck
 		self.update().await?;
+
+		Ok(())
+	}
+
+	/// Hydrate version list from local configuration.
+	async fn hydrate(&self) -> Result<()> {
+		let persisted_versions = self.file.read::<HashMap<VersionKey, PersitedVersion>>()?;
+
+		let pending_hydrated_versions =
+			persisted_versions
+				.into_iter()
+				.map(|(key, version)| async move {
+					// TODO: A version made on repository list [a, b] will create a patch list [a] on an updated repository list of [a, X, b]. I'm not convinced that's a problem.
+					let latest_patches = self.repositories.iter().map_while(|repository_name| {
+						version
+							.patches
+							.get(repository_name)
+							.map(|patch| (repository_name.clone(), patch))
+					});
+					Ok((key, self.build_patch_list(latest_patches).await?))
+				});
+		let hydrated_versions = try_join_all(pending_hydrated_versions).await?;
+
+		let mut versions = self.versions.write().expect("poisoned");
+		for (key, patch_list) in hydrated_versions {
+			// TODO: save out names.
+			versions.insert(key, patch_list);
+		}
+		drop(versions);
+
+		self.broadcast_version_list();
 
 		Ok(())
 	}
@@ -97,29 +129,77 @@ impl Manager {
 		let key = VersionKey::from_latest_patches(&latest_patches);
 
 		// Build a mapping of patch lists keyed by repository name.
-		// TODO: I'm not happy about zipping this twice, but it's so much cleaner to write than the absolute jank required by doing it all in one go.
-		let pending_patch_lists = latest_patches
-			.iter()
-			.zip(&self.repositories)
-			.map(|(patch, repository)| self.thaliak.patch_list(repository.clone(), patch));
-		let patch_lists = try_join_all(pending_patch_lists).await?;
-		let version_patches = self
-			.repositories
-			.clone()
-			.into_iter()
-			.zip(patch_lists)
-			.collect::<HashMap<_, _>>();
+
+		let patch_list = self
+			.build_patch_list(self.repositories.iter().cloned().zip(latest_patches))
+			.await?;
 
 		let mut versions = self.versions.write().expect("poisoned");
-		let version = versions.entry(key).or_insert_with(|| Version::new());
-		version.update(version_patches);
+		versions.insert(key, patch_list);
 		drop(versions);
 
 		// TODO: Update the LATEST sigil
 
-		// TODO: persist
+		self.save()?;
 
 		self.broadcast_version_list();
+
+		Ok(())
+	}
+
+	async fn build_patch_list(
+		&self,
+		latest_patches: impl IntoIterator<Item = (String, impl AsRef<str>)>,
+	) -> Result<PatchList> {
+		let pending_patch_list =
+			latest_patches
+				.into_iter()
+				.map(|(repository_name, latest_patch)| async move {
+					Ok((
+						repository_name.clone(),
+						self.thaliak
+							.patch_list(repository_name, latest_patch.as_ref())
+							.await?,
+					))
+				});
+
+		let patch_list = try_join_all(pending_patch_list).await?;
+
+		Ok(patch_list)
+	}
+
+	fn save(&self) -> Result<()> {
+		let versions = self.versions.read().expect("poisoned");
+
+		// TODO: This is atrocious.
+		let persisted_versions = versions
+			.iter()
+			.map(|(key, patch_list)| {
+				Ok((
+					key.clone(),
+					PersitedVersion {
+						names: vec![],
+						patches: patch_list
+							.iter()
+							.map(|(repository, patches)| {
+								Ok((
+									repository.clone(),
+									patches
+										.last()
+										.with_context(|| {
+											format!("missing patches for repository {repository} in version {key}")
+										})?
+										.name
+										.clone(),
+								))
+							})
+							.collect::<Result<_>>()?,
+					},
+				))
+			})
+			.collect::<Result<BTreeMap<_, _>>>()?;
+
+		self.file.write(&persisted_versions)?;
 
 		Ok(())
 	}
@@ -136,4 +216,10 @@ impl Manager {
 			false
 		});
 	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PersitedVersion {
+	names: Vec<String>,
+	patches: BTreeMap<String, String>,
 }
