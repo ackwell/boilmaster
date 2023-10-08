@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use futures::future::try_join_all;
+use futures::future::{join_all, try_join_all};
 use ironworks::{
 	excel::{Excel, Language},
 	sqpack::SqPack,
@@ -97,9 +97,18 @@ impl Data {
 		let prepares = versions
 			.into_iter()
 			.filter(|key| !known_keys.contains(key))
-			.map(|key| self.prepare_version(version, key));
+			.map(|key| async move {
+				self.prepare_version(version, key)
+					.await
+					.map_err(|error| (key, error))
+			});
 
-		try_join_all(prepares).await?;
+		// Run all the version preparation. We aren't failing fast on this, as an
+		// erroneous version should not prevent other versions from being prepared.
+		let results = join_all(prepares).await;
+		for (key, error) in results.into_iter().filter_map(Result::err) {
+			tracing::warn!(%key, reason = %error, "did not prepare version")
+		}
 
 		Ok(())
 	}

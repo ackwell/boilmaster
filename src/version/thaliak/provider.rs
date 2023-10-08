@@ -3,7 +3,6 @@ use std::{
 	sync::{Arc, Mutex},
 };
 
-use anyhow::Result;
 use either::Either;
 use futures::future::try_join_all;
 use graphql_client::{GraphQLQuery, Response};
@@ -22,6 +21,23 @@ use crate::version::Patch;
 pub struct RepositoryQuery;
 
 type RepositoryData = repository_query::RepositoryQueryRepository;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+	#[error("patch cannot be resolved: {0}")]
+	UnresolvablePatch(String),
+
+	#[error(transparent)]
+	Failure(#[from] anyhow::Error),
+}
+
+impl From<reqwest::Error> for Error {
+	fn from(value: reqwest::Error) -> Self {
+		Self::Failure(value.into())
+	}
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -67,8 +83,8 @@ impl Provider {
 	}
 
 	/// Get the list of patch files for the specified repository that arrive at the specified version.
-	pub async fn patch_list(&self, repository: String, version: &str) -> Result<Vec<Patch>> {
-		let repository_data = self.repository_data(repository, false).await?;
+	pub async fn patch_list(&self, repository: String, patch: &str) -> Result<Vec<Patch>> {
+		let repository_data = self.repository_data(repository.clone(), false).await?;
 
 		// Build a lookup of versions by their name.
 		let versions = repository_data
@@ -79,7 +95,17 @@ impl Provider {
 
 		// TODO: this next_version handling effectively results in erroneous links causing empty or partial patch lists. consider if that's a problem.
 		let mut patches = vec![];
-		let mut next_version = versions.get(version).copied();
+		let mut next_version = versions.get(patch).copied();
+
+		// If we're starting inside an inactive patch, this patch path has been
+		// deprecated and cannot be resolved without potentially running into
+		// non-existent patch files on the CDN. Report it as such.
+		let active = next_version.map_or(false, |version| version.is_active);
+		if !active {
+			return Err(Error::UnresolvablePatch(format!(
+				"patch \"{patch}\" is inactive"
+			)));
+		}
 
 		while let Some(version) = next_version {
 			// Get this version's patch - if there's anything other than exactly one patch, something has gone funky.
@@ -95,9 +121,9 @@ impl Provider {
 				size: patch.size.try_into().unwrap(),
 			});
 
-			// Grab the prerequsite versions data, split along is_active - we'll always
-			// priotitise selecting active versions.
-			let (mut active_versions, inactive_versions) = version
+			// Grab the prerequsite versions, ignoring any that we've seen (to avoid
+			// dependency cycles), or that are inactive (to avoid deprecated patches).
+			let mut active_versions = version
 				.prerequisite_versions
 				.iter()
 				.filter_map(|specifier| {
@@ -111,9 +137,9 @@ impl Provider {
 
 					versions.get(&specifier.version_string)
 				})
-				.partition::<Vec<&repository_query::RepositoryQueryRepositoryVersions>, _>(
-					|version| version.is_active,
-				);
+				.filter(|version| version.is_active)
+				.cloned()
+				.collect::<Vec<_>>();
 
 			// TODO: What does >1 active version imply? It seems to occur in places where it implies skipping a whole bunch of intermediary patches - i have to assume hotfixes. Is it skipping a bunch of .exe updates because they get bundled into the next main patch file as well?
 			// It seems like it _can_ just be a bug; for sanity purposes, we're sorting
@@ -121,12 +147,7 @@ impl Provider {
 			// avoid accidentally skipping a bunch of patches. Patch names are string-sortable.
 			active_versions.sort_by(|a, b| a.version_string.cmp(&b.version_string).reverse());
 
-			// Try to select the active version to record next. If the current version
-			// is inactive, allow falling back to inactive prerequesites as well.
 			next_version = active_versions.first().cloned();
-			if !version.is_active {
-				next_version = next_version.or_else(|| inactive_versions.first().cloned());
-			}
 		}
 
 		// Ironworks expects patches to be specified oldest-first - building down
@@ -207,7 +228,7 @@ impl Provider {
 
 				// Check we actually got non-erroneous data.
 				if let Some(errors) = response.errors {
-					anyhow::bail!("TODO: thaliak errors: {errors:?}");
+					Err(anyhow::anyhow!("TODO: thaliak errors: {errors:?}"))?;
 				}
 
 				let data = response

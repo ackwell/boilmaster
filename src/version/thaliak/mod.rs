@@ -1,3 +1,3 @@
 mod provider;
 
-pub use provider::{Config, Provider};
+pub use provider::{Config, Error, Provider};
