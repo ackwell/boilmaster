@@ -4,7 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{asset::Format, version::VersionKey};
+use crate::{asset::Format, version3::VersionKey};
 
 use super::{
 	error::Result,

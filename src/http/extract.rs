@@ -9,7 +9,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::version::VersionKey;
+use crate::version3::VersionKey;
 
 use super::{error::Error, service};
 

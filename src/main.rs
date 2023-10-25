@@ -1,11 +1,19 @@
 use std::sync::Arc;
 
-use boilmaster::{asset, data, http, schema, search, tracing, version};
+use boilmaster::{
+	asset,
+	data,
+	http,
+	schema,
+	// search,
+	tracing,
+	// version,
+	version3,
+};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
 };
-use futures::TryFutureExt;
 use serde::Deserialize;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -15,9 +23,10 @@ struct Config {
 	tracing: tracing::Config,
 	http: http::Config,
 	data: data::Config,
-	version: version::Config,
+	// version: version::Config,
+	version3: version3::Config,
 	schema: schema::Config,
-	search: search::Config,
+	// search: search::Config,
 }
 
 #[tokio::main]
@@ -33,30 +42,32 @@ async fn main() {
 	// Initialise tracing before getting too far into bootstrapping the rest of the application
 	tracing::init(config.tracing);
 
-	let version = Arc::new(version::Manager::new(config.version).expect("TODO"));
+	// let version = Arc::new(version::Manager::new(config.version).expect("TODO"));
+	let version3 = Arc::new(version3::Manager::new(config.version3).expect("TODO"));
 	let data = Arc::new(data::Data::new(config.data));
-	// let asset = Arc::new(asset::Service::new(data.clone()));
-	// let schema = Arc::new(schema::Provider::new(config.schema).expect("TODO: Error handling"));
+	let asset = Arc::new(asset::Service::new(data.clone()));
+	let schema = Arc::new(schema::Provider::new(config.schema).expect("TODO: Error handling"));
 	// let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
 
 	// Set up a cancellation token that will fire when a shutdown signal is recieved.
 	let shutdown_token = shutdown_token();
 
 	tokio::try_join!(
-		version.start(shutdown_token.child_token()),
-		data.start(shutdown_token.child_token(), &version),
+		// version.start(shutdown_token.child_token()),
+		version3.start(shutdown_token.clone()),
+		data.start(shutdown_token.clone(), &version3),
 		// search
 		// 	.start(shutdown_token.child_token())
 		// 	.map_err(anyhow::Error::from),
-		// http::serve(
-		// 	shutdown_token.cancelled(),
-		// 	config.http,
-		// 	data.clone(),
-		// 	asset,
-		// 	schema,
-		// 	search.clone(),
-		// 	version.clone(),
-		// ),
+		http::serve(
+			shutdown_token,
+			config.http,
+			data.clone(),
+			asset,
+			schema,
+			// search.clone(),
+			version3.clone(),
+		),
 	)
 	.expect("TODO: Error handling");
 }

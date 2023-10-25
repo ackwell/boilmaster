@@ -7,7 +7,7 @@ use crate::{
 	data::LanguageString,
 	read, schema,
 	utility::{anyhow::Anyhow, warnings::Warnings},
-	version::VersionKey,
+	version3::VersionKey,
 };
 
 use super::{

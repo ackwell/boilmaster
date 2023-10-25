@@ -1,7 +1,11 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 
-use crate::{asset, schema, search};
+use crate::{
+	asset,
+	schema,
+	// search
+};
 
 #[derive(Serialize)]
 pub struct ErrorResponse {
@@ -45,20 +49,20 @@ impl From<schema::Error> for Error {
 	}
 }
 
-impl From<search::Error> for Error {
-	fn from(error: search::Error) -> Self {
-		use search::Error as SE;
-		match error {
-			SE::FieldType(..)
-			| SE::MalformedQuery(..)
-			| SE::QuerySchemaMismatch(..)
-			| SE::QueryGameMismatch(..)
-			| SE::SchemaGameMismatch(..)
-			| SE::UnknownCursor(..) => Self::Invalid(error.to_string()),
-			SE::Failure(inner) => Self::Other(inner),
-		}
-	}
-}
+// impl From<search::Error> for Error {
+// 	fn from(error: search::Error) -> Self {
+// 		use search::Error as SE;
+// 		match error {
+// 			SE::FieldType(..)
+// 			| SE::MalformedQuery(..)
+// 			| SE::QuerySchemaMismatch(..)
+// 			| SE::QueryGameMismatch(..)
+// 			| SE::SchemaGameMismatch(..)
+// 			| SE::UnknownCursor(..) => Self::Invalid(error.to_string()),
+// 			SE::Failure(inner) => Self::Other(inner),
+// 		}
+// 	}
+// }
 
 impl IntoResponse for Error {
 	fn into_response(self) -> axum::response::Response {

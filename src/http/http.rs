@@ -2,27 +2,32 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
 use axum::{Router, Server};
-use futures::Future;
 use serde::Deserialize;
+use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
-use super::{admin, asset, search, service, sheets};
+use super::{
+	// admin,
+	asset,
+	// search,
+	service,
+	sheets,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-	admin: admin::Config,
-
+	// admin: admin::Config,
 	address: Option<IpAddr>,
 	port: u16,
 }
 
 pub async fn serve(
-	shutdown: impl Future<Output = ()>,
+	cancel: CancellationToken,
 	config: Config,
 	data: service::Data,
 	asset: service::Asset,
 	schema: service::Schema,
-	search: service::Search,
+	// search: service::Search,
 	version: service::Version,
 ) -> Result<()> {
 	let bind_address = SocketAddr::new(
@@ -33,22 +38,22 @@ pub async fn serve(
 	tracing::info!("http binding to {bind_address:?}");
 
 	let router = Router::new()
-		.nest("/admin", admin::router(config.admin))
+		// .nest("/admin", admin::router(config.admin))
 		.nest("/asset", asset::router())
 		.nest("/sheets", sheets::router())
-		.nest("/search", search::router())
+		// .nest("/search", search::router())
 		.layer(TraceLayer::new_for_http())
 		.with_state(service::State {
 			asset,
 			data,
 			schema,
-			search,
+			// search,
 			version,
 		});
 
 	Server::bind(&bind_address)
 		.serve(router.into_make_service())
-		.with_graceful_shutdown(shutdown)
+		.with_graceful_shutdown(cancel.cancelled())
 		.await
 		.unwrap();
 

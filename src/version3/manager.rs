@@ -66,10 +66,22 @@ impl Manager {
 		})
 	}
 
+	/// Subscribe to changes to the version list.
 	pub fn subscribe(&self) -> watch::Receiver<Vec<VersionKey>> {
 		self.channel.subscribe()
 	}
 
+	/// Resolve a version name to its key, if the name is known. If no version is
+	/// specified. the version marked as latest will be returned.
+	pub fn resolve(&self, name: Option<&str>) -> Option<VersionKey> {
+		self.names
+			.read()
+			.expect("poisoned")
+			.get(name.unwrap_or(TAG_LATEST))
+			.copied()
+	}
+
+	/// Get the full version metadata for a given key, if it exists.
 	pub fn version(&self, key: VersionKey) -> Option<Version> {
 		self.versions.read().expect("poisoned").get(&key).cloned()
 	}
