@@ -12,7 +12,7 @@ use fs4::FileExt;
 use futures::future::{join_all, try_join_all};
 use nonempty::NonEmpty;
 use serde::{Deserialize, Serialize};
-use tokio::{select, time};
+use tokio::{select, sync::watch, time};
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -43,10 +43,14 @@ pub struct Manager {
 
 	versions: RwLock<HashMap<VersionKey, Version>>,
 	names: RwLock<HashMap<String, VersionKey>>,
+
+	channel: watch::Sender<Vec<VersionKey>>,
 }
 
 impl Manager {
 	pub fn new(config: Config) -> Result<Self> {
+		let (sender, _receiver) = watch::channel(vec![]);
+
 		Ok(Self {
 			provider: thaliak::Provider::new(config.thaliak),
 			patcher: patcher::Patcher::new(config.patch),
@@ -57,7 +61,17 @@ impl Manager {
 
 			versions: Default::default(),
 			names: Default::default(),
+
+			channel: sender,
 		})
+	}
+
+	pub fn subscribe(&self) -> watch::Receiver<Vec<VersionKey>> {
+		self.channel.subscribe()
+	}
+
+	pub fn version(&self, key: VersionKey) -> Option<Version> {
+		self.versions.read().expect("poisoned").get(&key).cloned()
 	}
 
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
@@ -141,7 +155,8 @@ impl Manager {
 			self.persist_metadata()
 		)?;
 
-		// TODO: Broadcast
+		// There's a change to versions, broadcast as such.
+		self.broadcast();
 
 		Ok(())
 	}
@@ -222,6 +237,9 @@ impl Manager {
 			names.insert(name, key);
 		}
 
+		// Hydration is complete - broadcast the version list.
+		self.broadcast();
+
 		Ok(())
 	}
 
@@ -242,6 +260,8 @@ impl Manager {
 			&mut serde_json::Deserializer::from_str(&string_config),
 			|repository, patch| self.patcher.patch_path(repository, patch),
 		)?;
+
+		// TODO: should probably validate these versions too - will need to store at least the file size, and preferably the hash as well once i have that.
 
 		Ok(version)
 	}
@@ -283,6 +303,27 @@ impl Manager {
 			Ok(())
 		});
 		join_handle.await?
+	}
+
+	fn broadcast(&self) {
+		let keys = self
+			.versions
+			.read()
+			.expect("poisoned")
+			.keys()
+			.copied()
+			.collect::<Vec<_>>();
+
+		// TODO: Currently, a change to the patch path of latest (or any other version, not that that would happen), won't be broadcast (no change to the key list), which means consumers won't pick up on the changed patch path until the system is restarted. That, in turn, means that deprecated patches in a patch path are difficult to invalidate and remove. This isn't a huge issue, but realistically a channel should be used for comms rather than a watched value.
+		self.channel.send_if_modified(|value| {
+			let modified = &keys != value;
+
+			if modified {
+				*value = keys;
+			}
+
+			modified
+		});
 	}
 }
 

@@ -4,4 +4,7 @@ mod patcher;
 mod thaliak;
 mod version;
 
-pub use manager::{Config, Manager};
+pub use {
+	key::VersionKey,
+	manager::{Config, Manager},
+};
