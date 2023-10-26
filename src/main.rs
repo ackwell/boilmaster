@@ -8,7 +8,7 @@ use boilmaster::{
 	// search,
 	tracing,
 	// version,
-	version3,
+	version,
 };
 use figment::{
 	providers::{Env, Format, Toml},
@@ -24,7 +24,7 @@ struct Config {
 	http: http::Config,
 	data: data::Config,
 	// version: version::Config,
-	version3: version3::Config,
+	version3: version::Config,
 	schema: schema::Config,
 	// search: search::Config,
 }
@@ -43,7 +43,7 @@ async fn main() {
 	tracing::init(config.tracing);
 
 	// let version = Arc::new(version::Manager::new(config.version).expect("TODO"));
-	let version3 = Arc::new(version3::Manager::new(config.version3).expect("TODO"));
+	let version3 = Arc::new(version::Manager::new(config.version3).expect("TODO"));
 	let data = Arc::new(data::Data::new(config.data));
 	let asset = Arc::new(asset::Service::new(data.clone()));
 	let schema = Arc::new(schema::Provider::new(config.schema).expect("TODO: Error handling"));

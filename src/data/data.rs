@@ -14,7 +14,7 @@ use serde::Deserialize;
 use tokio::{select, sync::watch};
 use tokio_util::sync::CancellationToken;
 
-use crate::version3::{self, VersionKey};
+use crate::version::{self, VersionKey};
 
 use super::language::LanguageString;
 
@@ -54,11 +54,7 @@ impl Data {
 		self.channel.subscribe()
 	}
 
-	pub async fn start(
-		&self,
-		cancel: CancellationToken,
-		version: &version3::Manager,
-	) -> Result<()> {
+	pub async fn start(&self, cancel: CancellationToken, version: &version::Manager) -> Result<()> {
 		let execute_prepare = |versions: Vec<VersionKey>| async {
 			select! {
 				result = self.prepare_new_versions(version, versions) => result,
@@ -82,7 +78,7 @@ impl Data {
 
 	async fn prepare_new_versions(
 		&self,
-		version: &version3::Manager,
+		version: &version::Manager,
 		versions: Vec<VersionKey>,
 	) -> Result<()> {
 		let known_keys = self
@@ -115,7 +111,7 @@ impl Data {
 	// TODO: should this use an explicit cancellation token?
 	async fn prepare_version(
 		&self,
-		manager: &version3::Manager,
+		manager: &version::Manager,
 		version_key: VersionKey,
 	) -> Result<()> {
 		let version = manager

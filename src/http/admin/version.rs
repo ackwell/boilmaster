@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::{
 	http::{error::Result, service},
-	version3::VersionKey,
+	version::VersionKey,
 };
 
 use super::base::BaseTemplate;
