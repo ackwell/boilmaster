@@ -7,7 +7,6 @@ use boilmaster::{
 	schema,
 	// search,
 	tracing,
-	// version,
 	version,
 };
 use figment::{
@@ -23,8 +22,7 @@ struct Config {
 	tracing: tracing::Config,
 	http: http::Config,
 	data: data::Config,
-	// version: version::Config,
-	version3: version::Config,
+	version: version::Config,
 	schema: schema::Config,
 	// search: search::Config,
 }
@@ -42,8 +40,7 @@ async fn main() {
 	// Initialise tracing before getting too far into bootstrapping the rest of the application
 	tracing::init(config.tracing);
 
-	// let version = Arc::new(version::Manager::new(config.version).expect("TODO"));
-	let version3 = Arc::new(version::Manager::new(config.version3).expect("TODO"));
+	let version = Arc::new(version::Manager::new(config.version).expect("TODO"));
 	let data = Arc::new(data::Data::new(config.data));
 	let asset = Arc::new(asset::Service::new(data.clone()));
 	let schema = Arc::new(schema::Provider::new(config.schema).expect("TODO: Error handling"));
@@ -53,9 +50,8 @@ async fn main() {
 	let shutdown_token = shutdown_token();
 
 	tokio::try_join!(
-		// version.start(shutdown_token.child_token()),
-		version3.start(shutdown_token.clone()),
-		data.start(shutdown_token.clone(), &version3),
+		version.start(shutdown_token.clone()),
+		data.start(shutdown_token.clone(), &version),
 		// search
 		// 	.start(shutdown_token.child_token())
 		// 	.map_err(anyhow::Error::from),
@@ -66,7 +62,7 @@ async fn main() {
 			asset,
 			schema,
 			// search.clone(),
-			version3.clone(),
+			version.clone(),
 		),
 	)
 	.expect("TODO: Error handling");
