@@ -8,16 +8,24 @@ use std::{
 use seahash::SeaHasher;
 use serde::{de, Deserialize, Serialize};
 
+use super::version::Version;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VersionKey(u64);
 
-impl VersionKey {
-	pub fn from_latest_patches(latest_patches: &[impl Hash]) -> Self {
+impl From<&Version> for VersionKey {
+	fn from(version: &Version) -> Self {
 		let mut hasher = SeaHasher::new();
-		latest_patches.hash(&mut hasher);
-		let hash = hasher.finish();
 
-		Self(hash)
+		for patch in version
+			.repositories
+			.iter()
+			.map(|repository| repository.latest())
+		{
+			patch.name.hash(&mut hasher);
+		}
+
+		Self(hasher.finish())
 	}
 }
 

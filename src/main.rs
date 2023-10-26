@@ -1,11 +1,18 @@
 use std::sync::Arc;
 
-use boilmaster::{asset, data, http, schema, search, tracing, version};
+use boilmaster::{
+	asset,
+	data,
+	http,
+	schema,
+	// search,
+	tracing,
+	version,
+};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
 };
-use futures::TryFutureExt;
 use serde::Deserialize;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -17,7 +24,7 @@ struct Config {
 	data: data::Config,
 	version: version::Config,
 	schema: schema::Config,
-	search: search::Config,
+	// search: search::Config,
 }
 
 #[tokio::main]
@@ -37,24 +44,24 @@ async fn main() {
 	let data = Arc::new(data::Data::new(config.data));
 	let asset = Arc::new(asset::Service::new(data.clone()));
 	let schema = Arc::new(schema::Provider::new(config.schema).expect("TODO: Error handling"));
-	let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
+	// let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
 
 	// Set up a cancellation token that will fire when a shutdown signal is recieved.
 	let shutdown_token = shutdown_token();
 
 	tokio::try_join!(
-		version.start(shutdown_token.child_token()),
-		data.start(shutdown_token.child_token(), &version),
-		search
-			.start(shutdown_token.child_token())
-			.map_err(anyhow::Error::from),
+		version.start(shutdown_token.clone()),
+		data.start(shutdown_token.clone(), &version),
+		// search
+		// 	.start(shutdown_token.child_token())
+		// 	.map_err(anyhow::Error::from),
 		http::serve(
-			shutdown_token.cancelled(),
+			shutdown_token,
 			config.http,
 			data.clone(),
 			asset,
 			schema,
-			search.clone(),
+			// search.clone(),
 			version.clone(),
 		),
 	)

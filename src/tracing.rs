@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt, str::FromStr};
 
 use serde::{de, Deserialize};
 use tracing::metadata::LevelFilter;
-use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 // TODO: tracing should proooobably be it's own file at this point
 #[derive(Debug, Deserialize)]
@@ -46,14 +46,19 @@ impl<'de> Deserialize<'de> for ConfigLevelFilter {
 }
 
 pub fn init(config: Config) {
-	let filter = filter::Targets::new()
+	// TODO: consider enabling this with a config flag or something tracing.console?
+	let console_filter = filter::Targets::new()
+		.with_target("tokio", LevelFilter::TRACE)
+		.with_target("runtime", LevelFilter::TRACE);
+
+	let tracing_filter = filter::Targets::new()
 		.with_default(config.filters.default)
 		.with_targets(config.filters.targets);
 
 	// TODO: env filter (will need feature enabled). consider enabling pulling from log! too.
 	// TODO: now that i have config working, is it worth using env filter here or should i handle it via config env?
 	tracing_subscriber::registry()
-		.with(tracing_subscriber::fmt::layer())
-		.with(filter)
+		.with(console_subscriber::spawn().with_filter(console_filter))
+		.with(tracing_subscriber::fmt::layer().with_filter(tracing_filter))
 		.init();
 }

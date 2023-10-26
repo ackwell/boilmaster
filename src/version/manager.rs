@@ -1,89 +1,69 @@
 use std::{
-	collections::{BTreeMap, HashMap},
+	collections::{hash_map::Entry, BTreeMap, HashMap},
 	fs,
-	path::PathBuf,
+	io::{self, Read},
+	path::{Path, PathBuf},
 	sync::RwLock,
 };
 
-use super::{
-	key::VersionKey,
-	patch::{Patch, PatchStore},
-	persist::JsonFile,
-	thaliak,
-	version::Version,
-};
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use figment::value::magic::RelativePathBuf;
-use futures::future::try_join_all;
-use serde::Deserialize;
+use fs4::FileExt;
+use futures::future::{join_all, try_join_all};
+use nonempty::NonEmpty;
+use serde::{Deserialize, Serialize};
 use tokio::{select, sync::watch, time};
 use tokio_util::sync::CancellationToken;
 
-pub type PatchList = Vec<(String, Vec<Patch>)>;
+use super::{
+	key::VersionKey,
+	patcher, thaliak,
+	version::{Repository, Version},
+};
+
+const TAG_LATEST: &str = "latest";
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	thaliak: thaliak::Config,
+	patch: patcher::Config,
 
 	interval: u64,
 	directory: RelativePathBuf,
 	repositories: Vec<String>,
 }
 
-const LATEST_TAG: &str = "latest";
-
-#[derive(Debug)]
 pub struct Manager {
-	thaliak: thaliak::Provider,
+	provider: thaliak::Provider,
+	patcher: patcher::Patcher,
 
 	update_interval: u64,
-
-	file: JsonFile,
 	directory: PathBuf,
+	repositories: Vec<String>,
+
+	versions: RwLock<HashMap<VersionKey, Version>>,
+	names: RwLock<HashMap<String, VersionKey>>,
 
 	channel: watch::Sender<Vec<VersionKey>>,
-
-	repositories: Vec<String>,
-	patches: HashMap<String, RwLock<PatchStore>>,
-	versions: RwLock<HashMap<VersionKey, Version>>,
-	version_names: RwLock<HashMap<String, VersionKey>>,
 }
 
 impl Manager {
 	pub fn new(config: Config) -> Result<Self> {
-		let directory = config.directory.relative();
-
-		// Build a patch store for each repository - repositories are stable within
-		// a given running instance, so doing this eagerly is safe.
-		let patches = config
-			.repositories
-			.iter()
-			.map(|repository_name| {
-				(
-					repository_name.to_string(),
-					RwLock::new(PatchStore::new(&directory, repository_name)),
-				)
-			})
-			.collect::<HashMap<_, _>>();
-
 		let (sender, _receiver) = watch::channel(vec![]);
 
-		let manager = Self {
-			thaliak: thaliak::Provider::new(config.thaliak),
+		Ok(Self {
+			provider: thaliak::Provider::new(config.thaliak),
+			patcher: patcher::Patcher::new(config.patch),
+
 			update_interval: config.interval,
-			file: JsonFile::new(directory.join("versions.json")),
-			directory,
-			channel: sender,
+			directory: config.directory.relative(),
 			repositories: config.repositories,
-			patches,
+
 			versions: Default::default(),
-			version_names: Default::default(),
-		};
+			names: Default::default(),
 
-		// Eagerly kick off an initial hydration from disk.
-		manager.hydrate()?;
-
-		Ok(manager)
+			channel: sender,
+		})
 	}
 
 	/// Subscribe to changes to the version list.
@@ -91,8 +71,8 @@ impl Manager {
 		self.channel.subscribe()
 	}
 
-	/// Get a list of all currently known versions.
-	pub fn versions(&self) -> Vec<VersionKey> {
+	/// Get a list of all known version keys.
+	pub fn keys(&self) -> Vec<VersionKey> {
 		self.versions
 			.read()
 			.expect("poisoned")
@@ -101,242 +81,338 @@ impl Manager {
 			.collect()
 	}
 
-	/// Get the list of names for a version.
-	// TODO: Error on unknown version?
-	pub fn names(&self, key: VersionKey) -> Vec<String> {
-		let version_names = self.version_names.read().expect("poisoned");
-		version_names
-			.iter()
-			.filter_map(|(name, inner_key)| (*inner_key == key).then(|| name.clone()))
-			.collect()
-	}
-
-	/// Set the names for a version. Collisions will overwrite the name with the version provided.
-	// TODO: error on unknown version?
-	pub fn set_names(
-		&self,
-		key: VersionKey,
-		names: impl IntoIterator<Item = impl ToString>,
-	) -> Result<()> {
-		// Remove all names pointing to the specified key, then extend with the new names.
-		let mut version_names = self.version_names.write().expect("poisoned");
-		version_names.retain(|_, value| *value != key);
-		version_names.extend(names.into_iter().map(|name| (name.to_string(), key)));
-		drop(version_names);
-		self.save()?;
-		Ok(())
-	}
-
-	/// Resolve a version name to its key. If no version is specified, the version marked as latest will be returned, if any exists.
+	/// Resolve a version name to its key, if the name is known. If no version is
+	/// specified. the version marked as latest will be returned.
 	pub fn resolve(&self, name: Option<&str>) -> Option<VersionKey> {
-		self.version_names
+		self.names
 			.read()
 			.expect("poisoned")
-			.get(name.unwrap_or(LATEST_TAG))
-			.cloned()
+			.get(name.unwrap_or(TAG_LATEST))
+			.copied()
 	}
 
-	/// Get a patch list for a given version.
-	pub fn patch_list(&self, key: VersionKey) -> Result<PatchList> {
-		// Fetch the requested version.
-		let versions = self.versions.read().expect("poisoned");
-		let version = versions
-			.get(&key)
-			.with_context(|| format!("unknown version {key}"))?;
+	// Get a list of names for a given version key.
+	pub fn names(&self, key: VersionKey) -> Option<Vec<String>> {
+		// Make sure the version is actually known to exist, to distinguish between an unknown key and a key with no names.
+		if !self.versions.read().expect("poisoned").contains_key(&key) {
+			return None;
+		}
 
-		// TODO: A version made on repository list [a, b] will create a patch list [a] on an updated repository list of [a, X, b]. I'm not convinced that's a problem.
-		let patch_list = self
-			.repositories
+		let names = self
+			.names
+			.read()
+			.expect("poisoned")
 			.iter()
-			.map_while(|repository_name| {
-				// Get the patch store for this repository.
-				let patches = self.patches.get(repository_name)?.read().expect("poisoned");
-				let patch_names = version.patches().get(repository_name)?;
+			.filter_map(|(name, inner_key)| (*inner_key == key).then(|| name.clone()))
+			.collect();
 
-				// Resolve the patches for this version against the patch store.
-				let list = patch_names
-					.iter()
-					.map(|patch_name| {
-						patches.patch(patch_name).with_context(|| {
-							format!("missing patch metadata for {repository_name} {patch_name}")
-						})
-					})
-					.collect::<Result<Vec<_>>>()
-					.map(|list| (repository_name.clone(), list));
-
-				Some(list)
-			})
-			.collect::<Result<Vec<_>>>()?;
-
-		Ok(patch_list)
+		Some(names)
 	}
 
-	/// Hydrate data from persisted files.
-	fn hydrate(&self) -> Result<()> {
-		// Hydrate all the repository patch stores.
-		for patch_store in self.patches.values() {
-			patch_store.write().expect("poisoned").hydrate()?;
+	/// Set the names for the specified version. If a name already exists, it
+	/// will be updated to match.
+	pub async fn set_names(
+		&self,
+		key: VersionKey,
+		new_names: impl IntoIterator<Item = impl ToString>,
+	) -> Result<()> {
+		// Funny squigglies because something in the checker(s) doesn't manage to track ownership properly with a drop().
+		{
+			let mut names = self.names.write().expect("poisoned");
+			names.retain(|_, value| *value != key);
+			names.extend(new_names.into_iter().map(|name| (name.to_string(), key)));
 		}
-
-		// Pull in the list of every known version. Keys here are the version keys,
-		// inverse to what we use in-memory.
-		let all_versions = self.file.read::<HashMap<VersionKey, Vec<String>>>()?;
-
-		let mut version_names = self.version_names.write().expect("poisoned");
-		let mut versions = self.versions.write().expect("poisoned");
-
-		for (version_key, names) in all_versions {
-			// Save the names out.
-			for name in names {
-				version_names.insert(name, version_key);
-			}
-
-			// Build a version representation and hydrate it from disk.
-			let mut version = Version::new(&self.directory, &version_key);
-			version.hydrate()?;
-			versions.insert(version_key, version);
-		}
-
-		drop(version_names);
-		drop(versions);
-
-		// Broadcast the initial state of the version list.
-		self.broadcast_version_list();
-
+		self.persist_metadata().await?;
 		Ok(())
 	}
 
-	/// Start the service.
+	/// Get the full version metadata for a given key, if it exists.
+	pub fn version(&self, key: VersionKey) -> Option<Version> {
+		self.versions.read().expect("poisoned").get(&key).cloned()
+	}
+
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
+		select! {
+			result = self.start_inner() => result,
+			_ = cancel.cancelled() => Ok(())
+		}
+	}
+
+	async fn start_inner(&self) -> Result<()> {
+		// Hydrate from disk.
+		self.hydrate().await?;
+
+		// Set up an interval to check for updates.
 		let mut interval = time::interval(time::Duration::from_secs(self.update_interval));
 		interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
 
 		loop {
-			select! {
-				_ = interval.tick() => {},
-				_ = cancel.cancelled() => { break }
-			}
+			interval.tick().await;
 
 			if let Err(error) = self.update().await {
 				tracing::error!(%error, "update failed");
 			}
 		}
-
-		Ok(())
 	}
 
-	/// Update local data from upstream sources.
-	pub async fn update(&self) -> Result<()> {
+	// TODO: There should only be one update pass running at a time - two would result in races.
+	async fn update(&self) -> Result<()> {
 		tracing::info!("checking for version updates");
 
-		// Ensure that the persistance folder exists before trying to write anything to it.
-		fs::create_dir_all(&self.directory)?;
-
-		// Fetch the patch lists for each of the repositories.
-		let pending_repository_patches = self
+		// Get a fresh view of the repositories.
+		let pending_repositories = self
 			.repositories
 			.iter()
-			.map(|repository_name| self.update_repository_patches(repository_name));
+			.map(|repository| self.fetch_repository(repository));
+		let repositories = try_join_all(pending_repositories).await?;
 
-		let repository_patches = try_join_all(pending_repository_patches).await?;
-
-		// Get the latest patches for the updated patch lists and use to build the current version key.
-		let latest_patches = repository_patches
-			.iter()
-			.zip(&self.repositories)
-			.map(|(patches, repository_name)| {
-				patches
-					.last()
-					.ok_or_else(|| anyhow!("no patches found for repository {repository_name}"))
-			})
-			.collect::<Result<Vec<_>>>()?;
-
-		let key = VersionKey::from_latest_patches(&latest_patches);
-
-		// Merge the versions with the repository names and update the version with
-		// it, creating a new version if it's not been seen before.
-		let value = self
-			.repositories
-			.clone()
-			.into_iter()
-			.zip(repository_patches)
-			.collect::<HashMap<_, _>>();
+		// Build a version struct and it's associated key and save it to the versions map.
+		let version = Version { repositories };
+		let key = VersionKey::from(&version);
 
 		let mut versions = self.versions.write().expect("poisoned");
-		let version = versions
-			.entry(key)
-			.or_insert_with(|| Version::new(&self.directory, &key));
 
-		version.update(value)?;
-		drop(versions);
-
-		// Set the latest sigil to always point to the most recent version key.
-		// TODO: This should be managed through the admin control panel. If automated, it'll likely need to be told in some way that all other ingestion tasks are done before being flaggest as latest.
-		let mut version_names = self.version_names.write().expect("poisoned");
-		version_names.insert(LATEST_TAG.to_string(), key);
-		drop(version_names);
-
-		self.save()?;
-
-		// Broadcast any changes to the version list from this update.
-		self.broadcast_version_list();
-
-		Ok(())
-	}
-
-	async fn update_repository_patches(&self, repository_name: &str) -> Result<Vec<String>> {
-		// Get the latest patches for this repository.
-		let patches = self.thaliak.patches(repository_name.to_string()).await?;
-
-		// Grab the list of patch names for later use.
-		let patch_names = patches
-			.iter()
-			.map(|patch| patch.name.to_string())
-			.collect::<Vec<_>>();
-
-		// Save the patch data to the repository's patch store.
-		self.patches
-			.get(repository_name)
-			.ok_or_else(|| anyhow!("missing patch store for repository {repository_name}"))?
-			.write()
-			.expect("posioned")
-			.update(patches)?;
-
-		Ok(patch_names)
-	}
-
-	fn save(&self) -> Result<()> {
-		// Build the full version listing for persisting.
-		let versions = self.versions.read().expect("poisoned");
-		let version_names = self.version_names.read().expect("poisoned");
-
-		let mut all_versions = versions
-			.keys()
-			.map(|key| (key, vec![]))
-			.collect::<BTreeMap<_, _>>();
-
-		for (name, version) in version_names.iter() {
-			all_versions
-				.entry(version)
-				.or_insert_with(Vec::new)
-				.push(name);
-		}
-
-		self.file.write(&all_versions)?;
-
-		Ok(())
-	}
-
-	fn broadcast_version_list(&self) {
-		let versions = self.versions.read().expect("poisoned");
-		let keys = versions.keys().cloned().collect::<Vec<_>>();
-		self.channel.send_if_modified(|value| {
-			if &keys != value {
-				*value = keys;
-				return true;
+		let changed = match versions.entry(key) {
+			// New version entry - mark it as latest and request an update.
+			Entry::Vacant(entry) => {
+				entry.insert(version.clone());
+				true
 			}
 
-			false
+			// Existing entry, check if the requisite patches have changed before saving.
+			Entry::Occupied(mut entry) => {
+				let changed = *entry.get() != version;
+				if changed {
+					entry.insert(version.clone());
+				}
+				changed
+			}
+		};
+
+		drop(versions);
+
+		// If there hasn't been any changes from this update, skip running updates beyond this point.
+		if !changed {
+			return Ok(());
+		}
+
+		tracing::info!(%key, "new or updated version");
+
+		// Update latest tag.
+		// TODO: This might need to be moved to manual-only for now? If there's any long-running ingestion tasks (i.e. search) hanging off versions, then setting latest _now_ would leave end-consumers pointing at an uningested tag.
+		self.names
+			.write()
+			.expect("poisoned")
+			.insert(TAG_LATEST.to_string(), key);
+
+		// Persist updated metadata
+		tokio::try_join!(
+			//
+			self.persist_version(key, version),
+			self.persist_metadata()
+		)?;
+
+		// There's a change to versions, broadcast as such.
+		self.broadcast();
+
+		Ok(())
+	}
+
+	async fn fetch_repository(&self, repository: &str) -> Result<Repository> {
+		// a failure to fetch the patch list for a repo is pretty unrecoverable i think?
+		let patch_list = self.provider.patch_list(repository.to_string()).await?;
+
+		// todo: is a failure here meaningful? i imagine retries and so on should be done at the patcher
+		// note: would use nonempty::map but i need asyncnessnessness
+		let pending_patches = patch_list
+			.into_iter()
+			.map(|patch| self.patcher.to_local_patch(repository, patch));
+		let patches = NonEmpty::from_vec(try_join_all(pending_patches).await?)
+			.expect("non-empty list is guaranteed by provider");
+
+		Ok(Repository {
+			name: repository.to_string(),
+			patches,
+		})
+	}
+
+	fn metadata_path(&self) -> PathBuf {
+		self.directory.join("metadata.json")
+	}
+
+	fn version_path(&self, key: VersionKey) -> PathBuf {
+		self.directory.join(format!("version-{key}.json"))
+	}
+
+	async fn hydrate(&self) -> Result<()> {
+		let Some(metadata) = self.hydrate_metadata().await? else { return Ok(()) };
+
+		let pending_versions = metadata
+			.versions
+			.iter()
+			.map(|key| self.hydrate_version(*key));
+
+		let hydrated_versions = join_all(pending_versions)
+			.await
+			.into_iter()
+			.zip(metadata.versions);
+
+		let mut versions = self.versions.write().expect("poisoned");
+
+		for (result, key) in hydrated_versions {
+			let version = match result {
+				Ok(version) => version,
+				Err(error) => {
+					tracing::warn!(%key, ?error, "could not hydrate version");
+					continue;
+				}
+			};
+
+			tracing::debug!(%key, "hydrated version");
+			versions.insert(key, version);
+		}
+
+		drop(versions);
+
+		let versions = self.versions.read().expect("poisoned");
+		let mut names = self.names.write().expect("poisoned");
+
+		for (name, key) in metadata.names {
+			if !versions.contains_key(&key) {
+				tracing::warn!(name, %key, "unknown key for name");
+				continue;
+			}
+
+			tracing::debug!(name, %key, "named version");
+			names.insert(name, key);
+		}
+
+		// Hydration is complete - broadcast the version list.
+		self.broadcast();
+
+		Ok(())
+	}
+
+	async fn hydrate_metadata(&self) -> Result<Option<PersistedMetadata>> {
+		let path = self.metadata_path();
+		let join_handle = tokio::task::spawn_blocking(|| -> Result<Option<PersistedMetadata>> {
+			let Some(file) = open_config_read(path)? else { return Ok(None) };
+			let metadata: PersistedMetadata = serde_json::from_reader(file)?;
+			Ok(Some(metadata))
+		});
+
+		join_handle.await?
+	}
+
+	async fn hydrate_version(&self, key: VersionKey) -> Result<Version> {
+		// NOTE: Parsing outside the task so I don't have to get the self reference into the task for patch paths.
+		let path = self.version_path(key);
+		let join_handle = tokio::task::spawn_blocking(move || -> Result<String> {
+			let Some(mut file) = open_config_read(path)? else {
+				anyhow::bail!("version {key} has no persisted configuration")
+			};
+			let mut buffer = String::new();
+			file.read_to_string(&mut buffer)?;
+			Ok(buffer)
+		});
+		let string_config = join_handle.await??;
+
+		let version = Version::deserialize(
+			&mut serde_json::Deserializer::from_str(&string_config),
+			|repository, patch| self.patcher.patch_path(repository, patch),
+		)?;
+
+		// TODO: should probably validate these versions too - will need to store at least the file size, and preferably the hash as well once i have that.
+
+		Ok(version)
+	}
+
+	async fn persist_metadata(&self) -> Result<()> {
+		let persisted_versions = PersistedMetadata {
+			versions: self
+				.versions
+				.read()
+				.expect("poisoned")
+				.keys()
+				.copied()
+				.collect(),
+
+			names: self
+				.names
+				.read()
+				.expect("poisoned")
+				.clone()
+				.into_iter()
+				.collect(),
+		};
+
+		let path = self.metadata_path();
+		let join_handle = tokio::task::spawn_blocking(move || -> Result<()> {
+			let file = open_config_write(path)?;
+			serde_json::to_writer_pretty(file, &persisted_versions)?;
+			Ok(())
+		});
+
+		join_handle.await?
+	}
+
+	async fn persist_version(&self, key: VersionKey, version: Version) -> Result<()> {
+		let path = self.directory.join(format!("version-{key}.json"));
+		let join_handle = tokio::task::spawn_blocking(move || -> Result<()> {
+			let file = open_config_write(path)?;
+			version.serialize(&mut serde_json::Serializer::pretty(file))?;
+			Ok(())
+		});
+		join_handle.await?
+	}
+
+	fn broadcast(&self) {
+		let keys = self
+			.versions
+			.read()
+			.expect("poisoned")
+			.keys()
+			.copied()
+			.collect::<Vec<_>>();
+
+		// TODO: Currently, a change to the patch path of latest (or any other version, not that that would happen), won't be broadcast (no change to the key list), which means consumers won't pick up on the changed patch path until the system is restarted. That, in turn, means that deprecated patches in a patch path are difficult to invalidate and remove. This isn't a huge issue, but realistically a channel should be used for comms rather than a watched value.
+		self.channel.send_if_modified(|value| {
+			let modified = &keys != value;
+
+			if modified {
+				*value = keys;
+			}
+
+			modified
 		});
 	}
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedMetadata {
+	versions: Vec<VersionKey>,
+	names: BTreeMap<String, VersionKey>,
+}
+
+fn open_config_read(path: impl AsRef<Path>) -> Result<Option<fs::File>> {
+	let file = match fs::File::open(path) {
+		Ok(file) => file,
+		Err(error) => {
+			return match error.kind() {
+				io::ErrorKind::NotFound => Ok(None),
+				_ => Err(error.into()),
+			}
+		}
+	};
+
+	file.lock_shared()?;
+
+	Ok(Some(file))
+}
+
+fn open_config_write(path: impl AsRef<Path>) -> Result<fs::File> {
+	let file = fs::File::options().create(true).write(true).open(path)?;
+	file.lock_exclusive()?;
+	file.set_len(0)?;
+	Ok(file)
 }

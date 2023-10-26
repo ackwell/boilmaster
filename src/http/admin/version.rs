@@ -1,3 +1,4 @@
+use anyhow::Context;
 use axum::{
 	debug_handler,
 	extract::{OriginalUri, Path, State},
@@ -5,13 +6,12 @@ use axum::{
 	routing::get,
 	Form, Router,
 };
-use humansize::{format_size, BINARY};
 use maud::{html, Render};
 use serde::Deserialize;
 
 use crate::{
 	http::{error::Result, service},
-	version::{Patch, VersionKey},
+	version::VersionKey,
 };
 
 use super::base::BaseTemplate;
@@ -26,16 +26,23 @@ async fn get_version(
 	Path(version_key): Path<VersionKey>,
 	State(version): State<service::Version>,
 ) -> Result<impl IntoResponse> {
-	let names = version.names(version_key);
+	let names = version.names(version_key).context("unknown version")?;
 
 	// Patches are stored in oldest-first order for IW, which is lovely in code
 	// and horrible for reading. Given this is ostensibly the reading bit of the
 	// application, fix that.
 	let patch_list = version
-		.patch_list(version_key)?
+		.version(version_key)
+		.context("unknown version")?
+		.repositories
 		.into_iter()
-		.map(|(repository, patches)| (repository, patches.into_iter().rev().collect()))
-		.collect::<Vec<(String, Vec<Patch>)>>();
+		.map(|repository| {
+			(
+				repository.name,
+				repository.patches.into_iter().rev().collect::<Vec<_>>(),
+			)
+		})
+		.collect::<Vec<_>>();
 
 	Ok((BaseTemplate {
 		title: format!("version {}", version_key),
@@ -63,7 +70,7 @@ async fn get_version(
 					}
 					ul {
 						@for patch in patches {
-							li { (patch.name) " (" (format_size(patch.size, BINARY)) ")" }
+							li { (patch.name) }
 						}
 					}
 				}
@@ -86,7 +93,7 @@ async fn post_version(
 	Form(request): Form<VersionPostRequest>,
 ) -> Result<impl IntoResponse> {
 	let names = request.names.split(',').map(str::trim);
-	version.set_names(version_key, names)?;
+	version.set_names(version_key, names).await?;
 
 	Ok(Redirect::to(&uri.to_string()))
 }

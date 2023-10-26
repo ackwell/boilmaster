@@ -1,3 +1,4 @@
+use anyhow::Context;
 use axum::{
 	debug_handler,
 	extract::{OriginalUri, State},
@@ -31,22 +32,22 @@ async fn versions(
 ) -> Result<impl IntoResponse> {
 	let version_info = |key: VersionKey| -> Result<_> {
 		let latest = version
-			.patch_list(key)?
+			.version(key)
+			.context("missing version")?
+			.repositories
 			.into_iter()
-			.filter_map(|(repository, patches)| {
-				Some((repository, patches.into_iter().last()?.name))
-			})
+			.map(|repository| (repository.name, repository.patches.last().name.clone()))
 			.collect();
 
 		Ok(VersionInfo {
 			key,
 			patches: latest,
-			names: version.names(key),
+			names: version.names(key).context("missing version")?,
 		})
 	};
 
 	let versions = version
-		.versions()
+		.keys()
 		.into_iter()
 		.map(version_info)
 		.collect::<Result<Vec<_>>>()?;
