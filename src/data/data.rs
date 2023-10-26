@@ -3,7 +3,7 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
-use futures::future::try_join_all;
+use anyhow::Context;
 use ironworks::{
 	excel::{Excel, Language},
 	sqpack::SqPack,
@@ -18,13 +18,10 @@ use crate::version::{self, VersionKey};
 use super::{
 	error::{Error, Result},
 	language::LanguageString,
-	patch,
 };
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-	patch: patch::Config,
-
 	language: LanguageString,
 }
 
@@ -36,14 +33,7 @@ pub struct Data {
 	// Root ZiPatch instance, acts as a LUT cache
 	zipatch: zipatch::ZiPatch,
 
-	patcher: patch::Patcher,
-
-	versions: RwLock<HashMap<VersionKey, VersionState>>,
-}
-
-enum VersionState {
-	Pending,
-	Ready(Arc<Version>),
+	versions: RwLock<HashMap<VersionKey, Arc<Version>>>,
 }
 
 impl Data {
@@ -54,7 +44,6 @@ impl Data {
 			default_language: config.language.into(),
 			channel: sender,
 			zipatch: zipatch::ZiPatch::new().with_persisted_lookups(),
-			patcher: patch::Patcher::new(config.patch),
 			versions: Default::default(),
 		}
 	}
@@ -68,15 +57,20 @@ impl Data {
 	}
 
 	pub async fn start(&self, cancel: CancellationToken, version: &version::Manager) -> Result<()> {
+		let execute_prepare = |versions: Vec<VersionKey>| async {
+			select! {
+				result = self.prepare_new_versions(version, versions) => result,
+				_ = cancel.cancelled() => Ok(()),
+			}
+		};
+
 		let mut receiver = version.subscribe();
-		self.prepare_new_versions(version, receiver.borrow().clone())
-			.await?;
+
+		execute_prepare(receiver.borrow().clone()).await?;
 
 		loop {
 			select! {
-				Ok(_) = receiver.changed() => {
-					self.prepare_new_versions(version, receiver.borrow().clone()).await?
-				}
+				Ok(_) = receiver.changed() => execute_prepare(receiver.borrow().clone()).await?,
 				_ = cancel.cancelled() => break,
 			}
 		}
@@ -98,76 +92,42 @@ impl Data {
 			.cloned()
 			.collect::<HashSet<_>>();
 
-		let to_prepare = versions
+		let results = versions
 			.into_iter()
 			.filter(|key| !known_keys.contains(key))
-			.collect::<HashSet<_>>();
+			.map(|key| {
+				self.prepare_version(version, key)
+					.map_err(|error| (key, error))
+			});
 
-		// Mark the versions as being prepared.
-		self.versions
-			.write()
-			.expect("poisoned")
-			.extend(to_prepare.iter().map(|key| (*key, VersionState::Pending)));
-
-		// Run the preparations.
-		let prepares = to_prepare
-			.iter()
-			.map(|key| self.prepare_version(version, *key));
-
-		if let Err(error) = try_join_all(prepares).await {
-			// An error occured, roll back any preparation markers for this batch that are still sitting around.
-			self.versions.write().expect("poisoned").retain(
-				|key, state| !matches!((key, state), (key, VersionState::Pending) if to_prepare.contains(key)),
-			);
-
-			return Err(error);
+		// Run all the version preparation. We aren't failing fast on this, as an
+		// erroneous version should not prevent other versions from being prepared.
+		for (key, error) in results.filter_map(Result::err) {
+			tracing::warn!(%key, reason = %error, "did not prepare version")
 		}
 
 		Ok(())
 	}
 
-	// TODO: should this use an explicit cancellation token?
-	async fn prepare_version(
-		&self,
-		version: &version::Manager,
-		version_key: VersionKey,
-	) -> Result<()> {
+	fn prepare_version(&self, manager: &version::Manager, version_key: VersionKey) -> Result<()> {
 		// Preparation only happens when we're told that a version exists, so anything going wrong _here_ is a hefty failure.
-		let patch_list = version.patch_list(version_key)?;
+		let version = manager
+			.version(version_key)
+			.context("version does not exist")?;
 
-		// Start getting paths for all the patches required for this version, downloading if required.
-		let pending_repositories = patch_list
+		let view = version
+			.repositories
 			.into_iter()
-			.map(|(repository, patches)| async move {
-				let mut patch_paths = self.patcher.patch_paths(&repository, &patches).await?;
-
-				let zipatch_patches = patches
+			.map(|repository| zipatch::PatchRepository {
+				patches: repository
+					.patches
 					.into_iter()
-					.map(|patch| {
-						let zipatch_patch = zipatch::Patch {
-							path: patch_paths.remove(&patch.name).ok_or_else(|| {
-								anyhow::anyhow!(
-									"patch {} missing in patcher path response",
-									patch.name
-								)
-							})?,
-							name: patch.name,
-						};
-						Ok(zipatch_patch)
+					.map(|patch| zipatch::Patch {
+						path: patch.path,
+						name: patch.name,
 					})
-					.collect::<Result<Vec<_>>>()?;
-
-				Ok::<_, anyhow::Error>(zipatch::PatchRepository {
-					patches: zipatch_patches,
-				})
-			});
-
-		// Ensure that all patches are ready.
-		let repositories = try_join_all(pending_repositories).await?;
-
-		// Build a zipatch view into the patches.
-		let view = repositories
-			.into_iter()
+					.collect(),
+			})
 			.zip(0u8..)
 			.fold(self.zipatch.view(), |builder, (repository, index)| {
 				builder.with_repository(index, repository)
@@ -179,7 +139,9 @@ impl Data {
 		self.versions
 			.write()
 			.expect("poisoned")
-			.insert(version_key, VersionState::Ready(Arc::new(version)));
+			.insert(version_key, Arc::new(version));
+
+		tracing::debug!(key = %version_key, "version prepared");
 
 		// Broadcast the update.
 		// NOTE: This is performed after each version rather than when all versions
@@ -190,27 +152,18 @@ impl Data {
 		Ok(())
 	}
 
-	// TODO: this doesn't disambiguate between "version is unknown" and "version isn't ready yet", and there's a lot of consumers that are .context'ing this Option. Should probably disambiguate the two error cases and raise a proper error type that can be handled by other services appropriately
 	pub fn version(&self, version: VersionKey) -> Result<Arc<Version>> {
 		let versions = self.versions.read().expect("poisoned");
 
-		let state = versions
+		versions
 			.get(&version)
-			.ok_or_else(|| Error::UnknownVersion(version))?;
-
-		match state {
-			VersionState::Ready(version) => Ok(version.clone()),
-			VersionState::Pending => Err(Error::PendingVersion(version)),
-		}
+			.ok_or_else(|| Error::UnknownVersion(version))
+			.cloned()
 	}
 
 	fn broadcast_version_list(&self) {
 		let versions = self.versions.read().expect("poisoned");
-		let keys = versions
-			.iter()
-			.filter(|(_, state)| matches!(state, VersionState::Ready(..)))
-			.map(|(key, _)| *key)
-			.collect::<Vec<_>>();
+		let keys = versions.keys().copied().collect::<Vec<_>>();
 
 		self.channel.send_if_modified(|value| {
 			if &keys != value {

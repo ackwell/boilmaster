@@ -14,10 +14,6 @@ password = "password"
 [data]
 language = "en"
 
-[data.patch]
-directory = "patches"
-concurrency = 4
-
 [version]
 interval = 3600 # 1 hour
 directory = "versions"
@@ -32,6 +28,11 @@ repositories = [
 [version.thaliak]
 endpoint = "https://thaliak.xiv.dev/graphql/2022-08-14"
 
+[version.patch]
+directory = "patches"
+concurrency = 4
+user_agent = "FFXIV PATCH CLIENT"
+
 [schema]
 default = "saint-coinach"
 
@@ -45,8 +46,8 @@ limit_max = 500
 
 [search.tantivy]
 directory = "search"
-memory = 52428800 # 50MiB
+memory = 52428800    # 50MiB
 
 [search.tantivy.cursor]
 ttl = 3600 # 1 hour
-tti = 300 # 5 minutes
+tti = 300  # 5 minutes
