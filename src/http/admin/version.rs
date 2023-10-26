@@ -93,7 +93,7 @@ async fn post_version(
 	Form(request): Form<VersionPostRequest>,
 ) -> Result<impl IntoResponse> {
 	let names = request.names.split(',').map(str::trim);
-	// version.set_names(version_key, names)?;
+	version.set_names(version_key, names).await?;
 
 	Ok(Redirect::to(&uri.to_string()))
 }

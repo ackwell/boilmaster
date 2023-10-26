@@ -109,6 +109,23 @@ impl Manager {
 		Some(names)
 	}
 
+	/// Set the names for the specified version. If a name already exists, it
+	/// will be updated to match.
+	pub async fn set_names(
+		&self,
+		key: VersionKey,
+		new_names: impl IntoIterator<Item = impl ToString>,
+	) -> Result<()> {
+		// Funny squigglies because something in the checker(s) doesn't manage to track ownership properly with a drop().
+		{
+			let mut names = self.names.write().expect("poisoned");
+			names.retain(|_, value| *value != key);
+			names.extend(new_names.into_iter().map(|name| (name.to_string(), key)));
+		}
+		self.persist_metadata().await?;
+		Ok(())
+	}
+
 	/// Get the full version metadata for a given key, if it exists.
 	pub fn version(&self, key: VersionKey) -> Option<Version> {
 		self.versions.read().expect("poisoned").get(&key).cloned()
