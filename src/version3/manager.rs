@@ -228,14 +228,7 @@ impl Manager {
 	}
 
 	async fn hydrate(&self) -> Result<()> {
-		let path = self.metadata_path();
-		let join_handle = tokio::task::spawn_blocking(|| -> Result<Option<PersistedMetadata>> {
-			let Some(file) = open_config_read(path)? else { return Ok(None) };
-			let metadata: PersistedMetadata = serde_json::from_reader(file)?;
-			Ok(Some(metadata))
-		});
-
-		let Some(metadata) = join_handle.await?? else { return Ok(()) };
+		let Some(metadata) = self.hydrate_metadata().await? else { return Ok(()) };
 
 		let pending_versions = metadata
 			.versions
@@ -281,6 +274,17 @@ impl Manager {
 		self.broadcast();
 
 		Ok(())
+	}
+
+	async fn hydrate_metadata(&self) -> Result<Option<PersistedMetadata>> {
+		let path = self.metadata_path();
+		let join_handle = tokio::task::spawn_blocking(|| -> Result<Option<PersistedMetadata>> {
+			let Some(file) = open_config_read(path)? else { return Ok(None) };
+			let metadata: PersistedMetadata = serde_json::from_reader(file)?;
+			Ok(Some(metadata))
+		});
+
+		join_handle.await?
 	}
 
 	async fn hydrate_version(&self, key: VersionKey) -> Result<Version> {

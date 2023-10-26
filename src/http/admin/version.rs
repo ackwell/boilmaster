@@ -6,7 +6,6 @@ use axum::{
 	routing::get,
 	Form, Router,
 };
-use humansize::{format_size, BINARY};
 use maud::{html, Render};
 use serde::Deserialize;
 
@@ -71,7 +70,7 @@ async fn get_version(
 					}
 					ul {
 						@for patch in patches {
-							li { (patch.name) /*" (" (format_size(patch.size, BINARY)) ")"*/ }
+							li { (patch.name) }
 						}
 					}
 				}
