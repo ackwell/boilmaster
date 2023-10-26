@@ -1,4 +1,4 @@
-// mod admin;
+mod admin;
 mod asset;
 mod error;
 mod extract;

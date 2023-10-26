@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
 use super::{
-	// admin,
+	admin,
 	asset,
 	// search,
 	service,
@@ -16,7 +16,7 @@ use super::{
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-	// admin: admin::Config,
+	admin: admin::Config,
 	address: Option<IpAddr>,
 	port: u16,
 }
@@ -38,7 +38,7 @@ pub async fn serve(
 	tracing::info!("http binding to {bind_address:?}");
 
 	let router = Router::new()
-		// .nest("/admin", admin::router(config.admin))
+		.nest("/admin", admin::router(config.admin))
 		.nest("/asset", asset::router())
 		.nest("/sheets", sheets::router())
 		// .nest("/search", search::router())

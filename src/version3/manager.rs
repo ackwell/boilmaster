@@ -71,6 +71,16 @@ impl Manager {
 		self.channel.subscribe()
 	}
 
+	/// Get a list of all known version keys.
+	pub fn keys(&self) -> Vec<VersionKey> {
+		self.versions
+			.read()
+			.expect("poisoned")
+			.keys()
+			.copied()
+			.collect()
+	}
+
 	/// Resolve a version name to its key, if the name is known. If no version is
 	/// specified. the version marked as latest will be returned.
 	pub fn resolve(&self, name: Option<&str>) -> Option<VersionKey> {
@@ -79,6 +89,24 @@ impl Manager {
 			.expect("poisoned")
 			.get(name.unwrap_or(TAG_LATEST))
 			.copied()
+	}
+
+	// Get a list of names for a given version key.
+	pub fn names(&self, key: VersionKey) -> Option<Vec<String>> {
+		// Make sure the version is actually known to exist, to distinguish between an unknown key and a key with no names.
+		if !self.versions.read().expect("poisoned").contains_key(&key) {
+			return None;
+		}
+
+		let names = self
+			.names
+			.read()
+			.expect("poisoned")
+			.iter()
+			.filter_map(|(name, inner_key)| (*inner_key == key).then(|| name.clone()))
+			.collect();
+
+		Some(names)
 	}
 
 	/// Get the full version metadata for a given key, if it exists.
