@@ -1,4 +1,6 @@
-use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+	debug_handler, extract::State, response::IntoResponse, routing::get, Extension, Json, Router,
+};
 use ironworks::{excel::Language, file::exh};
 use serde::{Deserialize, Serialize};
 
