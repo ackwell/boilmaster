@@ -1,8 +1,11 @@
+use std::{num::ParseIntError, str::FromStr};
+
 use axum::{
 	debug_handler, extract::State, response::IntoResponse, routing::get, Extension, Json, Router,
 };
+use either::Either;
 use ironworks::{excel::Language, file::exh};
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 
 use crate::{
 	data::LanguageString,
@@ -55,6 +58,42 @@ struct SheetPath {
 	sheet: String,
 }
 
+#[derive(Debug)]
+struct RowSpecifier {
+	row_id: u32,
+	subrow_id: Option<u16>,
+}
+
+impl FromStr for RowSpecifier {
+	type Err = ParseIntError;
+
+	fn from_str(string: &str) -> Result<Self, Self::Err> {
+		let out = match string.split_once(':') {
+			Some((row_id, subrow_id)) => Self {
+				row_id: row_id.parse()?,
+				subrow_id: Some(subrow_id.parse()?),
+			},
+			None => Self {
+				row_id: string.parse()?,
+				subrow_id: None,
+			},
+		};
+
+		Ok(out)
+	}
+}
+
+impl<'de> Deserialize<'de> for RowSpecifier {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		let raw = String::deserialize(deserializer)?;
+		raw.parse().map_err(de::Error::custom)
+	}
+}
+
+// TODO: Consider adding default field filter (config, parse from read:: dsl?)
 #[derive(Deserialize)]
 struct SheetQuery {
 	// Data resolution
@@ -64,8 +103,30 @@ struct SheetQuery {
 	fields: Option<Warnings<Option<read::Filter>>>,
 
 	// ID pagination/filtering
+	#[serde(deserialize_with = "deserialize_rows")]
+	rows: Option<Vec<RowSpecifier>>,
 	page: Option<usize>,
 	limit: Option<usize>,
+}
+
+fn deserialize_rows<'de, D>(deserializer: D) -> Result<Option<Vec<RowSpecifier>>, D::Error>
+where
+	D: Deserializer<'de>,
+{
+	let maybe_raw = Option::<String>::deserialize(deserializer)?;
+	let raw = match maybe_raw.as_deref() {
+		None | Some("") => return Ok(None),
+		Some(value) => value,
+	};
+
+	// TODO: maybe use warnings for these too?
+	let parsed = raw
+		.split(',')
+		.map(|x| x.parse())
+		.collect::<Result<_, _>>()
+		.map_err(de::Error::custom)?;
+
+	Ok(Some(parsed))
 }
 
 #[derive(Serialize)]
@@ -117,9 +178,22 @@ async fn sheet(
 	})?;
 
 	// Iterate over the sheet, building row results.
-	// todo look into changing the row builder in iw so this assignment isn't required
+	// TODO: look into changing the row builder in iw so this assignment isn't required - moving to an owned value would also possibly allow me to move this builder into the None case below.
 	let mut builder = sheet.with();
-	let sheet_iterator = builder.language(language).iter();
+	builder.language(language);
+
+	let sheet_iterator = match query.rows {
+		// One or more row specifiers were provided, iterate over those specifically.
+		Some(specifiers) => Either::Left(specifiers.into_iter()),
+
+		// None were provided, iterate over the sheet itself.
+		// TODO: Currently, read:: does _all_ the row fetching itself, which means that we're effectively iterating the sheet here _just_ to get the row IDs, then re-fetching in the read:: code. This... probably isn't too problematic, but worth considering how to approach more betterer. If read:: can be modified to take a row, then the Some() case above can be specailised to the read-row logic and this case can be simplified.
+		// None => Either::Right(builder.iter().map(Result::Ok)),
+		None => Either::Right(builder.iter().map(|row| RowSpecifier {
+			row_id: row.row_id(),
+			subrow_id: Some(row.subrow_id()),
+		})),
+	};
 
 	// Paginate the results.
 	let limit = query
@@ -131,11 +205,12 @@ async fn sheet(
 
 	// Build Results for the targeted rows.
 	let sheet_kind = sheet.kind().anyhow()?;
-	let sheet_iterator = sheet_iterator.map(|row| {
-		let row_id = row.row_id();
-		let subrow_id = row.subrow_id();
+	let sheet_iterator = sheet_iterator.map(|specifier| {
+		let row_id = specifier.row_id;
+		let subrow_id = specifier.subrow_id.unwrap_or(0);
 
 		// TODO: This is pretty wasteful to call inside a loop, revisit actual read logic.
+		// TODO: at the moment, an unknown row specifier will cause excel to error with a NotFound (which is fine), however read:: then squashes that with anyhow, meaning the error gets hidden in a 500 ISE. revisit error handling in read:: while i'm at it ref. the above.
 		let fields = read::read(
 			&excel,
 			schema.as_ref(),
@@ -146,7 +221,6 @@ async fn sheet(
 			subrow_id,
 		)?;
 
-		//
 		Ok(RowResult {
 			row_id,
 			subrow_id: match sheet_kind {
@@ -161,6 +235,7 @@ async fn sheet(
 
 	let response = SheetResponse { rows };
 
+	// TODO: warnings
 	Ok(Json(response))
 }
 
