@@ -14,12 +14,21 @@ use super::{
 	service,
 };
 
-pub fn router() -> Router<service::State> {
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+	limit_default: usize,
+	limit_max: usize,
+}
+
+pub fn router(config: Config) -> Router<service::State> {
 	Router::new()
 		.route("/", get(list))
 		.route("/:sheet", get(sheet))
+		// TODO: combine these as `/:sheet/*id` and use a deserialiser thing like the specifier - then i can reuse that deser thing for ids=... too
 		.route("/:sheet/:row", get(row))
 		.route("/:sheet/:row/:subrow", get(row))
+		// Using Extension so I don't need to worry about nested state destructuring.
+		.layer(Extension(config))
 }
 
 #[debug_handler(state = service::State)]
@@ -46,10 +55,15 @@ struct SheetPath {
 
 #[derive(Deserialize)]
 struct SheetQuery {
+	// Data resolution
 	language: Option<LanguageString>,
 	schema: Option<schema::Specifier>,
 	// TODO: this is pretty cruddy, rethink this when revisiting read::
 	fields: Option<Warnings<Option<read::Filter>>>,
+
+	// ID pagination/filtering
+	page: Option<usize>,
+	limit: Option<usize>,
 }
 
 #[derive(Serialize)]
@@ -74,6 +88,7 @@ async fn sheet(
 	Query(query): Query<SheetQuery>,
 	State(data): State<service::Data>,
 	State(schema_provider): State<service::Schema>,
+	Extension(config): Extension<Config>,
 ) -> Result<impl IntoResponse> {
 	// Resolve arguments with the services.
 	let excel = data.version(version_key)?.excel();
@@ -104,6 +119,15 @@ async fn sheet(
 	let mut builder = sheet.with();
 	let sheet_iterator = builder.language(language).iter();
 
+	// Paginate the results.
+	let limit = query
+		.limit
+		.unwrap_or(config.limit_default)
+		.min(config.limit_max);
+	let offset = query.page.unwrap_or(0) * limit;
+	let sheet_iterator = sheet_iterator.skip(offset).take(limit);
+
+	// Build Results for the targeted rows.
 	let sheet_kind = sheet.kind().anyhow()?;
 	let sheet_iterator = sheet_iterator.map(|row| {
 		let row_id = row.row_id();
@@ -131,10 +155,7 @@ async fn sheet(
 		})
 	});
 
-	// Paginate the results.
-	// todo: limit/offset. will need config for limits, presumably seperate from search
-	// todo might want to do the collect-1-extra trick like search to see if there's more
-	let rows = sheet_iterator.take(10).collect::<Result<Vec<_>>>()?;
+	let rows = sheet_iterator.collect::<Result<Vec<_>>>()?;
 
 	let response = SheetResponse { rows };
 

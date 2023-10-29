@@ -18,6 +18,8 @@ use super::{
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	admin: admin::Config,
+	api1: api1::Config,
+
 	address: Option<IpAddr>,
 	port: u16,
 }
@@ -42,7 +44,7 @@ pub async fn serve(
 		.nest("/admin", admin::router(config.admin))
 		.nest(
 			"/api/1",
-			api1::router().with_state(api1::State {
+			api1::router(config.api1).with_state(api1::State {
 				data: data.clone(),
 				schema: schema.clone(),
 				version: version.clone(),

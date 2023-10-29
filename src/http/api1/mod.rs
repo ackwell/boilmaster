@@ -4,4 +4,7 @@ mod extract;
 mod service;
 mod sheet;
 
-pub use {api::router, service::State};
+pub use {
+	api::{router, Config},
+	service::State,
+};

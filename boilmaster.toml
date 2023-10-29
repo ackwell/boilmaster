@@ -11,6 +11,10 @@ port = 8080
 username = "username"
 password = "password"
 
+[http.api1.sheet]
+limit_default = 100
+limit_max = 500
+
 [data]
 language = "en"
 
