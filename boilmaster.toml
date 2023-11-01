@@ -12,10 +12,10 @@ username = "username"
 password = "password"
 
 [http.api1.sheet]
-limit_default = 100
-limit_max = 500
+limit.default = 100
+limit.max = 500
 # TODO: should this be shared with search eventually, or nah?
-filter.saint-coinach = "Name"
+filter.saint-coinach = "Name,Singular,Icon"
 
 [data]
 language = "en"

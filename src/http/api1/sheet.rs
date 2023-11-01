@@ -21,11 +21,16 @@ use super::{
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-	limit_default: usize,
-	limit_max: usize,
+	limit: LimitConfig,
 
 	#[serde(deserialize_with = "deserialize_filter")]
 	filter: HashMap<String, Option<read::Filter>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LimitConfig {
+	default: usize,
+	max: usize,
 }
 
 fn deserialize_filter<'de, D>(
@@ -238,8 +243,8 @@ async fn sheet(
 	// Paginate the results.
 	let limit = query
 		.limit
-		.unwrap_or(config.limit_default)
-		.min(config.limit_max);
+		.unwrap_or(config.limit.default)
+		.min(config.limit.max);
 	let offset = query.page.unwrap_or(0) * limit;
 	let sheet_iterator = sheet_iterator.skip(offset).take(limit);
 
