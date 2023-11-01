@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use ironworks_schema::Schema;
 use serde::Deserialize;
 
-use super::{error::Error, saint_coinach, Specifier};
+use super::{error::Error, saint_coinach, specifier::CanonicalSpecifier, Specifier};
 
 pub trait Source: Send + Sync {
-	fn version(&self, version: Option<&str>) -> Result<Box<dyn Schema>, Error>;
+	fn canonicalize(&self, version: Option<&str>) -> Result<String, Error>;
+	fn version(&self, version: &str) -> Result<Box<dyn Schema>, Error>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,14 +35,27 @@ impl Provider {
 		})
 	}
 
-	pub fn schema(&self, specifier: Option<&Specifier>) -> Result<Box<dyn Schema>, Error> {
-		let specifier = specifier.unwrap_or(&self.default);
+	/// Canonicalise an optional specifier.
+	pub fn canonicalize(&self, specifier: Option<Specifier>) -> Result<CanonicalSpecifier, Error> {
+		let specifier = specifier.unwrap_or_else(|| self.default.clone());
 
 		let source = self
 			.sources
 			.get(specifier.source.as_str())
 			.ok_or_else(|| Error::UnknownSource(specifier.source.clone()))?;
-		source.version(specifier.version.as_deref())
+
+		Ok(CanonicalSpecifier {
+			source: specifier.source,
+			version: source.canonicalize(specifier.version.as_deref())?,
+		})
+	}
+
+	pub fn schema(&self, specifier: CanonicalSpecifier) -> Result<Box<dyn Schema>, Error> {
+		let source = self
+			.sources
+			.get(specifier.source.as_str())
+			.ok_or_else(|| Error::UnknownSource(specifier.source.clone()))?;
+		source.version(&specifier.version)
 	}
 }
 

@@ -1,4 +1,4 @@
-use std::{num::ParseIntError, str::FromStr};
+use std::{collections::HashMap, num::ParseIntError, str::FromStr};
 
 use axum::{
 	debug_handler, extract::State, response::IntoResponse, routing::get, Extension, Json, Router,
@@ -23,15 +23,46 @@ use super::{
 pub struct Config {
 	limit_default: usize,
 	limit_max: usize,
+
+	#[serde(deserialize_with = "deserialize_filter")]
+	filter: HashMap<String, Option<read::Filter>>,
+}
+
+fn deserialize_filter<'de, D>(
+	deserializer: D,
+) -> Result<HashMap<String, Option<read::Filter>>, D::Error>
+where
+	D: Deserializer<'de>,
+{
+	let raw = match Option::<HashMap<String, String>>::deserialize(deserializer)? {
+		Some(value) => value,
+		None => return Ok(HashMap::new()),
+	};
+
+	let filters = raw
+		.into_iter()
+		.map(|(schema, filter_string)| {
+			let filter_parsed = filter_string.parse::<Warnings<Option<read::Filter>>>()?;
+
+			// TODO: is logging going to be a common pattern? should it be pulled into the util?
+			let (filter, warnings) = filter_parsed.decompose();
+			for warning in warnings {
+				tracing::warn!(%schema, %warning, "default filter warning");
+			}
+
+			Ok((schema, filter))
+		})
+		.collect::<Result<_>>()
+		.map_err(de::Error::custom)?;
+
+	Ok(filters)
 }
 
 pub fn router(config: Config) -> Router<service::State> {
 	Router::new()
 		.route("/", get(list))
 		.route("/:sheet", get(sheet))
-		// TODO: combine these as `/:sheet/*id` and use a deserialiser thing like the specifier - then i can reuse that deser thing for ids=... too
 		.route("/:sheet/:row", get(row))
-		.route("/:sheet/:row/:subrow", get(row))
 		// Using Extension so I don't need to worry about nested state destructuring.
 		.layer(Extension(config))
 }
@@ -162,12 +193,22 @@ async fn sheet(
 		.unwrap_or_else(|| data.default_language());
 
 	// TODO: Consider extractor for this.
-	let schema = schema_provider.schema(query.schema.as_ref())?;
+	let schema_specifier = schema_provider.canonicalize(query.schema)?;
 
 	let (field_filter, warnings) = query
 		.fields
 		.unwrap_or_else(|| Warnings::new(None))
 		.decompose();
+
+	let field_filter = field_filter.or_else(|| {
+		config
+			.filter
+			.get(schema_specifier.source())
+			.cloned()
+			.flatten()
+	});
+
+	let schema = schema_provider.schema(schema_specifier)?;
 
 	// Get a reference to the sheet we'll be reading from.
 	let sheet = excel.sheet(path.sheet).map_err(|error| match error {
@@ -188,7 +229,6 @@ async fn sheet(
 
 		// None were provided, iterate over the sheet itself.
 		// TODO: Currently, read:: does _all_ the row fetching itself, which means that we're effectively iterating the sheet here _just_ to get the row IDs, then re-fetching in the read:: code. This... probably isn't too problematic, but worth considering how to approach more betterer. If read:: can be modified to take a row, then the Some() case above can be specailised to the read-row logic and this case can be simplified.
-		// None => Either::Right(builder.iter().map(Result::Ok)),
 		None => Either::Right(builder.iter().map(|row| RowSpecifier {
 			row_id: row.row_id(),
 			subrow_id: Some(row.subrow_id()),
@@ -242,11 +282,13 @@ async fn sheet(
 #[derive(Deserialize)]
 struct RowPath {
 	sheet: String,
-	row: u32,
-	subrow: Option<u16>,
+	row: RowSpecifier,
 }
 
 #[debug_handler(state = service::State)]
 async fn row(Path(path): Path<RowPath>) -> impl IntoResponse {
-	"todo"
+	format!(
+		"todo {}/{}:{:?}",
+		path.sheet, path.row.row_id, path.row.subrow_id
+	)
 }

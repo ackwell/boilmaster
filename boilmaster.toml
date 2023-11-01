@@ -14,6 +14,8 @@ password = "password"
 [http.api1.sheet]
 limit_default = 100
 limit_max = 500
+# TODO: should this be shared with search eventually, or nah?
+filter.saint-coinach = "Name"
 
 [data]
 language = "en"

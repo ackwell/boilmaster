@@ -1,5 +1,6 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, str::FromStr};
 
+use anyhow::anyhow;
 use nom::{
 	branch::alt,
 	bytes::complete::{tag, take_while1},
@@ -21,7 +22,7 @@ use crate::{
 
 const LANGUAGE_SIGIL: &str = "@";
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructKey {
 	pub name: String,
 	pub language: Option<data::LanguageString>,
@@ -41,7 +42,7 @@ impl fmt::Display for StructKey {
 type StructFilter = HashMap<StructKey, Option<Filter>>;
 type ArrayFilter = Option<Box<Filter>>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Filter {
 	Struct(StructFilter),
 
@@ -85,15 +86,22 @@ impl<'de> SoftDeserialize<'de> for Option<Filter> {
 		D: Deserializer<'de>,
 	{
 		let raw = String::deserialize(deserializer)?;
+		raw.parse().map_err(de::Error::custom)
+	}
+}
 
-		let (remaining, filter) = group(&raw)
+impl FromStr for Warnings<Option<Filter>> {
+	type Err = anyhow::Error;
+
+	fn from_str(input: &str) -> Result<Self, Self::Err> {
+		let (remaining, filter) = group(&input)
 			.finish()
-			.map_err(|error| de::Error::custom(format!("field filter parse error: {error}")))?;
+			.map_err(|error| anyhow!("field filter parse error: {error}"))?;
 
 		if !remaining.is_empty() {
-			return Err(de::Error::custom(format!(
+			return Err(anyhow!(
 				"field filter parse error: trailing characters found {remaining:?}"
-			)));
+			));
 		}
 
 		Ok(filter)

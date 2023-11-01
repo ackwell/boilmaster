@@ -81,7 +81,8 @@ async fn row(
 	State(schema_provider): State<service::Schema>,
 ) -> Result<impl IntoResponse> {
 	let excel = data.version(version_key).context("data not ready")?.excel();
-	let schema = schema_provider.schema(schema_query.schema.as_ref())?;
+	let schema_specifier = schema_provider.canonicalize(schema_query.schema)?;
+	let schema = schema_provider.schema(schema_specifier)?;
 
 	// Sanity check that the correct path was used.
 	let sheet_kind = excel
