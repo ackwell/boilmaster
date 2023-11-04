@@ -12,7 +12,6 @@ use super::{
 	asset,
 	// search,
 	service,
-	sheets,
 };
 
 #[derive(Debug, Deserialize)]
@@ -52,7 +51,6 @@ pub async fn serve(
 		)
 		// old:
 		.nest("/asset", asset::router())
-		.nest("/sheets", sheets::router())
 		// .nest("/search", search::router())
 		.layer(TraceLayer::new_for_http())
 		.with_state(service::State {
