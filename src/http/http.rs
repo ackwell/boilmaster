@@ -40,15 +40,7 @@ pub async fn serve(
 
 	let router = Router::new()
 		.nest("/admin", admin::router(config.admin))
-		.nest(
-			"/api/1",
-			api1::router(config.api1).with_state(api1::State {
-				asset: asset.clone(),
-				data: data.clone(),
-				schema: schema.clone(),
-				version: version.clone(),
-			}),
-		)
+		.nest("/api/1", api1::router(config.api1))
 		// old:
 		// .nest("/search", search::router())
 		.layer(TraceLayer::new_for_http())

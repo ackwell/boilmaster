@@ -6,12 +6,11 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::asset::Format;
+use crate::{asset::Format, http::service};
 
 use super::{
 	error::Result,
 	extract::{Path, Query, VersionQuery},
-	service,
 };
 
 pub fn router() -> Router<service::State> {

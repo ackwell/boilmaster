@@ -6,9 +6,9 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::version::VersionKey;
+use crate::{http::service, version::VersionKey};
 
-use super::{error::Error, service};
+use super::error::Error;
 
 #[derive(Deserialize)]
 struct VersionQueryParams {
