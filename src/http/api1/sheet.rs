@@ -168,6 +168,10 @@ where
 #[derive(Serialize)]
 struct SheetResponse {
 	rows: Vec<RowResult>,
+
+	// TODO: maybe this should be provided by serializing `Warnings` itself?
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	warnings: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -278,7 +282,7 @@ async fn sheet(
 
 	let rows = sheet_iterator.collect::<Result<Vec<_>>>()?;
 
-	let response = SheetResponse { rows };
+	let response = SheetResponse { rows, warnings };
 
 	// TODO: warnings
 	Ok(Json(response))
