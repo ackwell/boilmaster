@@ -139,7 +139,7 @@ struct SheetQuery {
 	fields: Option<Warnings<Option<read::Filter>>>,
 
 	// ID pagination/filtering
-	#[serde(deserialize_with = "deserialize_rows")]
+	#[serde(default, deserialize_with = "deserialize_rows")]
 	rows: Option<Vec<RowSpecifier>>,
 	page: Option<usize>,
 	limit: Option<usize>,
