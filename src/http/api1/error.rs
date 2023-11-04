@@ -1,7 +1,7 @@
 use axum::{
 	extract::rejection::{PathRejection, QueryRejection},
 	http::StatusCode,
-	response::IntoResponse,
+	response::{IntoResponse, Response},
 	Json,
 };
 use serde::Serialize;
@@ -103,7 +103,7 @@ struct ErrorResponse {
 }
 
 impl IntoResponse for Error {
-	fn into_response(self) -> axum::response::Response {
+	fn into_response(self) -> Response {
 		// Log the full error for ISEs - we don't show this info anywhere else in case it contains something sensitive.
 		if let Self::Other(ref error) = self {
 			tracing::error!("{error:?}")

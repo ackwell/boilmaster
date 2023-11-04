@@ -8,12 +8,9 @@ use axum::{
 };
 use maud::{html, Render};
 
-use crate::{
-	http::{error::Result, service},
-	version::VersionKey,
-};
+use crate::{http::service, version::VersionKey};
 
-use super::base::BaseTemplate;
+use super::{base::BaseTemplate, error::Result};
 
 pub fn router() -> Router<service::State> {
 	Router::new().route("/", get(versions))
