@@ -1,14 +1,16 @@
+use std::ffi::OsStr;
+
 use axum::{
 	debug_handler, extract::State, headers::ContentType, http::header, response::IntoResponse,
 	routing::get, Router, TypedHeader,
 };
 use serde::Deserialize;
 
-use crate::{asset::Format, version::VersionKey};
+use crate::asset::Format;
 
 use super::{
 	error::Result,
-	extract::{Path, Query},
+	extract::{Path, Query, VersionQuery},
 	service,
 };
 
@@ -17,23 +19,23 @@ pub fn router() -> Router<service::State> {
 }
 
 #[derive(Deserialize)]
-struct FormatQuery {
+struct AssetQuery {
 	format: Format,
 }
 
 #[debug_handler(state = service::State)]
 async fn asset(
 	Path(path): Path<String>,
-	version_key: VersionKey,
-	Query(format_query): Query<FormatQuery>,
+	VersionQuery(version_key): VersionQuery,
+	Query(query): Query<AssetQuery>,
 	State(asset): State<service::Asset>,
 ) -> Result<impl IntoResponse> {
-	let format = format_query.format;
+	let format = query.format;
 
 	let bytes = asset.convert(version_key, &path, format)?;
 
-	let filename = std::path::Path::new(&path).with_extension(format.extension());
-	let disposition = match filename.file_name().and_then(|name| name.to_str()) {
+	let filepath = std::path::Path::new(&path).with_extension(format.extension());
+	let disposition = match filepath.file_name().and_then(OsStr::to_str) {
 		Some(name) => format!("inline; filename=\"{name}\""),
 		None => "inline".to_string(),
 	};

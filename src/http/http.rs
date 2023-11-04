@@ -9,7 +9,6 @@ use tower_http::trace::TraceLayer;
 use super::{
 	admin,
 	api1,
-	asset,
 	// search,
 	service,
 };
@@ -44,13 +43,13 @@ pub async fn serve(
 		.nest(
 			"/api/1",
 			api1::router(config.api1).with_state(api1::State {
+				asset: asset.clone(),
 				data: data.clone(),
 				schema: schema.clone(),
 				version: version.clone(),
 			}),
 		)
 		// old:
-		.nest("/asset", asset::router())
 		// .nest("/search", search::router())
 		.layer(TraceLayer::new_for_http())
 		.with_state(service::State {
