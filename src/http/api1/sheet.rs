@@ -145,6 +145,7 @@ struct SheetQuery {
 	limit: Option<usize>,
 }
 
+// TODO: this can probably be made as a general purpose "comma seperated" deserializer struct
 fn deserialize_rows<'de, D>(deserializer: D) -> Result<Option<Vec<RowSpecifier>>, D::Error>
 where
 	D: Deserializer<'de>,
@@ -174,6 +175,7 @@ struct SheetResponse {
 	warnings: Vec<String>,
 }
 
+// TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
 #[derive(Serialize)]
 struct RowResult {
 	row_id: u32,
@@ -220,6 +222,7 @@ async fn sheet(
 	let schema = schema_provider.schema(schema_specifier)?;
 
 	// Get a reference to the sheet we'll be reading from.
+	// TODO: should this be in error as a default extract? minus the sheet specialised case, that is
 	let sheet = excel.sheet(path.sheet).map_err(|error| match error {
 		ironworks::Error::NotFound(ironworks::ErrorValue::Sheet(..)) => {
 			Error::NotFound(error.to_string())
@@ -294,10 +297,67 @@ struct RowPath {
 	row: RowSpecifier,
 }
 
+#[derive(Deserialize)]
+struct RowQuery {
+	language: Option<LanguageString>,
+	schema: Option<schema::Specifier>,
+	fields: Option<Warnings<Option<read::Filter>>>,
+}
+
+#[derive(Serialize)]
+struct RowResponse {
+	#[serde(flatten)]
+	row: RowResult,
+
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	warnings: Vec<String>,
+}
+
 #[debug_handler(state = service::State)]
-async fn row(Path(path): Path<RowPath>) -> impl IntoResponse {
-	format!(
-		"todo {}/{}:{:?}",
-		path.sheet, path.row.row_id, path.row.subrow_id
-	)
+async fn row(
+	Path(path): Path<RowPath>,
+	VersionQuery(version_key): VersionQuery,
+	Query(query): Query<RowQuery>,
+	State(data): State<service::Data>,
+	State(schema_provider): State<service::Schema>,
+) -> Result<impl IntoResponse> {
+	let excel = data.version(version_key)?.excel();
+
+	let language = query
+		.language
+		.map(Language::from)
+		.unwrap_or_else(|| data.default_language());
+
+	let schema_specifier = schema_provider.canonicalize(query.schema)?;
+	let schema = schema_provider.schema(schema_specifier)?;
+
+	let (field_filter, warnings) = query
+		.fields
+		.unwrap_or_else(|| Warnings::new(None))
+		.decompose();
+
+	let row_id = path.row.row_id;
+	let subrow_id = path.row.subrow_id;
+
+	let fields = read::read(
+		&excel,
+		schema.as_ref(),
+		language,
+		field_filter.as_ref(),
+		&path.sheet,
+		row_id,
+		subrow_id.unwrap_or(0),
+	)?;
+
+	let response = RowResponse {
+		row: RowResult {
+			row_id,
+			// NOTE: this results in subrow being reported if it's included in path, even on non-subrow sheets (though anything but :0 on those throws an error)
+			subrow_id,
+			fields: Some(fields),
+		},
+		warnings,
+	};
+
+	Ok(Json(response))
 }
