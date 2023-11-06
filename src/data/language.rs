@@ -1,8 +1,9 @@
 use std::{fmt, str::FromStr};
 
-use anyhow::bail;
 use ironworks::excel::Language;
 use serde::de;
+
+use super::error::Error;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LanguageString(Language);
@@ -42,7 +43,7 @@ impl From<Language> for LanguageString {
 }
 
 impl FromStr for LanguageString {
-	type Err = anyhow::Error;
+	type Err = Error;
 
 	fn from_str(string: &str) -> Result<Self, Self::Err> {
 		let language = match string {
@@ -54,7 +55,7 @@ impl FromStr for LanguageString {
 			"chs" => Language::ChineseSimplified,
 			"cht" => Language::ChineseTraditional,
 			"kr" => Language::Korean,
-			_ => bail!("unrecognised language \"{string}\""),
+			_ => return Err(Error::UnknownLanguage(string.into())),
 		};
 
 		Ok(Self(language))

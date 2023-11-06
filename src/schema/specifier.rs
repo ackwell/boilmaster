@@ -2,7 +2,24 @@ use std::{convert::Infallible, str::FromStr};
 
 use serde::{de, Deserialize};
 
+// TODO: will probably need eq/hash so i can use these as cache keys?
 #[derive(Debug)]
+pub struct CanonicalSpecifier {
+	pub(super) source: String,
+	pub(super) version: String,
+}
+
+impl CanonicalSpecifier {
+	pub fn source(&self) -> &str {
+		&self.source
+	}
+
+	pub fn version(&self) -> &str {
+		&self.version
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct Specifier {
 	pub source: String,
 	pub version: Option<String>,

@@ -13,13 +13,14 @@ use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
 };
+use futures::TryFutureExt;
 use serde::Deserialize;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Deserialize)]
 struct Config {
-	tracing: tracing::Config,
+	// tracing: tracing::Config, - read individually.
 	http: http::Config,
 	data: data::Config,
 	version: version::Config,
@@ -29,16 +30,23 @@ struct Config {
 
 #[tokio::main]
 async fn main() {
-	// Load configuration
+	// Prepare the configuration hierarchy.
 	// TODO: is it worth having a cli flag to specify the config path or is that just immense overkill?
-	let config = Figment::new()
+	let figment = Figment::new()
 		.merge(Toml::file("boilmaster.toml"))
-		.merge(Env::prefixed("BM_").split("_"))
-		.extract::<Config>()
-		.expect("TODO: Error handling");
+		.merge(Env::prefixed("BM_").split("_"));
 
-	// Initialise tracing before getting too far into bootstrapping the rest of the application
-	tracing::init(config.tracing);
+	// Initialise tracing before getting too far into bootstrapping the rest of
+	// the application. We extract only the tracing configuration first, so that
+	// the tracing library is bootstrapped before the rest of the configuration
+	// is read, in case any of it traces.
+	let tracing_config = figment
+		.extract_inner::<tracing::Config>("tracing")
+		.expect("TODO: Error handling");
+	tracing::init(tracing_config);
+
+	// Load the rest of the configuration.
+	let config = figment.extract::<Config>().expect("TODO: Error handling");
 
 	let version = Arc::new(version::Manager::new(config.version).expect("TODO"));
 	let data = Arc::new(data::Data::new(config.data));
@@ -51,7 +59,8 @@ async fn main() {
 
 	tokio::try_join!(
 		version.start(shutdown_token.clone()),
-		data.start(shutdown_token.clone(), &version),
+		data.start(shutdown_token.clone(), &version)
+			.map_err(anyhow::Error::from),
 		// search
 		// 	.start(shutdown_token.child_token())
 		// 	.map_err(anyhow::Error::from),

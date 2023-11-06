@@ -3,8 +3,7 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
-use anyhow::{Context, Result};
-use futures::future::join_all;
+use anyhow::Context;
 use ironworks::{
 	excel::{Excel, Language},
 	sqpack::SqPack,
@@ -16,7 +15,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::version::{self, VersionKey};
 
-use super::language::LanguageString;
+use super::{
+	error::{Error, Result},
+	language::LanguageString,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -81,6 +83,7 @@ impl Data {
 		version: &version::Manager,
 		versions: Vec<VersionKey>,
 	) -> Result<()> {
+		// Filter the incoming version list down to the ones we're not already aware of.
 		let known_keys = self
 			.versions
 			.read()
@@ -89,31 +92,25 @@ impl Data {
 			.cloned()
 			.collect::<HashSet<_>>();
 
-		let prepares = versions
+		let results = versions
 			.into_iter()
 			.filter(|key| !known_keys.contains(key))
-			.map(|key| async move {
+			.map(|key| {
 				self.prepare_version(version, key)
-					.await
 					.map_err(|error| (key, error))
 			});
 
 		// Run all the version preparation. We aren't failing fast on this, as an
 		// erroneous version should not prevent other versions from being prepared.
-		let results = join_all(prepares).await;
-		for (key, error) in results.into_iter().filter_map(Result::err) {
+		for (key, error) in results.filter_map(Result::err) {
 			tracing::warn!(%key, reason = %error, "did not prepare version")
 		}
 
 		Ok(())
 	}
 
-	// TODO: should this use an explicit cancellation token?
-	async fn prepare_version(
-		&self,
-		manager: &version::Manager,
-		version_key: VersionKey,
-	) -> Result<()> {
+	fn prepare_version(&self, manager: &version::Manager, version_key: VersionKey) -> Result<()> {
+		// Preparation only happens when we're told that a version exists, so anything going wrong _here_ is a hefty failure.
 		let version = manager
 			.version(version_key)
 			.context("version does not exist")?;
@@ -155,18 +152,18 @@ impl Data {
 		Ok(())
 	}
 
-	// TODO: this doesn't disambiguate between "version is unknown" and "version isn't ready yet", and there's a lot of consumers that are .context'ing this Option. Should probably disambiguate the two error cases and raise a proper error type that can be handled by other services appropriately
-	pub fn version(&self, version: VersionKey) -> Option<Arc<Version>> {
-		self.versions
-			.read()
-			.expect("poisoned")
+	pub fn version(&self, version: VersionKey) -> Result<Arc<Version>> {
+		let versions = self.versions.read().expect("poisoned");
+
+		versions
 			.get(&version)
+			.ok_or_else(|| Error::UnknownVersion(version))
 			.cloned()
 	}
 
 	fn broadcast_version_list(&self) {
 		let versions = self.versions.read().expect("poisoned");
-		let keys = versions.keys().cloned().collect::<Vec<_>>();
+		let keys = versions.keys().copied().collect::<Vec<_>>();
 
 		self.channel.send_if_modified(|value| {
 			if &keys != value {
