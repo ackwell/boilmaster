@@ -129,7 +129,6 @@ impl<'de> Deserialize<'de> for RowSpecifier {
 	}
 }
 
-// TODO: Consider adding default field filter (config, parse from read:: dsl?)
 #[derive(Deserialize)]
 struct SheetQuery {
 	// Data resolution
@@ -222,7 +221,7 @@ async fn sheet(
 	let schema = schema_provider.schema(schema_specifier)?;
 
 	// Get a reference to the sheet we'll be reading from.
-	// TODO: should this be in error as a default extract? minus the sheet specialised case, that is
+	// TODO: should this be in super::error as a default extract? minus the sheet specialised case, that is
 	let sheet = excel.sheet(path.sheet).map_err(|error| match error {
 		ironworks::Error::NotFound(ironworks::ErrorValue::Sheet(..)) => {
 			Error::NotFound(error.to_string())
@@ -287,7 +286,6 @@ async fn sheet(
 
 	let response = SheetResponse { rows, warnings };
 
-	// TODO: warnings
 	Ok(Json(response))
 }
 
