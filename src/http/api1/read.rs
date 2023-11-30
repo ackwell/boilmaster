@@ -84,6 +84,7 @@ fn array(input: &str) -> IResult<&str, read::Filter> {
 #[cfg(test)]
 mod test {
 	use nom::Finish;
+	use pretty_assertions::assert_eq;
 
 	use super::*;
 
