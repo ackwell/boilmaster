@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use ironworks::excel;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Filter {
-	Struct(HashMap<StructKey, Filter>),
+	Struct(Vec<(StructKey, Filter)>),
 	Array(Box<Filter>),
 	All,
 }
