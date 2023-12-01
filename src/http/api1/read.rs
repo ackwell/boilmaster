@@ -1,17 +1,47 @@
+use std::str::FromStr;
+
 use ironworks::excel;
 use nom::{
 	branch::alt,
 	bytes::complete::{tag, take_while1},
 	character::complete::char,
-	combinator::{map, map_res, opt, value},
+	combinator::{all_consuming, map, map_res, opt, value},
 	multi::separated_list1,
 	sequence::{delimited, preceded, tuple},
-	IResult,
+	Finish, IResult,
 };
+use serde::{de, Deserialize, Deserializer};
 
 use crate::{data, read2 as read};
 
-struct FilterString(read::Filter);
+use super::error;
+
+#[derive(Debug)]
+pub struct FilterString(read::Filter);
+
+impl<'de> Deserialize<'de> for FilterString {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		let raw = String::deserialize(deserializer)?;
+		raw.parse().map_err(de::Error::custom)
+	}
+}
+
+impl FromStr for FilterString {
+	// TODO: Is using the http error type "correct" here - it's the most relevant given _location_, but is it _relevant_?
+	type Err = error::Error;
+
+	fn from_str(input: &str) -> Result<Self, Self::Err> {
+		// TODO: Consider using VerboseError or similar?
+		let (_, filter) = all_consuming(root_filter)(input)
+			.finish()
+			.map_err(|error| error::Error::Invalid(error.to_string()))?;
+
+		Ok(FilterString(filter))
+	}
+}
 
 // The root level of filters is effectively a struct, with optional braces. This
 // is invalid anywhere but the root, as it makes commas ambiguous. We only allow
@@ -90,7 +120,6 @@ mod test {
 
 	fn test_parse(input: &str) -> read::Filter {
 		let (remaining, output) = root_filter(input).finish().expect("parse should not fail");
-		// TODO: should i have a single entry point that uses all_consuming?
 		assert_eq!(remaining, "");
 		output
 	}
