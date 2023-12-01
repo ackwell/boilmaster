@@ -207,7 +207,7 @@ mod test {
 	fn parse_root_shared_path() {
 		let expected = test_struct([
 			("a", test_struct([("b", read::Filter::All)])),
-			("a", test_struct([("d", read::Filter::All)])),
+			("a", test_struct([("c", read::Filter::All)])),
 		]);
 
 		let got = test_parse("{a.{b.*},a.{c.*}}");
