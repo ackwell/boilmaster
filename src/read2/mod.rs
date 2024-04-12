@@ -7,5 +7,5 @@ pub use {
 	error::Error,
 	filter::{Filter, Language},
 	read::read,
-	value::{StructKey, Value},
+	value::{Reference, StructKey, Value},
 };

@@ -5,7 +5,7 @@ use std::{
 	ops::Range,
 };
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 
@@ -14,7 +14,7 @@ use crate::read2::error::MismatchError;
 use super::{
 	error::{Error, Result},
 	filter::Filter,
-	value::{StructKey, Value},
+	value::{Reference, StructKey, Value},
 };
 
 pub fn read(
@@ -29,23 +29,36 @@ pub fn read(
 
 	filter: &Filter,
 ) -> Result<Value> {
-	let sheet_schema = schema.sheet(sheet_name)?;
-	let sheet_data = excel.sheet(sheet_name)?;
+	let value = read_sheet(ReaderContext {
+		excel,
+		schema,
+
+		sheet: sheet_name,
+		language: default_language,
+		row_id,
+		subrow_id,
+
+		filter,
+		rows: &mut HashMap::new(),
+		columns: &[],
+		depth: 1,
+	})?;
+
+	Ok(value)
+}
+
+fn read_sheet(context: ReaderContext) -> Result<Value> {
+	let sheet_name = context.sheet;
+	let sheet_schema = context.schema.sheet(sheet_name)?;
+	let sheet_data = context.excel.sheet(sheet_name)?;
 	let columns = get_sorted_columns(&sheet_schema, &sheet_data)?;
 
 	let value = read_node(
 		&sheet_schema.node,
 		ReaderContext {
-			excel,
-
-			sheet: sheet_name,
-			language: default_language,
-			row_id,
-			subrow_id,
-
-			filter,
-			rows: &mut HashMap::new(),
 			columns: &columns,
+
+			..context
 		},
 	)?;
 
@@ -67,7 +80,7 @@ fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
 	use schema::Node as N;
 	match node {
 		N::Array { count, node } => read_node_array(node, *count, context),
-		N::Reference(targets) => read_node_reference(context),
+		N::Reference(targets) => read_node_reference(targets, context),
 		N::Scalar => read_node_scalar(context),
 		N::Struct(fields) => read_node_struct(fields, context),
 	}
@@ -77,9 +90,94 @@ fn read_node_scalar(mut context: ReaderContext) -> Result<Value> {
 	context.next_field().map(Value::Scalar)
 }
 
-fn read_node_reference(context: ReaderContext) -> Result<Value> {
-	// TODO: Implement references
-	read_node_scalar(context)
+fn read_node_reference(
+	targets: &[schema::ReferenceTarget],
+	mut context: ReaderContext,
+) -> Result<Value> {
+	// TODO: are references _always_ i32? like, always always?
+	let target_value = convert_reference_value(context.next_field()?)?;
+
+	let mut reference = Reference {
+		value: target_value,
+		sheet: None,
+		fields: None,
+	};
+
+	// A target less than 0 (typically -1) is usually used to signify that a link is not
+	// present on this row. Also ensure that we've not run out of recursion depth.
+	// TODO: would be neat to halt recursion later, but target checking does have a cost that needs to be considered.
+	if target_value < 0 || context.depth == 0 {
+		return Ok(Value::Reference(reference));
+	}
+	let target_value = u32::try_from(target_value)
+		.expect("target value should always be >= 0 due to prior condition");
+
+	// NOTE: a lot of the TODOs here are immediately break;ing - this is to avoid a potentially correct target that is simply unhandled being ignored and a later, incorrect target being picked as a result.
+	for target in targets {
+		// TODO: handle conditions
+		if target.condition.is_some() {
+			tracing::warn!("unhandled target condition: {target:?}");
+			break;
+		}
+
+		// TODO: handle retargeted refs
+		if target.selector.is_some() {
+			tracing::warn!("unhandled target selector: {target:?}");
+			break;
+		}
+
+		let sheet_data = context.excel.sheet(&target.sheet)?;
+
+		// TODO: handle references targeting subrows (how?)
+		if sheet_data.kind()? == exh::SheetKind::Subrows {
+			tracing::warn!("unhandled subrow sheet target: {target:?}");
+			break;
+		}
+
+		// Try to fetch the row data - if no matching row exists, continue to the next target.
+		// TODO: handle target selectors
+		let row_data = match sheet_data
+			.with()
+			.language(context.language)
+			.row(target_value)
+		{
+			Err(ironworks::Error::NotFound(ironworks::ErrorValue::Row { .. })) => continue,
+			other => other,
+		}?;
+
+		let child_data = read_sheet(ReaderContext {
+			sheet: &target.sheet,
+			row_id: row_data.row_id(),
+			subrow_id: row_data.subrow_id(),
+
+			rows: &mut HashMap::from([(context.language, row_data)]),
+			depth: context.depth - 1,
+
+			..context
+		})?;
+
+		reference.sheet = Some(target.sheet.to_string());
+		reference.fields = Some(child_data.into());
+	}
+
+	Ok(Value::Reference(reference))
+}
+
+fn convert_reference_value(field: excel::Field) -> Result<i32> {
+	use excel::Field as F;
+	let result = match field {
+		F::I8(value) => i32::from(value),
+		F::I16(value) => i32::from(value),
+		F::I32(value) => value,
+		F::I64(value) => value.try_into()?,
+		F::U8(value) => i32::from(value),
+		F::U16(value) => i32::from(value),
+		F::U32(value) => value.try_into()?,
+		F::U64(value) => value.try_into()?,
+
+		other => Err(anyhow!("invalid index type {other:?}"))?,
+	};
+	Ok(result)
 }
 
 fn read_node_array(
@@ -239,9 +337,9 @@ fn iterate_struct_fields<'s, 'c>(
 	Ok(items)
 }
 
-#[derive(Debug)]
 struct ReaderContext<'a> {
 	excel: &'a excel::Excel<'a>,
+	schema: &'a dyn schema::Schema,
 
 	sheet: &'a str,
 	language: excel::Language,
@@ -251,6 +349,7 @@ struct ReaderContext<'a> {
 	filter: &'a Filter,
 	columns: &'a [exh::ColumnDefinition],
 	rows: &'a mut HashMap<excel::Language, excel::Row>,
+	depth: u8,
 }
 
 impl ReaderContext<'_> {

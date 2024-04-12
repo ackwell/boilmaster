@@ -28,6 +28,7 @@ macro_rules! impl_to_failure {
 	};
 }
 
+impl_to_failure!(std::num::TryFromIntError);
 impl_to_failure!(ironworks::Error);
 impl_to_failure!(ironworks_schema::Error);
 

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ironworks::excel;
-use serde::ser::{Serialize, SerializeMap, SerializeSeq};
+use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
 use crate::{data, read2};
 
@@ -33,7 +33,7 @@ where
 	use read2::Value as V;
 	match value {
 		V::Array(values) => serialize_array(serializer, values),
-		V::Reference => todo!(),
+		V::Reference(reference) => serialize_reference(serializer, reference),
 		V::Scalar(field) => serialize_scalar(serializer, field),
 		V::Struct(fields) => serialize_struct(serializer, fields),
 	}
@@ -48,6 +48,23 @@ where
 		sequence.serialize_element(&ValueReference(value))?;
 	}
 	sequence.end()
+}
+
+fn serialize_reference<S>(serializer: S, reference: &read2::Reference) -> Result<S::Ok, S::Error>
+where
+	S: serde::Serializer,
+{
+	let mut state = serializer.serialize_struct("Reference", 3)?;
+	state.serialize_field("value", &reference.value)?;
+	match &reference.sheet {
+		Some(value) => state.serialize_field("sheet", value)?,
+		None => state.skip_field("sheet")?,
+	};
+	match &reference.fields {
+		Some(fields) => state.serialize_field("fields", &ValueReference(fields))?,
+		None => state.skip_field("fields")?,
+	};
+	state.end()
 }
 
 fn serialize_scalar<S>(serializer: S, field: &excel::Field) -> Result<S::Ok, S::Error>
