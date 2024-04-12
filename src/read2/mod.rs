@@ -1,3 +1,11 @@
+mod error;
 mod filter;
+mod read;
+mod value;
 
-pub use filter::{Filter, StructKey};
+pub use {
+	error::Error,
+	filter::{Filter, Language},
+	read::read,
+	value::{StructKey, Value},
+};

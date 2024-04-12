@@ -7,24 +7,20 @@ use either::Either;
 use ironworks::{excel::Language, file::exh};
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use crate::{
-	data::LanguageString,
-	http::service,
-	read, schema,
-	utility::{anyhow::Anyhow, warnings::Warnings},
-};
+use crate::{data::LanguageString, http::service, read2 as read, schema, utility::anyhow::Anyhow};
 
 use super::{
 	error::{Error, Result},
 	extract::{Path, Query, VersionQuery},
+	filter::FilterString,
+	value::ValueString,
 };
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
 	limit: LimitConfig,
 
-	#[serde(deserialize_with = "deserialize_filter")]
-	filter: HashMap<String, Option<read::Filter>>,
+	filter: HashMap<String, FilterConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -33,34 +29,10 @@ struct LimitConfig {
 	max: usize,
 }
 
-fn deserialize_filter<'de, D>(
-	deserializer: D,
-) -> Result<HashMap<String, Option<read::Filter>>, D::Error>
-where
-	D: Deserializer<'de>,
-{
-	let raw = match Option::<HashMap<String, String>>::deserialize(deserializer)? {
-		Some(value) => value,
-		None => return Ok(HashMap::new()),
-	};
-
-	let filters = raw
-		.into_iter()
-		.map(|(schema, filter_string)| {
-			let filter_parsed = filter_string.parse::<Warnings<Option<read::Filter>>>()?;
-
-			// TODO: is logging going to be a common pattern? should it be pulled into the util?
-			let (filter, warnings) = filter_parsed.decompose();
-			for warning in warnings {
-				tracing::warn!(%schema, %warning, "default filter warning");
-			}
-
-			Ok((schema, filter))
-		})
-		.collect::<Result<_>>()
-		.map_err(de::Error::custom)?;
-
-	Ok(filters)
+#[derive(Debug, Clone, Deserialize)]
+struct FilterConfig {
+	list: Option<FilterString>,
+	entry: Option<FilterString>,
 }
 
 pub fn router(config: Config) -> Router<service::State> {
@@ -134,8 +106,7 @@ struct SheetQuery {
 	// Data resolution
 	language: Option<LanguageString>,
 	schema: Option<schema::Specifier>,
-	// TODO: this is pretty cruddy, rethink this when revisiting read::
-	fields: Option<Warnings<Option<read::Filter>>>,
+	fields: Option<FilterString>,
 
 	// ID pagination/filtering
 	#[serde(default, deserialize_with = "deserialize_rows")]
@@ -168,10 +139,6 @@ where
 #[derive(Serialize)]
 struct SheetResponse {
 	rows: Vec<RowResult>,
-
-	// TODO: maybe this should be provided by serializing `Warnings` itself?
-	#[serde(skip_serializing_if = "Vec::is_empty")]
-	warnings: Vec<String>,
 }
 
 // TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
@@ -182,7 +149,7 @@ struct RowResult {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	subrow_id: Option<u16>,
 
-	fields: Option<read::Value>,
+	fields: Option<ValueString>,
 }
 
 #[debug_handler(state = service::State)]
@@ -205,24 +172,22 @@ async fn sheet(
 	// TODO: Consider extractor for this.
 	let schema_specifier = schema_provider.canonicalize(query.schema)?;
 
-	let (field_filter, warnings) = query
+	let filter = query
 		.fields
-		.unwrap_or_else(|| Warnings::new(None))
-		.decompose();
-
-	let field_filter = field_filter.or_else(|| {
-		config
-			.filter
-			.get(schema_specifier.source())
-			.cloned()
-			.flatten()
-	});
+		.or_else(|| {
+			config
+				.filter
+				.get(schema_specifier.source())
+				.and_then(|filter_config| filter_config.list.clone())
+		})
+		.map(|filter_string| filter_string.to_filter(language))
+		.unwrap_or(Ok(read::Filter::All))?;
 
 	let schema = schema_provider.schema(schema_specifier)?;
 
 	// Get a reference to the sheet we'll be reading from.
 	// TODO: should this be in super::error as a default extract? minus the sheet specialised case, that is
-	let sheet = excel.sheet(path.sheet).map_err(|error| match error {
+	let sheet = excel.sheet(&path.sheet).map_err(|error| match error {
 		ironworks::Error::NotFound(ironworks::ErrorValue::Sheet(..)) => {
 			Error::NotFound(error.to_string())
 		}
@@ -265,11 +230,11 @@ async fn sheet(
 		let fields = read::read(
 			&excel,
 			schema.as_ref(),
-			language,
-			field_filter.as_ref(),
-			&sheet.name(),
+			&path.sheet,
 			row_id,
 			subrow_id,
+			language,
+			&filter,
 		)?;
 
 		Ok(RowResult {
@@ -278,13 +243,13 @@ async fn sheet(
 				exh::SheetKind::Subrows => Some(subrow_id),
 				_ => None,
 			},
-			fields: Some(fields),
+			fields: Some(ValueString(fields)),
 		})
 	});
 
 	let rows = sheet_iterator.collect::<Result<Vec<_>>>()?;
 
-	let response = SheetResponse { rows, warnings };
+	let response = SheetResponse { rows };
 
 	Ok(Json(response))
 }
@@ -299,16 +264,13 @@ struct RowPath {
 struct RowQuery {
 	language: Option<LanguageString>,
 	schema: Option<schema::Specifier>,
-	fields: Option<Warnings<Option<read::Filter>>>,
+	fields: Option<FilterString>,
 }
 
 #[derive(Serialize)]
 struct RowResponse {
 	#[serde(flatten)]
 	row: RowResult,
-
-	#[serde(skip_serializing_if = "Vec::is_empty")]
-	warnings: Vec<String>,
 }
 
 #[debug_handler(state = service::State)]
@@ -318,6 +280,7 @@ async fn row(
 	Query(query): Query<RowQuery>,
 	State(data): State<service::Data>,
 	State(schema_provider): State<service::Schema>,
+	Extension(config): Extension<Config>,
 ) -> Result<impl IntoResponse> {
 	let excel = data.version(version_key)?.excel();
 
@@ -327,12 +290,19 @@ async fn row(
 		.unwrap_or_else(|| data.default_language());
 
 	let schema_specifier = schema_provider.canonicalize(query.schema)?;
-	let schema = schema_provider.schema(schema_specifier)?;
 
-	let (field_filter, warnings) = query
+	let filter = query
 		.fields
-		.unwrap_or_else(|| Warnings::new(None))
-		.decompose();
+		.or_else(|| {
+			config
+				.filter
+				.get(schema_specifier.source())
+				.and_then(|filter_config| filter_config.entry.clone())
+		})
+		.map(|filter_string| filter_string.to_filter(language))
+		.unwrap_or(Ok(read::Filter::All))?;
+
+	let schema = schema_provider.schema(schema_specifier)?;
 
 	let row_id = path.row.row_id;
 	let subrow_id = path.row.subrow_id;
@@ -340,11 +310,11 @@ async fn row(
 	let fields = read::read(
 		&excel,
 		schema.as_ref(),
-		language,
-		field_filter.as_ref(),
 		&path.sheet,
 		row_id,
 		subrow_id.unwrap_or(0),
+		language,
+		&filter,
 	)?;
 
 	let response = RowResponse {
@@ -352,9 +322,8 @@ async fn row(
 			row_id,
 			// NOTE: this results in subrow being reported if it's included in path, even on non-subrow sheets (though anything but :0 on those throws an error)
 			subrow_id,
-			fields: Some(fields),
+			fields: Some(ValueString(fields)),
 		},
-		warnings,
 	};
 
 	Ok(Json(response))
