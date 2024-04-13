@@ -243,7 +243,7 @@ async fn sheet(
 				exh::SheetKind::Subrows => Some(subrow_id),
 				_ => None,
 			},
-			fields: Some(ValueString(fields)),
+			fields: Some(ValueString(fields, language)),
 		})
 	});
 
@@ -322,7 +322,7 @@ async fn row(
 			row_id,
 			// NOTE: this results in subrow being reported if it's included in path, even on non-subrow sheets (though anything but :0 on those throws an error)
 			subrow_id,
-			fields: Some(ValueString(fields)),
+			fields: Some(ValueString(fields, language)),
 		},
 	};
 
