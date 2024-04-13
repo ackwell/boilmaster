@@ -264,13 +264,17 @@ fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) 
 				},
 			)?;
 
-			value_fields.insert(
-				StructKey {
-					name: name.to_string(),
-					language,
-				},
-				value,
-			);
+			match value_fields.entry(StructKey {
+				name: name.to_string(),
+				language,
+			}) {
+				hash_map::Entry::Vacant(entry) => {
+					entry.insert(value);
+				}
+				hash_map::Entry::Occupied(entry) => {
+					tracing::warn!(key = ?entry.key(), "struct key collision");
+				}
+			}
 		}
 	}
 
