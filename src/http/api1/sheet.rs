@@ -7,7 +7,7 @@ use either::Either;
 use ironworks::{excel::Language, file::exh};
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use crate::{data::LanguageString, http::service, read2 as read, schema, utility::anyhow::Anyhow};
+use crate::{data::LanguageString, http::service, read, schema, utility::anyhow::Anyhow};
 
 use super::{
 	error::{Error, Result},

@@ -13,7 +13,7 @@ use nom::{
 };
 use serde::{de, Deserialize};
 
-use crate::{data, read2 as read};
+use crate::{data, read};
 
 use super::error;
 

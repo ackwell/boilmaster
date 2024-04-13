@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use ironworks::excel;
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
-use crate::{data, read2};
+use crate::{data, read};
 
 #[derive(Debug)]
-pub struct ValueString(pub read2::Value, pub excel::Language);
+pub struct ValueString(pub read::Value, pub excel::Language);
 impl Serialize for ValueString {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where
@@ -21,7 +21,7 @@ impl Serialize for ValueString {
 }
 
 struct ValueReference<'a> {
-	value: &'a read2::Value,
+	value: &'a read::Value,
 	language: excel::Language,
 }
 
@@ -30,7 +30,7 @@ impl Serialize for ValueReference<'_> {
 	where
 		S: serde::Serializer,
 	{
-		use read2::Value as V;
+		use read::Value as V;
 		match self.value {
 			V::Array(values) => self.serialize_array(serializer, values),
 			V::Reference(reference) => self.serialize_reference(serializer, reference),
@@ -41,7 +41,7 @@ impl Serialize for ValueReference<'_> {
 }
 
 impl ValueReference<'_> {
-	fn serialize_array<S>(&self, serializer: S, values: &[read2::Value]) -> Result<S::Ok, S::Error>
+	fn serialize_array<S>(&self, serializer: S, values: &[read::Value]) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
@@ -58,19 +58,19 @@ impl ValueReference<'_> {
 	fn serialize_reference<S>(
 		&self,
 		serializer: S,
-		reference: &read2::Reference,
+		reference: &read::Reference,
 	) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
 		match reference {
-			read2::Reference::Scalar(value) => {
+			read::Reference::Scalar(value) => {
 				let mut state = serializer.serialize_struct("Reference", 1)?;
 				state.serialize_field("value", value)?;
 				state.end()
 			}
 
-			read2::Reference::Populated {
+			read::Reference::Populated {
 				value,
 				sheet,
 				row_id,
@@ -121,14 +121,14 @@ impl ValueReference<'_> {
 	fn serialize_struct<S>(
 		&self,
 		serializer: S,
-		fields: &HashMap<read2::StructKey, read2::Value>,
+		fields: &HashMap<read::StructKey, read::Value>,
 	) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
 		let mut fields = fields
 			.into_iter()
-			.map(|(read2::StructKey { name, language }, value)| {
+			.map(|(read::StructKey { name, language }, value)| {
 				let key = match *language == self.language {
 					true => name.to_owned(),
 					false => format!("{name}@{}", data::LanguageString::from(*language)),

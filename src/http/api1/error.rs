@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::{
 	asset,
 	data,
-	read2 as read,
+	read,
 	schema,
 	// search
 };

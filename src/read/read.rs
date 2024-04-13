@@ -9,7 +9,7 @@ use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 
-use crate::read2::error::MismatchError;
+use crate::read::error::MismatchError;
 
 use super::{
 	error::{Error, Result},

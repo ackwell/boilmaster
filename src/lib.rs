@@ -4,7 +4,7 @@
 pub mod asset;
 pub mod data;
 pub mod http;
-mod read2;
+mod read;
 pub mod schema;
 // pub mod search;
 pub mod tracing;
