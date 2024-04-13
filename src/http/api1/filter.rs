@@ -3,9 +3,10 @@ use std::{collections::HashMap, str::FromStr};
 use ironworks::excel;
 use nohash_hasher::IntMap;
 use nom::{
-	bytes::complete::{tag, take_while1},
-	character::complete::char,
-	combinator::{all_consuming, map, map_res, opt, value},
+	branch::alt,
+	bytes::complete::{escaped_transform, is_not, tag},
+	character::complete::{alphanumeric1, char},
+	combinator::{all_consuming, map, map_res, opt, value, verify},
 	multi::{many0, separated_list0, separated_list1},
 	sequence::{preceded, tuple},
 	Finish, IResult,
@@ -150,8 +151,25 @@ fn path_part(input: &str) -> IResult<&str, Vec<Entry>> {
 }
 
 fn key(input: &str) -> IResult<&str, Entry> {
+	let escaped_key = escaped_transform(
+		is_not("\\@[.,"),
+		'\\',
+		alt((
+			value("\\", char('\\')),
+			value("@", char('@')),
+			value("[", char('[')),
+			// NOTE: we don't actually need to support this, but it's nice QoL to permit balanced escapes.
+			value("]", char(']')),
+			value(".", char('.')),
+			value(",", char(',')),
+		)),
+	);
+
 	map(
-		tuple((alphanumeric, opt(preceded(char('@'), language)))),
+		tuple((
+			verify(escaped_key, |t: &str| !t.is_empty()),
+			opt(preceded(char('@'), language)),
+		)),
 		|(key, language)| Entry::Key(key.into(), language),
 	)(input)
 }
@@ -161,16 +179,11 @@ fn index(input: &str) -> IResult<&str, Entry> {
 }
 
 fn language(input: &str) -> IResult<&str, excel::Language> {
-	map_res(alphanumeric, |string| {
+	map_res(alphanumeric1, |string: &str| {
 		string
 			.parse::<data::LanguageString>()
 			.map(excel::Language::from)
 	})(input)
-}
-
-fn alphanumeric(input: &str) -> IResult<&str, &str> {
-	// TODO: should i permit escaped tokens?
-	take_while1(|c: char| c.is_ascii_alphanumeric())(input)
 }
 
 #[cfg(test)]
@@ -299,6 +312,25 @@ mod test {
 		)]);
 
 		let got = test_parse("a[][].b");
+		assert_eq!(got, expected);
+	}
+
+	#[test]
+	fn parse_complex_struct_keys() {
+		let expected = test_struct([
+			("curly{example}", read::Filter::All),
+			("ltgt<example>", read::Filter::All),
+			("parens(example)", read::Filter::All),
+			("square[example]", read::Filter::All),
+			("at@example", read::Filter::All),
+			("comma,example", read::Filter::All),
+			("period.example", read::Filter::All),
+			("backslash\\example", read::Filter::All),
+		]);
+
+		let got = test_parse(
+			"curly{example},ltgt<example>,parens(example),square\\[example\\],at\\@example,comma\\,example,period\\.example,backslash\\\\example",
+		);
 		assert_eq!(got, expected);
 	}
 }
