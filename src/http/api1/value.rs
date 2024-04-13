@@ -63,23 +63,38 @@ impl ValueReference<'_> {
 	where
 		S: serde::Serializer,
 	{
-		let mut state = serializer.serialize_struct("Reference", 3)?;
-		state.serialize_field("value", &reference.value)?;
-		match &reference.sheet {
-			Some(value) => state.serialize_field("sheet", value)?,
-			None => state.skip_field("sheet")?,
-		};
-		match &reference.fields {
-			Some(fields) => state.serialize_field(
-				"fields",
-				&ValueReference {
-					value: fields,
-					language: self.language,
-				},
-			)?,
-			None => state.skip_field("fields")?,
-		};
-		state.end()
+		match reference {
+			read2::Reference::Scalar(value) => {
+				let mut state = serializer.serialize_struct("Reference", 1)?;
+				state.serialize_field("value", value)?;
+				state.end()
+			}
+
+			read2::Reference::Populated {
+				value,
+				sheet,
+				row_id,
+				subrow_id,
+				fields,
+			} => {
+				let mut state = serializer.serialize_struct("Reference", 4)?;
+				state.serialize_field("value", value)?;
+				state.serialize_field("sheet", sheet)?;
+				state.serialize_field("row_id", row_id)?;
+				match subrow_id {
+					Some(value) => state.serialize_field("subrow_id", value)?,
+					None => state.skip_field("subrow_id")?,
+				};
+				state.serialize_field(
+					"fields",
+					&ValueReference {
+						value: fields,
+						language: self.language,
+					},
+				)?;
+				state.end()
+			}
+		}
 	}
 
 	fn serialize_scalar<S>(&self, serializer: S, field: &excel::Field) -> Result<S::Ok, S::Error>

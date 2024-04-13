@@ -97,11 +97,7 @@ fn read_node_reference(
 	// TODO: are references _always_ i32? like, always always?
 	let target_value = convert_reference_value(context.next_field()?)?;
 
-	let mut reference = Reference {
-		value: target_value,
-		sheet: None,
-		fields: None,
-	};
+	let mut reference = Reference::Scalar(target_value);
 
 	// A target less than 0 (typically -1) is usually used to signify that a link is not
 	// present on this row. Also ensure that we've not run out of recursion depth.
@@ -145,10 +141,13 @@ fn read_node_reference(
 			other => other,
 		}?;
 
+		let row_id = row_data.row_id();
+		let subrow_id = row_data.subrow_id();
+
 		let child_data = read_sheet(ReaderContext {
 			sheet: &target.sheet,
-			row_id: row_data.row_id(),
-			subrow_id: row_data.subrow_id(),
+			row_id,
+			subrow_id,
 
 			rows: &mut HashMap::from([(context.language, row_data)]),
 			depth: context.depth - 1,
@@ -156,8 +155,16 @@ fn read_node_reference(
 			..context
 		})?;
 
-		reference.sheet = Some(target.sheet.to_string());
-		reference.fields = Some(child_data.into());
+		reference = Reference::Populated {
+			value: target_value,
+			sheet: target.sheet.to_string(),
+			row_id,
+			subrow_id: match sheet_data.kind()? {
+				exh::SheetKind::Subrows => Some(subrow_id),
+				_ => None,
+			},
+			fields: child_data.into(),
+		}
 	}
 
 	Ok(Value::Reference(reference))

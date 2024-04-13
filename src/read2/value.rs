@@ -17,9 +17,13 @@ pub struct StructKey {
 }
 
 #[derive(Debug)]
-pub struct Reference {
-	pub value: i32,
-
-	pub sheet: Option<String>,
-	pub fields: Option<Box<Value>>,
+pub enum Reference {
+	Scalar(i32),
+	Populated {
+		value: u32,
+		sheet: String,
+		row_id: u32,
+		subrow_id: Option<u16>,
+		fields: Box<Value>,
+	},
 }
