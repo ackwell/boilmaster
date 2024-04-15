@@ -33,12 +33,12 @@ mini-moka = "0.10.0"
 nohash-hasher = "0.2.0"
 nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
-regex-syntax = "0.6.28"
+regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
 seahash = "4.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.95"
-tantivy = "0.19.0"
+tantivy = "0.22.0"
 texpresso = "2.0.1"
 thiserror = "1.0.30"
 tokio = { version = "1.32.0", features = ["full", "tracing"] }
