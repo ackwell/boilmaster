@@ -1,7 +1,7 @@
 use std::{io::Cursor, path::Path};
 
 use anyhow::Context;
-use image::{DynamicImage, ImageBuffer, ImageOutputFormat};
+use image::{DynamicImage, ImageBuffer, ImageFormat};
 use ironworks::{file::tex, Ironworks};
 use itertools::Itertools;
 
@@ -27,7 +27,7 @@ impl Converter for Image {
 
 		// TODO: add error handling case on this once more than one format exists.
 		let output_format = match format {
-			Format::Png => ImageOutputFormat::Png,
+			Format::Png => ImageFormat::Png,
 		};
 
 		// TODO: should i just pass IW to convert? is there any realistic expectation that a converter will need excel?

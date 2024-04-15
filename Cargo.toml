@@ -16,7 +16,7 @@ figment = { version = "0.10.8", features = ["env", "toml"] }
 fs4 = { version = "= 0.8.2", features = ["sync"] }
 futures = "0.3.25"
 graphql_client = { version = "0.14.0" }
-image = { version = "0.24.6", default-features = false, features = ["png"] }
+image = { version = "0.25.1", default-features = false, features = ["png"] }
 ironworks = { git = "https://github.com/ackwell/ironworks.git", features = [
     "excel",
     "sqpack",
