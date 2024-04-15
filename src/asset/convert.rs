@@ -61,7 +61,7 @@ fn read_texture(ironworks: &Ironworks, path: &str) -> Result<DynamicImage> {
 		other => other.context("read file")?,
 	};
 
-	if matches!(texture.kind(), tex::TextureKind::D2) {
+	if !matches!(texture.kind(), tex::TextureKind::D2) {
 		return Err(Error::UnsupportedSource(
 			path.into(),
 			format!("unhandled texture dimension {:?}", texture.kind()),
