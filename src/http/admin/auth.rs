@@ -1,9 +1,11 @@
 use axum::{
-	extract::State,
-	headers::{authorization::Basic, Authorization},
-	http::{header, Request, StatusCode},
+	extract::{Request, State},
+	http::{header, StatusCode},
 	middleware::Next,
 	response::{IntoResponse, Response},
+};
+use axum_extra::{
+	headers::{authorization::Basic, Authorization},
 	TypedHeader,
 };
 use serde::Deserialize;
@@ -14,11 +16,11 @@ pub struct BasicAuth {
 	password: String,
 }
 
-pub async fn basic_auth<B>(
+pub async fn basic_auth(
 	State(expected): State<BasicAuth>,
 	authorization: Option<TypedHeader<Authorization<Basic>>>,
-	request: Request<B>,
-	next: Next<B>,
+	request: Request,
+	next: Next,
 ) -> Response {
 	let authenticated = authorization.map_or(false, |TypedHeader(auth)| {
 		auth.username() == expected.username && auth.password() == expected.password

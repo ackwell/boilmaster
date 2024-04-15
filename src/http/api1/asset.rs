@@ -1,9 +1,9 @@
 use std::ffi::OsStr;
 
 use axum::{
-	debug_handler, extract::State, headers::ContentType, http::header, response::IntoResponse,
-	routing::get, Router, TypedHeader,
+	debug_handler, extract::State, http::header, response::IntoResponse, routing::get, Router,
 };
+use axum_extra::{headers::ContentType, TypedHeader};
 use serde::Deserialize;
 
 use crate::{asset::Format, http::service};

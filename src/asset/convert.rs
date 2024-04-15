@@ -1,7 +1,7 @@
 use std::{io::Cursor, path::Path};
 
 use anyhow::Context;
-use image::{DynamicImage, ImageBuffer, ImageOutputFormat};
+use image::{DynamicImage, ImageBuffer, ImageFormat};
 use ironworks::{file::tex, Ironworks};
 use itertools::Itertools;
 
@@ -27,7 +27,7 @@ impl Converter for Image {
 
 		// TODO: add error handling case on this once more than one format exists.
 		let output_format = match format {
-			Format::Png => ImageOutputFormat::Png,
+			Format::Png => ImageFormat::Png,
 		};
 
 		// TODO: should i just pass IW to convert? is there any realistic expectation that a converter will need excel?
@@ -61,10 +61,10 @@ fn read_texture(ironworks: &Ironworks, path: &str) -> Result<DynamicImage> {
 		other => other.context("read file")?,
 	};
 
-	if texture.dimension() != tex::Dimension::D2 {
+	if !matches!(texture.kind(), tex::TextureKind::D2) {
 		return Err(Error::UnsupportedSource(
 			path.into(),
-			format!("unhandled texture dimension {:?}", texture.dimension()),
+			format!("unhandled texture dimension {:?}", texture.kind()),
 		));
 	}
 
