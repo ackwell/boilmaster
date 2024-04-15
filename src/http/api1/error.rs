@@ -9,6 +9,7 @@ use serde::Serialize;
 use crate::{
 	asset,
 	data,
+	read,
 	schema,
 	// search
 };
@@ -47,6 +48,18 @@ impl From<data::Error> for Error {
 		match error {
 			DE::UnknownVersion(..) | DE::UnknownLanguage(..) => Self::Invalid(error.to_string()),
 			DE::Failure(inner) => Self::Other(inner),
+		}
+	}
+}
+
+impl From<read::Error> for Error {
+	fn from(error: read::Error) -> Self {
+		use read::Error as RE;
+		match error {
+			RE::FilterSchemaMismatch(..) | RE::SchemaGameMismatch(..) => {
+				Self::Invalid(error.to_string())
+			}
+			RE::Failure(inner) => Self::Other(inner),
 		}
 	}
 }

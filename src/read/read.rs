@@ -1,188 +1,137 @@
 use std::{
-	cell::RefCell,
-	collections::{btree_map, hash_map, BTreeMap, HashMap},
-	rc::Rc,
+	borrow::Cow,
+	collections::{hash_map, HashMap},
+	iter,
+	ops::Range,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 
-use crate::utility::field;
+use crate::read::error::MismatchError;
 
 use super::{
-	filter::{Filter, StructKey},
-	value::{Reference, Value},
+	error::{Error, Result},
+	filter::Filter,
+	value::{Reference, StructKey, Value},
 };
 
 pub fn read(
 	excel: &excel::Excel,
 	schema: &dyn schema::Schema,
 
-	language: excel::Language,
-	filter: Option<&Filter>,
-
 	sheet_name: &str,
 	row_id: u32,
 	subrow_id: u16,
+
+	default_language: excel::Language,
+
+	filter: &Filter,
 ) -> Result<Value> {
-	let sheet_schema = schema.sheet(sheet_name)?;
+	let value = read_sheet(ReaderContext {
+		excel,
+		schema,
 
-	let sheet = excel.sheet(sheet_name)?;
-	let columns = sheet.columns()?;
+		sheet: sheet_name,
+		language: default_language,
+		row_id,
+		subrow_id,
 
-	read_sheet(
-		sheet_schema,
+		filter,
+		rows: &mut HashMap::new(),
+		columns: &[],
+		depth: 1,
+	})?;
+
+	Ok(value)
+}
+
+fn read_sheet(context: ReaderContext) -> Result<Value> {
+	let sheet_name = context.sheet;
+	let sheet_schema = context.schema.sheet(sheet_name)?;
+	let sheet_data = context.excel.sheet(sheet_name)?;
+	let columns = get_sorted_columns(&sheet_schema, &sheet_data)?;
+
+	let value = read_node(
+		&sheet_schema.node,
 		ReaderContext {
-			excel,
-			schema,
-
-			language,
-			row_id,
-			subrow_id,
-
-			filter,
-
-			sheet: &sheet,
-			rows: Default::default(),
 			columns: &columns,
-			limit: 1,
+
+			..context
 		},
-	)
+	)?;
+
+	Ok(value)
 }
 
-#[derive(Clone)]
-struct ReaderContext<'a> {
-	excel: &'a excel::Excel<'a>,
-	schema: &'a dyn schema::Schema,
-
-	language: excel::Language,
-	row_id: u32,
-	subrow_id: u16,
-
-	filter: Option<&'a Filter>,
-
-	sheet: &'a excel::Sheet<'a, &'a str>,
-	rows: Rc<RefCell<HashMap<excel::Language, excel::Row>>>,
-	columns: &'a [exh::ColumnDefinition],
-	limit: u8,
-}
-
-impl ReaderContext<'_> {
-	fn next_field(&self) -> Result<excel::Field> {
-		// Grab the row from cache, creating if not yet retrieved.
-		let mut map = self.rows.borrow_mut();
-		let row = match map.entry(self.language) {
-			hash_map::Entry::Occupied(entry) => entry.into_mut(),
-			hash_map::Entry::Vacant(entry) => entry.insert(
-				self.sheet
-					.with()
-					.language(self.language)
-					.subrow(self.row_id, self.subrow_id)?,
-			),
-		};
-
-		// TODO: schema mismatches are gonna happen - probably should try to fail more gracefully than a 500.
-		let column = self.columns.get(0).context("schema mismatch")?;
-
-		Ok(row.field(column)?)
-	}
-}
-
-fn read_sheet(sheet: schema::Sheet, context: ReaderContext) -> Result<Value> {
-	if sheet.order != schema::Order::Index {
-		todo!("sheet schema {:?} order", sheet.order);
+fn get_sorted_columns(
+	schema: &schema::Sheet,
+	data: &excel::Sheet<'_, &str>,
+) -> Result<Vec<exh::ColumnDefinition>> {
+	if schema.order != schema::Order::Index {
+		todo!("sheet schema {:?} order", schema.order);
 	}
 
-	read_node(&sheet.node, context)
+	Ok(data.columns()?)
 }
 
 fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
 	use schema::Node as N;
 	match node {
-		N::Array { count, node } => read_array(*count, node, context),
-		N::Reference(targets) => read_reference(targets, context),
-		N::Scalar => read_scalar(context),
-		N::Struct(definition) => read_struct(definition, context),
+		N::Array { count, node } => read_node_array(node, *count, context),
+		N::Reference(targets) => read_node_reference(targets, context),
+		N::Scalar => read_node_scalar(context),
+		N::Struct(fields) => read_node_struct(fields, context),
 	}
 }
 
-fn read_array(count: u32, node: &schema::Node, context: ReaderContext) -> Result<Value> {
-	let inner_filter = match context.filter {
-		Some(Filter::Array(inner)) => inner.as_ref().map(|x| x.as_ref()),
-		// TODO: should this be a warning?
-		Some(other) => return Err(anyhow!("unexpected filter {other}")),
-		None => None,
-	};
-
-	let size = node.size();
-	let vec = (0..count)
-		.scan(0usize, |index, _| {
-			let size_usize = usize::try_from(size).unwrap();
-			let result = read_node(
-				node,
-				ReaderContext {
-					columns: context
-						.columns
-						.get(*index..*index + size_usize)
-						.unwrap_or(&[]),
-					filter: inner_filter,
-
-					rows: context.rows.clone(),
-					..context
-				},
-			);
-			*index += size_usize;
-			Some(result)
-		})
-		.collect::<Result<Vec<_>>>()?;
-
-	Ok(Value::Array(vec))
+fn read_node_scalar(mut context: ReaderContext) -> Result<Value> {
+	context.next_field().map(Value::Scalar)
 }
 
-fn read_reference(targets: &[schema::ReferenceTarget], context: ReaderContext) -> Result<Value> {
-	// Coerce the field to a i32
-	let field = context.next_field()?;
-	// TODO: i'd like to include the field in the context but it's really not worth copying the field for.
-	let target_value = field_to_index(field).context("failed to convert reference key to i32")?;
+fn read_node_reference(
+	targets: &[schema::ReferenceTarget],
+	mut context: ReaderContext,
+) -> Result<Value> {
+	// TODO: are references _always_ i32? like, always always?
+	let target_value = convert_reference_value(context.next_field()?)?;
 
-	// Build the base reference representation.
-	let mut reference = Reference::new(target_value);
+	let mut reference = Reference::Scalar(target_value);
 
-	// TODO: is neg case always gonna be like this?
-	// A target < 0 (typically -1) signifies that no link is active on this row.
-	// Also ensure that we've not run out of recursion space.
-	// TODO: should we limit check only just before we run the recursion so the reference data at least includes the target values?
-	if target_value < 0 || context.limit == 0 {
+	// A target less than 0 (typically -1) is usually used to signify that a link is not
+	// present on this row. Also ensure that we've not run out of recursion depth.
+	// TODO: would be neat to halt recursion later, but target checking does have a cost that needs to be considered.
+	if target_value < 0 || context.depth == 0 {
 		return Ok(Value::Reference(reference));
 	}
-	let target_value = u32::try_from(target_value).unwrap();
+	let target_value = u32::try_from(target_value)
+		.expect("target value should always be >= 0 due to prior condition");
 
+	// NOTE: a lot of the TODOs here are immediately break;ing - this is to avoid a potentially correct target that is simply unhandled being ignored and a later, incorrect target being picked as a result.
 	for target in targets {
-		// TODO: condition
+		// TODO: handle conditions
 		if target.condition.is_some() {
 			tracing::warn!("unhandled target condition: {target:?}");
 			break;
 		}
 
-		// Get the target sheet's data and schema. Intentionally fail hard, as any
-		// mismatch here can cause incorrect joins.
-		let sheet_data = context.excel.sheet(target.sheet.as_str())?;
-		let sheet_schema = context.schema.sheet(&target.sheet)?;
-
-		// TODO: non-id targets. how will this work alongside subrows?
+		// TODO: handle retargeted refs
 		if target.selector.is_some() {
 			tracing::warn!("unhandled target selector: {target:?}");
 			break;
 		}
 
-		// TODO: subrows
+		let sheet_data = context.excel.sheet(&target.sheet)?;
+
+		// TODO: handle references targeting subrows (how?)
 		if sheet_data.kind()? == exh::SheetKind::Subrows {
-			tracing::warn!("unhandled subrow target: {}", target.sheet);
+			tracing::warn!("unhandled subrow sheet target: {target:?}");
 			break;
 		}
 
-		// Get the row data for the target. If the row can't be found, pass on to the next target.
+		// Try to fetch the row data - if no matching row exists, continue to the next target.
+		// TODO: handle target selectors
 		let row_data = match sheet_data
 			.with()
 			.language(context.language)
@@ -192,29 +141,36 @@ fn read_reference(targets: &[schema::ReferenceTarget], context: ReaderContext) -
 			other => other,
 		}?;
 
-		reference.sheet = Some(target.sheet.clone());
-		reference.data = Some(
-			read_sheet(
-				sheet_schema,
-				ReaderContext {
-					row_id: row_data.row_id(),
-					subrow_id: row_data.subrow_id(),
-					sheet: &sheet_data,
-					rows: Rc::new(RefCell::new(HashMap::from([(context.language, row_data)]))),
-					columns: &sheet_data.columns()?,
-					limit: context.limit - 1,
-					..context
-				},
-			)?
-			.into(),
-		);
-		break;
+		let row_id = row_data.row_id();
+		let subrow_id = row_data.subrow_id();
+
+		let child_data = read_sheet(ReaderContext {
+			sheet: &target.sheet,
+			row_id,
+			subrow_id,
+
+			rows: &mut HashMap::from([(context.language, row_data)]),
+			depth: context.depth - 1,
+
+			..context
+		})?;
+
+		reference = Reference::Populated {
+			value: target_value,
+			sheet: target.sheet.to_string(),
+			row_id,
+			subrow_id: match sheet_data.kind()? {
+				exh::SheetKind::Subrows => Some(subrow_id),
+				_ => None,
+			},
+			fields: child_data.into(),
+		}
 	}
 
 	Ok(Value::Reference(reference))
 }
 
-fn field_to_index(field: excel::Field) -> Result<i32> {
+fn convert_reference_value(field: excel::Field) -> Result<i32> {
 	use excel::Field as F;
 	let result = match field {
 		F::I8(value) => i32::from(value),
@@ -231,83 +187,208 @@ fn field_to_index(field: excel::Field) -> Result<i32> {
 	Ok(result)
 }
 
-fn read_scalar(context: ReaderContext) -> Result<Value> {
-	// TODO: schema mismatches are gonna happen - probably should try to fail more gracefully than a 500.
-	Ok(Value::Scalar(context.next_field()?))
-}
-
-fn read_struct(fields: &[schema::StructField], context: ReaderContext) -> Result<Value> {
-	let mut map = BTreeMap::new();
-
+fn read_node_array(
+	element_node: &schema::Node,
+	count: u32,
+	mut context: ReaderContext,
+) -> Result<Value> {
 	let filter = match context.filter {
-		Some(Filter::Struct(map)) => Some(map),
-		// TODO: should this be a warning?
-		Some(other) => return Err(anyhow!("unexpected filter {other}")),
-		None => None,
+		Filter::All => &Filter::All,
+		Filter::Array(inner) => inner.as_ref(),
+		other => {
+			return Err(Error::FilterSchemaMismatch(
+				context.mismatch_error(format!("expected array filter, got {other:?}")),
+			));
+		}
 	};
 
-	let mut offset = 0usize;
-	while offset < context.columns.len() {
-		// TODO: this is yikes. Probably can improve with a .next-based thing given fields are ordered
-		let field = fields
-			.iter()
-			.find(|&field| field.offset == u32::try_from(offset).unwrap());
+	let size = usize::try_from(element_node.size()).context("schema node too large")?;
+	let values = (0..count)
+		.scan(0usize, |index, _| {
+			let Some(columns) = context.columns.get(*index..*index + size) else {
+				return Some(Err(Error::SchemaGameMismatch(context.mismatch_error(format!("insufficient columns to satisfy array")))));
+			};
+			*index += size;
 
-		let (name, size, read): (_, _, Box<dyn Fn(_) -> _>) = match field {
-			Some(field) => {
-				let size = usize::try_from(field.node.size()).unwrap();
-				let name = field::sanitize_name(&field.name);
-				let read = |context| read_node(&field.node, context);
-				(name, size, Box::new(read))
-			}
+			let result = read_node(
+				element_node,
+				ReaderContext {
+					filter,
+					columns,
+					rows: &mut context.rows,
 
-			None => (format!("unknown{offset}"), 1, Box::new(read_scalar)),
+					..context
+				},
+			);
+
+			Some(result)
+		})
+		.collect::<Result<Vec<_>>>()?;
+
+	Ok(Value::Array(values))
+}
+
+fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) -> Result<Value> {
+	let filter_fields = match context.filter {
+		Filter::All => None,
+		Filter::Struct(filter_fields) => Some(filter_fields),
+		other => {
+			return Err(Error::FilterSchemaMismatch(
+				context.mismatch_error(format!("expected struct filter, got {other:?}")),
+			))
+		}
+	};
+
+	let mut value_fields = HashMap::new();
+
+	for (name, node, columns) in iterate_struct_fields(fields, context.columns)? {
+		let language_filters = match filter_fields {
+			Some(fields) => either::Left(match fields.get(name.as_ref()) {
+				// Filter exists, but has no entry for this name - no languages to filter to.
+				None => either::Left(iter::empty()),
+
+				// Entry exists for the name, map the language pairs to the expected shape.
+				Some(languages) => either::Right(
+					languages
+						.iter()
+						.map(|(language, filter)| (language.0, filter)),
+				),
+			}),
+
+			// ::All filter, walk with the current context language.
+			None => either::Right(std::iter::once((context.language, &Filter::All))),
 		};
 
-		let range = offset..offset + size;
-		offset += size;
+		for (language, filter) in language_filters {
+			let value = read_node(
+				node,
+				ReaderContext {
+					filter,
+					language,
+					columns,
+					rows: &mut context.rows,
+					..context
+				},
+			)?;
 
-		// Get any language-filter pairs for this field, defaulting to a
-		// default-language no-op-filter if no filter exists.
-		// TODO: Improve this logic, this entire struct reader can probably do with a bit of cleaning up.
-		let default_key = StructKey {
-			name,
-			language: None,
-		};
-		let inner_filters = match filter {
-			None => vec![(&default_key, None)],
-			Some(map) => map
-				.iter()
-				.filter_map(|(key, inner_filter)| match key.name == default_key.name {
-					true => Some((key, inner_filter.as_ref())),
-					false => None,
-				})
-				.collect::<Vec<_>>(),
-		};
-
-		for (key, inner_filter) in inner_filters {
-			let value = read(ReaderContext {
-				columns: context.columns.get(range.clone()).unwrap_or(&[]),
-				language: key
-					.language
-					.map(excel::Language::from)
-					.unwrap_or(context.language),
-				filter: inner_filter,
-				rows: context.rows.clone(),
-				..context
-			})?;
-
-			match map.entry(key.to_string()) {
-				btree_map::Entry::Vacant(entry) => {
+			match value_fields.entry(StructKey {
+				name: name.to_string(),
+				language,
+			}) {
+				hash_map::Entry::Vacant(entry) => {
 					entry.insert(value);
 				}
-
-				btree_map::Entry::Occupied(entry) => {
-					tracing::warn!(name = %entry.key(), "name collision");
+				hash_map::Entry::Occupied(entry) => {
+					tracing::warn!(key = ?entry.key(), "struct key collision");
 				}
-			};
+			}
 		}
 	}
 
-	Ok(Value::Struct(map))
+	// TODO: i can catch filterschemamismatch at the struct level and skip the key - ideally raise a warning in future
+	// what about schemagamemismatch?
+
+	Ok(Value::Struct(value_fields))
+}
+
+// TODO: this is fairly gnarly - look into a crate for generators, i.e. genawaiter?
+fn iterate_struct_fields<'s, 'c>(
+	fields: &'s [schema::StructField],
+	columns: &'c [exh::ColumnDefinition],
+) -> Result<impl Iterator<Item = (Cow<'s, str>, &'s schema::Node, &'c [exh::ColumnDefinition])>> {
+	// Eagerly ensure that we have enough columns available to satisfy the struct field definitions.
+	let last_field = &fields[fields.len() - 1];
+	let fields_length = usize::try_from(last_field.offset + last_field.node.size())
+		.expect("schema field size too large");
+
+	if fields_length > columns.len() {
+		// TODO: use context for the mismatch error?
+		return Err(Error::SchemaGameMismatch(MismatchError {
+			field: "TODO".into(),
+			reason: "not enough columns to satisfy struct".into(),
+		}));
+	}
+
+	// Utility to generate items for columns not covered by a field.
+	let generate_unknowns = |range: Range<usize>| {
+		range.map(|offset| {
+			(
+				Cow::<str>::Owned(format!("unknown{offset}")),
+				&schema::Node::Scalar,
+				&columns[offset..offset + 1],
+			)
+		})
+	};
+
+	let items = fields
+		.into_iter()
+		.scan(0usize, move |last_offset, field| {
+			let field_offset =
+				usize::try_from(field.offset).expect("schema field offset too large");
+			let field_size =
+				usize::try_from(field.node.size()).expect("schema field size too large");
+
+			// Generate unknowns for any columns between the last field and this one.
+			let items = generate_unknowns(*last_offset..field_offset)
+				// Add an item for this field's schema structure.
+				.chain(iter::once((
+					Cow::<str>::Borrowed(&field.name),
+					&field.node,
+					&columns[field_offset..field_offset + field_size],
+				)));
+
+			*last_offset = field_offset + field_size;
+
+			Some(items)
+		})
+		.flatten()
+		// Generate unkowns for any trailing columns after the last field.
+		.chain(generate_unknowns(fields_length..columns.len()));
+
+	Ok(items)
+}
+
+struct ReaderContext<'a> {
+	excel: &'a excel::Excel<'a>,
+	schema: &'a dyn schema::Schema,
+
+	sheet: &'a str,
+	language: excel::Language,
+	row_id: u32,
+	subrow_id: u16,
+
+	filter: &'a Filter,
+	columns: &'a [exh::ColumnDefinition],
+	rows: &'a mut HashMap<excel::Language, excel::Row>,
+	depth: u8,
+}
+
+impl ReaderContext<'_> {
+	fn next_field(&mut self) -> Result<excel::Field> {
+		let column = self.columns.get(0).ok_or_else(|| {
+			Error::SchemaGameMismatch(
+				self.mismatch_error("tried to read field but no columns available".to_string()),
+			)
+		})?;
+
+		let row = match self.rows.entry(self.language) {
+			hash_map::Entry::Occupied(entry) => entry.into_mut(),
+			hash_map::Entry::Vacant(entry) => entry.insert(
+				self.excel
+					.sheet(self.sheet)?
+					.with()
+					.language(self.language)
+					.subrow(self.row_id, self.subrow_id)?,
+			),
+		};
+
+		Ok(row.field(column)?)
+	}
+
+	fn mismatch_error(&self, reason: impl ToString) -> MismatchError {
+		MismatchError {
+			field: "TODO: contextual filter path".into(),
+			reason: reason.to_string(),
+		}
+	}
 }

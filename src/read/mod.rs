@@ -1,7 +1,11 @@
+mod error;
 mod filter;
 mod read;
 mod value;
 
-pub use filter::Filter;
-pub use read::read;
-pub use value::{Reference, Value};
+pub use {
+	error::Error,
+	filter::{Filter, Language},
+	read::read,
+	value::{Reference, StructKey, Value},
+};
