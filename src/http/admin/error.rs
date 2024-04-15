@@ -1,5 +1,7 @@
-use axum::response::{IntoResponse, Response};
-use reqwest::StatusCode;
+use axum::{
+	http::StatusCode,
+	response::{IntoResponse, Response},
+};
 
 #[derive(Debug)]
 pub struct Error(anyhow::Error);

@@ -1,8 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
-use axum::{Router, Server};
+use axum::Router;
 use serde::Deserialize;
+use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
@@ -52,9 +53,9 @@ pub async fn serve(
 			version,
 		});
 
-	Server::bind(&bind_address)
-		.serve(router.into_make_service())
-		.with_graceful_shutdown(cancel.cancelled())
+	let listener = TcpListener::bind(bind_address).await.unwrap();
+	axum::serve(listener, router)
+		.with_graceful_shutdown(cancel.cancelled_owned())
 		.await
 		.unwrap();
 
