@@ -171,7 +171,7 @@ async fn sheet(
 		.unwrap_or_else(|| data.default_language());
 
 	// TODO: Consider extractor for this.
-	let schema_specifier = schema_provider.canonicalize(query.schema)?;
+	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
 
 	let filter = query
 		.fields
@@ -295,7 +295,7 @@ async fn row(
 		.map(Language::from)
 		.unwrap_or_else(|| data.default_language());
 
-	let schema_specifier = schema_provider.canonicalize(query.schema)?;
+	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
 
 	let filter = query
 		.fields

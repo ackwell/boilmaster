@@ -69,11 +69,15 @@ fn get_sorted_columns(
 	schema: &schema::Sheet,
 	data: &excel::Sheet<'_, &str>,
 ) -> Result<Vec<exh::ColumnDefinition>> {
-	if schema.order != schema::Order::Index {
-		todo!("sheet schema {:?} order", schema.order);
-	}
+	let mut columns = data.columns()?;
 
-	Ok(data.columns()?)
+	match schema.order {
+		schema::Order::Index => (),
+		// NOTE: It's important to maintain the sort order here for PackedBool ordering
+		schema::Order::Offset => columns.sort_by_key(|column| column.offset()),
+	};
+
+	Ok(columns)
 }
 
 fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
@@ -206,7 +210,9 @@ fn read_node_array(
 	let values = (0..count)
 		.scan(0usize, |index, _| {
 			let Some(columns) = context.columns.get(*index..*index + size) else {
-				return Some(Err(Error::SchemaGameMismatch(context.mismatch_error(format!("insufficient columns to satisfy array")))));
+				return Some(Err(Error::SchemaGameMismatch(
+					context.mismatch_error(format!("insufficient columns to satisfy array")),
+				)));
 			};
 			*index += size;
 
