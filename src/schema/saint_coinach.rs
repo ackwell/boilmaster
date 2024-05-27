@@ -37,14 +37,7 @@ impl Source for SaintCoinach {
 	}
 
 	fn version(&self, version: &str) -> Result<Box<dyn Schema>, Error> {
-		let version = self.provider.version(version).map_err(|error| {
-			use ironworks_schema::Error as SE;
-			use ironworks_schema::ErrorValue as SEV;
-			match error {
-				SE::NotFound(SEV::Version(_)) => Error::InvalidVersion(version.into()),
-				other => Error::Failure(other.into()),
-			}
-		})?;
+		let version = self.provider.version(version)?;
 
 		Ok(Box::new(version))
 	}
