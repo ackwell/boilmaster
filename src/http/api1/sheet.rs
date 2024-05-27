@@ -138,6 +138,7 @@ where
 
 #[derive(Serialize)]
 struct SheetResponse {
+	schema: schema::CanonicalSpecifier,
 	rows: Vec<RowResult>,
 }
 
@@ -183,7 +184,7 @@ async fn sheet(
 		.map(|filter_string| filter_string.to_filter(language))
 		.unwrap_or(Ok(read::Filter::All))?;
 
-	let schema = schema_provider.schema(schema_specifier)?;
+	let schema = schema_provider.schema(schema_specifier.clone())?;
 
 	// Get a reference to the sheet we'll be reading from.
 	// TODO: should this be in super::error as a default extract? minus the sheet specialised case, that is
@@ -249,7 +250,10 @@ async fn sheet(
 
 	let rows = sheet_iterator.collect::<Result<Vec<_>>>()?;
 
-	let response = SheetResponse { rows };
+	let response = SheetResponse {
+		schema: schema_specifier,
+		rows,
+	};
 
 	Ok(Json(response))
 }
@@ -269,6 +273,8 @@ struct RowQuery {
 
 #[derive(Serialize)]
 struct RowResponse {
+	schema: schema::CanonicalSpecifier,
+
 	#[serde(flatten)]
 	row: RowResult,
 }
@@ -302,7 +308,7 @@ async fn row(
 		.map(|filter_string| filter_string.to_filter(language))
 		.unwrap_or(Ok(read::Filter::All))?;
 
-	let schema = schema_provider.schema(schema_specifier)?;
+	let schema = schema_provider.schema(schema_specifier.clone())?;
 
 	let row_id = path.row.row_id;
 	let subrow_id = path.row.subrow_id;
@@ -318,6 +324,7 @@ async fn row(
 	)?;
 
 	let response = RowResponse {
+		schema: schema_specifier,
 		row: RowResult {
 			row_id,
 			// NOTE: this results in subrow being reported if it's included in path, even on non-subrow sheets (though anything but :0 on those throws an error)

@@ -6,5 +6,5 @@ mod specifier;
 pub use {
 	error::Error,
 	provider::{Config, Provider},
-	specifier::Specifier,
+	specifier::{CanonicalSpecifier, Specifier},
 };
