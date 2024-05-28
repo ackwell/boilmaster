@@ -1,7 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
+use futures::future::join_all;
 use ironworks_schema::Schema;
 use serde::Deserialize;
+use tokio::{select, time};
+use tokio_util::sync::CancellationToken;
 
 use crate::{data, version::VersionKey};
 
@@ -13,6 +16,8 @@ use super::{
 };
 
 pub trait Source: Send + Sync {
+	fn update(&self) -> Result<()>;
+
 	fn canonicalize(&self, schema_version: Option<&str>, version_key: VersionKey)
 		-> Result<String>;
 
@@ -22,6 +27,7 @@ pub trait Source: Send + Sync {
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	default: Specifier,
+	interval: u64,
 
 	exdschema: exdschema::Config,
 	saint_coinach: saint_coinach::Config,
@@ -31,7 +37,8 @@ pub struct Config {
 // TODO: look into moving sources into a channel so i'm not leaning on send+sync for other shit
 pub struct Provider {
 	default: Specifier,
-	sources: HashMap<&'static str, Box<dyn Source>>,
+	update_interval: u64,
+	sources: HashMap<&'static str, Arc<dyn Source>>,
 }
 
 impl Provider {
@@ -39,6 +46,7 @@ impl Provider {
 		// TODO: at the moment this will hard fail if any source fails - should i make sources soft fail?
 		Ok(Self {
 			default: config.default,
+			update_interval: config.interval,
 			sources: HashMap::from([
 				(
 					"saint-coinach",
@@ -50,6 +58,41 @@ impl Provider {
 				),
 			]),
 		})
+	}
+
+	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
+		select! {
+			_ = self.start_inner() => Ok(()),
+			_ = cancel.cancelled() => Ok(()),
+		}
+	}
+
+	async fn start_inner(&self) {
+		let mut interval = time::interval(time::Duration::from_secs(self.update_interval));
+		interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+
+		loop {
+			interval.tick().await;
+
+			self.update().await;
+		}
+	}
+
+	async fn update(&self) {
+		tracing::info!("checking for schema updates");
+
+		// TODO: Should this be spawn_blocking?
+		let pending_updates = self.sources.iter().map(|(&name, source)| {
+			let source = source.clone();
+			tokio::spawn(async move { (name, source.update()) })
+		});
+
+		// Bubble panics, but log + ignore failures.
+		for result in join_all(pending_updates).await {
+			if let (name, Err(error)) = result.expect("schema update panic") {
+				tracing::error!(%name, ?error, "schema update failed")
+			}
+		}
 	}
 
 	/// Canonicalise an optional specifier.
@@ -80,6 +123,6 @@ impl Provider {
 	}
 }
 
-fn boxed(x: impl Source + 'static) -> Box<dyn Source> {
-	Box::new(x)
+fn boxed(x: impl Source + 'static) -> Arc<dyn Source> {
+	Arc::new(x)
 }

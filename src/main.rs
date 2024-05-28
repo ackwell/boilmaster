@@ -62,6 +62,9 @@ async fn main() {
 		version.start(shutdown_token.clone()),
 		data.start(shutdown_token.clone(), &version)
 			.map_err(anyhow::Error::from),
+		schema
+			.start(shutdown_token.clone())
+			.map_err(anyhow::Error::from),
 		// search
 		// 	.start(shutdown_token.child_token())
 		// 	.map_err(anyhow::Error::from),
@@ -70,7 +73,7 @@ async fn main() {
 			config.http,
 			data.clone(),
 			asset,
-			schema,
+			schema.clone(),
 			// search.clone(),
 			version.clone(),
 		),

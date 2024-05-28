@@ -42,6 +42,13 @@ impl ExdSchema {
 }
 
 impl Source for ExdSchema {
+	fn update(&self) -> Result<()> {
+		if self.provider.update()? {
+			tracing::info!("EXDSchema updated")
+		}
+		Ok(())
+	}
+
 	fn canonicalize(
 		&self,
 		schema_version: Option<&str>,

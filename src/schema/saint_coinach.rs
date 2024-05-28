@@ -30,6 +30,11 @@ impl SaintCoinach {
 }
 
 impl Source for SaintCoinach {
+	fn update(&self) -> Result<()> {
+		// StC doesn't have an update code path - and will be deleted shortly anyway.
+		Ok(())
+	}
+
 	// TODO: should make this actually resolve a git hash properly from stc &c, but that'd require changes in iw and i'm being lazy at the moment. resolving it to our local defalt Should Do Fine for now.
 	fn canonicalize(
 		&self,
