@@ -5,16 +5,18 @@ use serde::Deserialize;
 
 use crate::{data, version::VersionKey};
 
-use super::{error::Error, exdschema, saint_coinach, specifier::CanonicalSpecifier, Specifier};
+use super::{
+	error::{Error, Result},
+	exdschema, saint_coinach,
+	specifier::CanonicalSpecifier,
+	Specifier,
+};
 
 pub trait Source: Send + Sync {
-	fn canonicalize(
-		&self,
-		schema_version: Option<&str>,
-		version_key: VersionKey,
-	) -> Result<String, Error>;
+	fn canonicalize(&self, schema_version: Option<&str>, version_key: VersionKey)
+		-> Result<String>;
 
-	fn version(&self, version: &str) -> Result<Box<dyn Schema>, Error>;
+	fn version(&self, version: &str) -> Result<Box<dyn Schema>>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,7 +35,7 @@ pub struct Provider {
 }
 
 impl Provider {
-	pub fn new(config: Config, data: Arc<data::Data>) -> Result<Self, Error> {
+	pub fn new(config: Config, data: Arc<data::Data>) -> Result<Self> {
 		// TODO: at the moment this will hard fail if any source fails - should i make sources soft fail?
 		Ok(Self {
 			default: config.default,
@@ -55,7 +57,7 @@ impl Provider {
 		&self,
 		specifier: Option<Specifier>,
 		version: VersionKey,
-	) -> Result<CanonicalSpecifier, Error> {
+	) -> Result<CanonicalSpecifier> {
 		let specifier = specifier.unwrap_or_else(|| self.default.clone());
 
 		let source = self
@@ -69,7 +71,7 @@ impl Provider {
 		})
 	}
 
-	pub fn schema(&self, specifier: CanonicalSpecifier) -> Result<Box<dyn Schema>, Error> {
+	pub fn schema(&self, specifier: CanonicalSpecifier) -> Result<Box<dyn Schema>> {
 		let source = self
 			.sources
 			.get(specifier.source.as_str())

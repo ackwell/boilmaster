@@ -20,3 +20,5 @@ impl From<ironworks_schema::Error> for Error {
 		}
 	}
 }
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;

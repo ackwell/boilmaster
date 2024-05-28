@@ -1,12 +1,15 @@
 use std::{borrow::Cow, sync::Arc};
 
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use ironworks_schema::exdschema;
 use serde::Deserialize;
 
 use crate::{data, utility::anyhow::Anyhow, version::VersionKey};
 
-use super::{error::Error, provider::Source};
+use super::{
+	error::{Error, Result},
+	provider::Source,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -43,7 +46,7 @@ impl Source for ExdSchema {
 		&self,
 		schema_version: Option<&str>,
 		version_key: VersionKey,
-	) -> Result<String, Error> {
+	) -> Result<String> {
 		let schema_version = schema_version.unwrap_or(&self.default);
 
 		let split = schema_version.splitn(2, '-').collect::<Vec<_>>();
@@ -72,7 +75,7 @@ impl Source for ExdSchema {
 		))
 	}
 
-	fn version(&self, version: &str) -> Result<Box<dyn ironworks_schema::Schema>, Error> {
+	fn version(&self, version: &str) -> Result<Box<dyn ironworks_schema::Schema>> {
 		let (reference, game_version) = version.split_once('-').ok_or_else(|| {
 			Error::Failure(anyhow!("invalid canonical version string: \"{version}\""))
 		})?;
