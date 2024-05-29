@@ -84,22 +84,35 @@ fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
 	use schema::Node as N;
 	match node {
 		N::Array { count, node } => read_node_array(node, *count, context),
-		N::Reference(targets) => read_node_reference(targets, context),
-		N::Scalar => read_node_scalar(context),
+		N::Scalar(scalar) => read_node_scalar(scalar, context),
 		N::Struct(fields) => read_node_struct(fields, context),
 	}
 }
 
-fn read_node_scalar(mut context: ReaderContext) -> Result<Value> {
-	context.next_field().map(Value::Scalar)
+fn read_node_scalar(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {
+	let field = context.next_field()?;
+
+	use schema::Scalar as S;
+	let out = match scalar {
+		S::Default => Value::Scalar(field),
+		S::Reference(targets) => read_scalar_reference(field, targets, context)?,
+		// TODO: Implement values for these. rethink scalar?
+		kind => {
+			tracing::warn!(?kind, "unhandled schema sub-kind");
+			Value::Scalar(field)
+		}
+	};
+
+	Ok(out)
 }
 
-fn read_node_reference(
+fn read_scalar_reference(
+	field: excel::Field,
 	targets: &[schema::ReferenceTarget],
-	mut context: ReaderContext,
+	context: ReaderContext,
 ) -> Result<Value> {
 	// TODO: are references _always_ i32? like, always always?
-	let target_value = convert_reference_value(context.next_field()?)?;
+	let target_value = convert_reference_value(field)?;
 
 	let mut reference = Reference::Scalar(target_value);
 
@@ -320,7 +333,7 @@ fn iterate_struct_fields<'s, 'c>(
 		range.map(|offset| {
 			(
 				Cow::<str>::Owned(format!("unknown{offset}")),
-				&schema::Node::Scalar,
+				&schema::Node::Scalar(schema::Scalar::Default),
 				&columns[offset..offset + 1],
 			)
 		})
