@@ -1,14 +1,6 @@
 use std::sync::Arc;
 
-use boilmaster::{
-	asset,
-	data,
-	http,
-	schema,
-	// search,
-	tracing,
-	version,
-};
+use boilmaster::{asset, data, http, schema, search, tracing, version};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -25,7 +17,7 @@ struct Config {
 	data: data::Config,
 	version: version::Config,
 	schema: schema::Config,
-	// search: search::Config,
+	search: search::Config,
 }
 
 #[tokio::main]
@@ -53,7 +45,7 @@ async fn main() {
 	let asset = Arc::new(asset::Service::new(data.clone()));
 	let schema =
 		Arc::new(schema::Provider::new(config.schema, data.clone()).expect("TODO: Error handling"));
-	// let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
+	let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
 
 	// Set up a cancellation token that will fire when a shutdown signal is recieved.
 	let shutdown_token = shutdown_token();
@@ -65,9 +57,9 @@ async fn main() {
 		schema
 			.start(shutdown_token.clone())
 			.map_err(anyhow::Error::from),
-		// search
-		// 	.start(shutdown_token.child_token())
-		// 	.map_err(anyhow::Error::from),
+		search
+			.start(shutdown_token.child_token())
+			.map_err(anyhow::Error::from),
 		http::serve(
 			shutdown_token,
 			config.http,

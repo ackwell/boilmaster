@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use tantivy::{
 	fastfield::{AliveBitSet, Column},
 	query::{EnableScoring, Explanation, Query, RegexQuery, Scorer, Weight},
@@ -12,12 +10,12 @@ use crate::search::{error::Result, Error};
 #[derive(Debug)]
 pub struct MatchQuery {
 	query: RegexQuery,
-	field: Field,
+	field: String,
 	target: u64,
 }
 
 impl MatchQuery {
-	pub fn new(match_string: &str, field_string: Field, field_length: Field) -> Result<Self> {
+	pub fn new(match_string: &str, field_string: Field, field_length: String) -> Result<Self> {
 		// String columns are ingested untokenised, so we can run "matches" using a regex partial match.
 		// TODO: consider allowing ^$ (impl by removing leading/trailing .*) and * (repl. with .*)
 		// TODO: for the above, consider how the above is scored - should they be trimmed? we can't expand the * to the matched length
@@ -45,7 +43,7 @@ impl Clone for MatchQuery {
 	fn clone(&self) -> Self {
 		Self {
 			query: self.query.clone(),
-			field: self.field,
+			field: self.field.clone(),
 			target: self.target,
 		}
 	}
@@ -62,7 +60,7 @@ impl Query for MatchQuery {
 
 		Ok(Box::new(MatchWeight {
 			weight,
-			field: self.field,
+			field: self.field.clone(),
 			target: self.target,
 		}))
 	}
@@ -70,13 +68,13 @@ impl Query for MatchQuery {
 
 struct MatchWeight {
 	weight: Box<dyn Weight>,
-	field: Field,
+	field: String,
 	target: u64,
 }
 
 impl Weight for MatchWeight {
 	fn scorer(&self, reader: &SegmentReader, boost: Score) -> tantivy::Result<Box<dyn Scorer>> {
-		let length_reader = reader.fast_fields().u64(self.field).unwrap();
+		let length_reader = reader.fast_fields().u64(&self.field).unwrap();
 
 		Ok(Box::new(MatchScorer {
 			scorer: self.weight.scorer(reader, boost)?,
@@ -92,7 +90,7 @@ impl Weight for MatchWeight {
 
 struct MatchScorer<S> {
 	scorer: S,
-	length_reader: Arc<dyn Column<u64>>,
+	length_reader: Column<u64>,
 	target: u64,
 }
 
@@ -103,7 +101,11 @@ where
 	fn score(&mut self) -> Score {
 		let score = self.scorer.score();
 
-		let length = self.length_reader.get_val(self.doc());
+		let length = self
+			.length_reader
+			.values_for_doc(self.doc())
+			.next()
+			.unwrap_or(1);
 		let boost = self.target as f32 / length as f32;
 
 		score * boost
@@ -122,7 +124,7 @@ where
 		self.scorer.seek(target)
 	}
 
-	fn fill_buffer(&mut self, buffer: &mut [DocId]) -> usize {
+	fn fill_buffer(&mut self, buffer: &mut [DocId; 64]) -> usize {
 		self.scorer.fill_buffer(buffer)
 	}
 

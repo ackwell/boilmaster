@@ -56,11 +56,11 @@ impl QueryResolver<'_> {
 	fn resolve_leaf(&self, leaf: &Leaf) -> Result<Box<dyn Query>> {
 		let (column, language) = &leaf.field;
 		let field_name = column_field_name(column, *language);
-		let field = self.schema.get_field(&field_name).ok_or_else(|| {
+		let field = self.schema.get_field(&field_name).map_err(|error| {
 			Error::SchemaGameMismatch(MismatchError {
 				// TODO: this will be pretty cryptic to end-users, try to resolve to the schema column name?
 				field: format!("field {field_name}"),
-				reason: "field does not exist in search index".into(),
+				reason: format!("field does not exist in search index: {error}"),
 			})
 		})?;
 
@@ -113,12 +113,11 @@ impl QueryResolver<'_> {
 		}
 
 		let field_name_length = string_length_field_name(field_entry.name());
-		let field_length = self.schema.get_field(&field_name_length).unwrap();
 
 		Ok(Box::new(MatchQuery::new(
 			string,
 			field_string,
-			field_length,
+			field_name_length,
 		)?))
 	}
 

@@ -207,7 +207,7 @@ impl<'a> Normalizer<'a> {
 						"i think this is passing the entire schema node down to the subquery?"
 					),
 
-					schema::Node::Reference(targets) => {
+					schema::Node::Scalar(schema::Scalar::Reference(targets)) => {
 						let field = match context.columns {
 							[column] => column,
 							other => {
@@ -376,13 +376,16 @@ fn collect_scalars(
 			})
 		}
 
-		schema::Node::Reference(_references) => {
-			// ignore refs?
-			Some(output)
-		}
+		schema::Node::Scalar(scalar) => {
+			match scalar {
+				schema::Scalar::Reference(_references) => {
+					// ignore references
+				}
 
-		schema::Node::Scalar => {
-			output.push(columns.get(0)?.clone());
+				_other => {
+					output.push(columns.get(0)?.clone());
+				}
+			}
 			Some(output)
 		}
 

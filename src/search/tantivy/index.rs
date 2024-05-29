@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs, path::Path};
 
 use ironworks::{
 	excel::{Field, Language, Row, Sheet},
@@ -7,8 +7,10 @@ use ironworks::{
 use tantivy::{
 	collector::TopDocs,
 	directory::MmapDirectory,
+	indexer::UserOperation,
 	query::{BooleanQuery, ConstScoreQuery, Query, TermQuery},
-	schema, Document, IndexReader, IndexSettings, ReloadPolicy, Term, UserOperation,
+	schema::{self, Value},
+	IndexReader, IndexSettings, ReloadPolicy, TantivyDocument, Term,
 };
 
 use crate::{
@@ -51,7 +53,7 @@ impl Index {
 
 		let reader = index
 			.reader_builder()
-			.reload_policy(ReloadPolicy::OnCommit)
+			.reload_policy(ReloadPolicy::OnCommitWithDelay)
 			.try_into()?;
 
 		Ok(Self { index, reader })
@@ -120,7 +122,7 @@ impl Index {
 			.map(|(sheet_key, boilmaster_query)| -> Result<_> {
 				let query = BooleanQuery::intersection(vec![
 					sheet_key_query(*sheet_key),
-					query_resolver.resolve(boilmaster_query.borrow())?,
+					query_resolver.resolve(boilmaster_query)?,
 				]);
 				Ok(Box::new(query) as Box<dyn Query>)
 			})
@@ -146,8 +148,8 @@ impl Index {
 		let field_row_id = schema.get_field(ROW_ID).unwrap();
 		let field_subrow_id = schema.get_field(SUBROW_ID).unwrap();
 
-		let get_u64 = |doc: &Document, field: schema::Field| doc.get_first(field)?.as_u64();
-		let ids = move |document: &Document| -> Option<(SheetKey, u32, u16)> {
+		let get_u64 = |doc: &TantivyDocument, field: schema::Field| doc.get_first(field)?.as_u64();
+		let ids = move |document: &TantivyDocument| -> Option<(SheetKey, u32, u16)> {
 			let sheet_key = get_u64(document, field_sheet_key)?.into();
 			let row_id = get_u64(document, field_row_id)?.try_into().ok()?;
 			let subrow_id = get_u64(document, field_subrow_id)?.try_into().ok()?;
@@ -175,20 +177,20 @@ fn sheet_documents(
 	key: SheetKey,
 	sheet: &Sheet<String>,
 	schema: &schema::Schema,
-) -> Result<impl ExactSizeIterator<Item = Document>> {
+) -> Result<impl ExactSizeIterator<Item = TantivyDocument>> {
 	tracing::info!(sheet = %sheet.name(), "ingesting");
 
 	let columns = sheet.columns()?;
 	let languages = sheet.languages()?;
 
 	// TODO: This effectively results in reading the entire sheet dataset into memory, which seems pretty wasteful - but `writer.run` requires an `ExactSizeIterator`, and I've as-yet been unable to get a better performing stream-alike solution to function sanely.
-	let mut documents = HashMap::<(u32, u16), Document>::new();
+	let mut documents = HashMap::<(u32, u16), TantivyDocument>::new();
 
 	for language in languages {
 		for row in sheet.with().language(language).iter() {
 			let document = documents
 				.entry((row.row_id(), row.subrow_id()))
-				.or_insert_with(Document::new);
+				.or_insert_with(TantivyDocument::new);
 			hydrate_row_document(document, row, &columns, language, schema)?;
 		}
 	}
@@ -207,7 +209,7 @@ fn sheet_documents(
 }
 
 fn hydrate_row_document(
-	document: &mut Document,
+	document: &mut TantivyDocument,
 	row: Row,
 	columns: &[exh::ColumnDefinition],
 	language: Language,

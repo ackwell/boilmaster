@@ -35,7 +35,7 @@ impl MetadataStore {
 
 		let reader = index
 			.reader_builder()
-			.reload_policy(ReloadPolicy::OnCommit)
+			.reload_policy(ReloadPolicy::OnCommitWithDelay)
 			.try_into()?;
 
 		// Effectively can't go below 3MB without tantivy panicing.
