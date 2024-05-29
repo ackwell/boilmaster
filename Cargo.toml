@@ -24,6 +24,7 @@ ironworks = { git = "https://github.com/ackwell/ironworks.git", features = [
     "zipatch",
 ] }
 ironworks_schema = { git = "https://github.com/ackwell/ironworks.git", features = [
+    "exdschema",
     "saint_coinach",
 ] }
 itertools = "0.12.1"

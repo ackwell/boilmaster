@@ -1,6 +1,7 @@
 *.ignore.*
-/target
+/exdschema
 /patches
 /saint_coinach
 /search
+/target
 /versions

@@ -9,10 +9,8 @@ use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 
-use crate::read::error::MismatchError;
-
 use super::{
-	error::{Error, Result},
+	error::{Error, MismatchError, Result},
 	filter::Filter,
 	value::{Reference, StructKey, Value},
 };
@@ -69,33 +67,51 @@ fn get_sorted_columns(
 	schema: &schema::Sheet,
 	data: &excel::Sheet<'_, &str>,
 ) -> Result<Vec<exh::ColumnDefinition>> {
-	if schema.order != schema::Order::Index {
-		todo!("sheet schema {:?} order", schema.order);
-	}
+	let mut columns = data.columns()?;
 
-	Ok(data.columns()?)
+	match schema.order {
+		schema::Order::Index => (),
+		// NOTE: It's important to maintain the sort order here for PackedBool ordering
+		schema::Order::Offset => columns.sort_by_key(|column| column.offset()),
+	};
+
+	Ok(columns)
 }
 
 fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
 	use schema::Node as N;
 	match node {
 		N::Array { count, node } => read_node_array(node, *count, context),
-		N::Reference(targets) => read_node_reference(targets, context),
-		N::Scalar => read_node_scalar(context),
+		N::Scalar(scalar) => read_node_scalar(scalar, context),
 		N::Struct(fields) => read_node_struct(fields, context),
 	}
 }
 
-fn read_node_scalar(mut context: ReaderContext) -> Result<Value> {
-	context.next_field().map(Value::Scalar)
+fn read_node_scalar(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {
+	let field = context.next_field()?;
+
+	use schema::Scalar as S;
+	let out = match scalar {
+		S::Default => Value::Scalar(field),
+		S::Reference(targets) => read_scalar_reference(field, targets, context)?,
+		S::Icon => read_scalar_icon(field)?,
+
+		kind => {
+			tracing::warn!(?kind, "unhandled scalar sub-kind");
+			Value::Scalar(field)
+		}
+	};
+
+	Ok(out)
 }
 
-fn read_node_reference(
+fn read_scalar_reference(
+	field: excel::Field,
 	targets: &[schema::ReferenceTarget],
-	mut context: ReaderContext,
+	context: ReaderContext,
 ) -> Result<Value> {
 	// TODO: are references _always_ i32? like, always always?
-	let target_value = convert_reference_value(context.next_field()?)?;
+	let target_value = convert_reference_value(field)?;
 
 	let mut reference = Reference::Scalar(target_value);
 
@@ -187,6 +203,25 @@ fn convert_reference_value(field: excel::Field) -> Result<i32> {
 	Ok(result)
 }
 
+fn read_scalar_icon(field: excel::Field) -> Result<Value> {
+	// TODO: this is getting dumb.
+	use excel::Field as F;
+	let id = match field {
+		F::I8(value) => u32::try_from(value)?,
+		F::I16(value) => u32::try_from(value)?,
+		F::I32(value) => u32::try_from(value)?,
+		F::I64(value) => u32::try_from(value)?,
+		F::U8(value) => u32::from(value),
+		F::U16(value) => u32::from(value),
+		F::U32(value) => value,
+		F::U64(value) => u32::try_from(value)?,
+
+		other => Err(anyhow!("invalid icon type {other:?}"))?,
+	};
+
+	Ok(Value::Icon(id))
+}
+
 fn read_node_array(
 	element_node: &schema::Node,
 	count: u32,
@@ -206,7 +241,9 @@ fn read_node_array(
 	let values = (0..count)
 		.scan(0usize, |index, _| {
 			let Some(columns) = context.columns.get(*index..*index + size) else {
-				return Some(Err(Error::SchemaGameMismatch(context.mismatch_error(format!("insufficient columns to satisfy array")))));
+				return Some(Err(Error::SchemaGameMismatch(
+					context.mismatch_error(format!("insufficient columns to satisfy array")),
+				)));
 			};
 			*index += size;
 
@@ -314,7 +351,7 @@ fn iterate_struct_fields<'s, 'c>(
 		range.map(|offset| {
 			(
 				Cow::<str>::Owned(format!("unknown{offset}")),
-				&schema::Node::Scalar,
+				&schema::Node::Scalar(schema::Scalar::Default),
 				&columns[offset..offset + 1],
 			)
 		})

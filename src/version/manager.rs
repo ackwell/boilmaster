@@ -150,7 +150,7 @@ impl Manager {
 			interval.tick().await;
 
 			if let Err(error) = self.update().await {
-				tracing::error!(%error, "update failed");
+				tracing::error!(?error, "update failed");
 			}
 		}
 	}
@@ -245,7 +245,9 @@ impl Manager {
 	}
 
 	async fn hydrate(&self) -> Result<()> {
-		let Some(metadata) = self.hydrate_metadata().await? else { return Ok(()) };
+		let Some(metadata) = self.hydrate_metadata().await? else {
+			return Ok(());
+		};
 
 		let pending_versions = metadata
 			.versions
@@ -296,7 +298,9 @@ impl Manager {
 	async fn hydrate_metadata(&self) -> Result<Option<PersistedMetadata>> {
 		let path = self.metadata_path();
 		let join_handle = tokio::task::spawn_blocking(|| -> Result<Option<PersistedMetadata>> {
-			let Some(file) = open_config_read(path)? else { return Ok(None) };
+			let Some(file) = open_config_read(path)? else {
+				return Ok(None);
+			};
 			let metadata: PersistedMetadata = serde_json::from_reader(file)?;
 			Ok(Some(metadata))
 		});

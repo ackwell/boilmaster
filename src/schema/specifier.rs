@@ -1,9 +1,9 @@
 use std::{convert::Infallible, str::FromStr};
 
-use serde::{de, Deserialize};
+use serde::{de, Deserialize, Serialize};
 
 // TODO: will probably need eq/hash so i can use these as cache keys?
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CanonicalSpecifier {
 	pub(super) source: String,
 	pub(super) version: String,
@@ -16,6 +16,21 @@ impl CanonicalSpecifier {
 
 	pub fn version(&self) -> &str {
 		&self.version
+	}
+}
+
+impl ToString for CanonicalSpecifier {
+	fn to_string(&self) -> String {
+		format!("{}@{}", self.source, self.version)
+	}
+}
+
+impl Serialize for CanonicalSpecifier {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		serializer.serialize_str(&self.to_string())
 	}
 }
 

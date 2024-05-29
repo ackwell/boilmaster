@@ -6,7 +6,7 @@ use std::{
 	sync::{Arc, Mutex},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use figment::value::magic::RelativePathBuf;
 use serde::Deserialize;
 use tokio::sync::{broadcast, Semaphore};
@@ -60,7 +60,8 @@ impl Patcher {
 		let repository_directory = patch_path
 			.parent()
 			.expect("patches should always be within a folder");
-		fs::create_dir_all(&repository_directory)?;
+		fs::create_dir_all(&repository_directory)
+			.with_context(|| format!("failed to create directory {repository_directory:?}"))?;
 
 		let mut patch_states = self.patch_states.lock().expect("poisoned");
 
