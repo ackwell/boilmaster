@@ -5,15 +5,10 @@ use ironworks::excel;
 #[derive(Debug)]
 pub enum Value {
 	Array(Vec<Value>),
+	Icon(u32),
 	Reference(Reference),
 	Scalar(excel::Field),
 	Struct(HashMap<StructKey, Value>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct StructKey {
-	pub name: String,
-	pub language: excel::Language,
 }
 
 #[derive(Debug)]
@@ -26,4 +21,10 @@ pub enum Reference {
 		subrow_id: Option<u16>,
 		fields: Box<Value>,
 	},
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StructKey {
+	pub name: String,
+	pub language: excel::Language,
 }

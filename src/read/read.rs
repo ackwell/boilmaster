@@ -9,10 +9,8 @@ use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 
-use crate::read::error::MismatchError;
-
 use super::{
-	error::{Error, Result},
+	error::{Error, MismatchError, Result},
 	filter::Filter,
 	value::{Reference, StructKey, Value},
 };
@@ -96,9 +94,10 @@ fn read_node_scalar(scalar: &schema::Scalar, mut context: ReaderContext) -> Resu
 	let out = match scalar {
 		S::Default => Value::Scalar(field),
 		S::Reference(targets) => read_scalar_reference(field, targets, context)?,
-		// TODO: Implement values for these. rethink scalar?
+		S::Icon => read_scalar_icon(field)?,
+
 		kind => {
-			tracing::warn!(?kind, "unhandled schema sub-kind");
+			tracing::warn!(?kind, "unhandled scalar sub-kind");
 			Value::Scalar(field)
 		}
 	};
@@ -202,6 +201,25 @@ fn convert_reference_value(field: excel::Field) -> Result<i32> {
 		other => Err(anyhow!("invalid index type {other:?}"))?,
 	};
 	Ok(result)
+}
+
+fn read_scalar_icon(field: excel::Field) -> Result<Value> {
+	// TODO: this is getting dumb.
+	use excel::Field as F;
+	let id = match field {
+		F::I8(value) => u32::try_from(value)?,
+		F::I16(value) => u32::try_from(value)?,
+		F::I32(value) => u32::try_from(value)?,
+		F::I64(value) => u32::try_from(value)?,
+		F::U8(value) => u32::from(value),
+		F::U16(value) => u32::from(value),
+		F::U32(value) => value,
+		F::U64(value) => u32::try_from(value)?,
+
+		other => Err(anyhow!("invalid icon type {other:?}"))?,
+	};
+
+	Ok(Value::Icon(id))
 }
 
 fn read_node_array(
