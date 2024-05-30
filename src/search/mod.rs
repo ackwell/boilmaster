@@ -2,7 +2,8 @@ mod error;
 #[path = "query/mod.rs"]
 mod internal_query;
 mod search;
-mod tantivy;
+mod sqlite;
+// mod tantivy;
 
 pub use {
 	error::{Error, FieldTypeError, MismatchError},

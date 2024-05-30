@@ -1,7 +1,8 @@
 [tracing.filters]
 default = "debug"
-tantivy = "warn"
 hyper = "info"
+sqlx = "info"
+# tantivy = "warn"
 
 [http]
 # address = "0.0.0.0"
@@ -57,10 +58,10 @@ directory = "saint_coinach"
 limit_default = 100
 limit_max = 500
 
-[search.tantivy]
-directory = "search"
-memory = 52428800    # 50MiB
+# [search.tantivy]
+# directory = "search"
+# memory = 52428800    # 50MiB
 
-[search.tantivy.cursor]
-ttl = 3600 # 1 hour
-tti = 300  # 5 minutes
+# [search.tantivy.cursor]
+# ttl = 3600 # 1 hour
+# tti = 300  # 5 minutes
