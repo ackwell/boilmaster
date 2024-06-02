@@ -1371,7 +1371,6 @@ dependencies = [
  "derivative",
  "git2",
  "serde",
- "serde_json",
  "serde_yaml",
  "thiserror",
 ]

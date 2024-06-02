@@ -10,7 +10,7 @@ use crate::{data, version::VersionKey};
 
 use super::{
 	error::{Error, Result},
-	exdschema, saint_coinach,
+	exdschema,
 	specifier::CanonicalSpecifier,
 	Specifier,
 };
@@ -30,7 +30,6 @@ pub struct Config {
 	interval: u64,
 
 	exdschema: exdschema::Config,
-	saint_coinach: saint_coinach::Config,
 }
 
 // TODO: need a way to handle updating the repo
@@ -47,16 +46,10 @@ impl Provider {
 		Ok(Self {
 			default: config.default,
 			update_interval: config.interval,
-			sources: HashMap::from([
-				(
-					"saint-coinach",
-					boxed(saint_coinach::SaintCoinach::new(config.saint_coinach)?),
-				),
-				(
-					"exdschema",
-					boxed(exdschema::ExdSchema::new(config.exdschema, data)?),
-				),
-			]),
+			sources: HashMap::from([(
+				"exdschema",
+				boxed(exdschema::ExdSchema::new(config.exdschema, data)?),
+			)]),
 		})
 	}
 

@@ -41,17 +41,13 @@ concurrency = 4
 user_agent = "FFXIV PATCH CLIENT"
 
 [schema]
-default = "saint-coinach"
-interval = 3600           # 1 hour
+default = "exdschema"
+interval = 3600       # 1 hour
 
 [schema.exdschema]
 default = "HEAD"
 remote = "https://github.com/xivdev/EXDSchema.git"
 directory = "exdschema"
-
-[schema.saint_coinach]
-# remote = "https://github.com/xivapi/SaintCoinach.git"
-directory = "saint_coinach"
 
 [search.pagination]
 limit_default = 100
