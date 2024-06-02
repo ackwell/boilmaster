@@ -23,6 +23,7 @@ use super::{
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	pagination: PaginationConfig,
+	sqlite: sqlite::Config,
 	// tantivy: tantivy::Config,
 }
 
@@ -73,7 +74,7 @@ impl Search {
 		Ok(Self {
 			pagination_config: config.pagination,
 			// provider: Arc::new(tantivy::Provider::new(config.tantivy)?),
-			provider: Arc::new(sqlite::Provider::new()),
+			provider: Arc::new(sqlite::Provider::new(config.sqlite)?),
 			data,
 		})
 	}

@@ -1,139 +1,241 @@
 use std::{
-	borrow::Cow,
 	collections::{hash_map::Entry, HashMap},
-	str::FromStr,
-	sync::Arc,
+	fs,
+	path::{Path, PathBuf},
+	sync::{Arc, RwLock},
 };
 
+use figment::value::magic::RelativePathBuf;
+use futures::future::try_join_all;
 use ironworks::{
-	excel::{Field, Language, Row, Sheet},
+	excel::{Field, Language, Sheet},
 	file::exh,
 };
-use itertools::Itertools;
+use sea_query::{
+	Alias, ColumnDef, ColumnType, Query, SimpleExpr, SqliteQueryBuilder, Table,
+	TableCreateStatement,
+};
+use sea_query_binder::SqlxBinder;
+use serde::Deserialize;
 use sqlx::{
 	sqlite::{SqliteConnectOptions, SqliteSynchronous},
 	SqlitePool,
 };
-use tokio::{select, sync::RwLock};
+use tokio::select;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 
 use crate::{search::error::Result, version::VersionKey};
 
+#[derive(Debug, Deserialize)]
+pub struct Config {
+	directory: RelativePathBuf,
+}
+
 pub struct Provider {
-	// todo: should this instead have per-pool locks? like that other thing i did somewhen where it inserts a pending item so it doesn't lock the entire map
-	dbs: RwLock<HashMap<VersionKey, Arc<SqlitePool>>>,
+	directory: PathBuf,
+
+	databases: RwLock<HashMap<VersionKey, Arc<Database>>>,
 }
 
 impl Provider {
-	pub fn new() -> Self {
-		Self {
-			dbs: Default::default(),
-		}
+	pub fn new(config: Config) -> Result<Self> {
+		let directory = config.directory.relative();
+
+		// ensure shit exists ig
+		fs::create_dir_all(&directory)?;
+
+		Ok(Self {
+			directory,
+			databases: Default::default(),
+		})
 	}
 
-	#[tracing::instrument(skip_all)]
 	pub async fn ingest(
 		self: Arc<Self>,
 		cancel: CancellationToken,
 		sheets: Vec<(VersionKey, Sheet<'static, String>)>,
 	) -> Result<()> {
-		// db per ver? share? duno, think about it.
-		// consider WAL for journalling. possibly not worth it if using a db per version, as we'd never be writing at the same time as reading. https://www.sqlite.org/wal.html
-
-		// TODO: consider seaquery for this shit
-		tracing::info!("starting the thing ({})", sheets.len());
+		// Group by database key and run per-DB ingestions concurrently. Realistically
+		// Sqlite doesn't support multiple writers on a single DB, but that's left as
+		// an implementation detail of the DB.
+		let mut grouped = HashMap::<VersionKey, Vec<Sheet<String>>>::new();
 		for (version, sheet) in sheets {
-			let f = Arc::clone(&self);
-			select! {
-				_ = cancel.cancelled() => { break }
-				result = tokio::task::spawn(async move {
-					f.clone().ingest_sheet(version,sheet).await
-				}) => { result? }
-			}
+			grouped.entry(version).or_insert_with(Vec::new).push(sheet);
+		}
+
+		let pending_ingestions = grouped
+			.into_iter()
+			.map(|(version, sheets)| self.ingest_version(version, sheets));
+
+		select! {
+			_ = cancel.cancelled() => { todo!() }
+			result = try_join_all(pending_ingestions) => { result?; }
 		}
 
 		Ok(())
 	}
 
-	async fn ingest_sheet(self: Arc<Self>, version: VersionKey, sheet: Sheet<'static, String>) {
-		let mut dbw = self.dbs.write().await;
-		let pool = match dbw.entry(version) {
-			Entry::Occupied(x) => x.into_mut(),
-			Entry::Vacant(x) => {
-				tracing::info!("yeeting new db i think for {version}");
-				let fdsaaa = create_db(version).await;
-				x.insert(Arc::new(fdsaaa))
+	async fn ingest_version(
+		&self,
+		version: VersionKey,
+		sheets: Vec<Sheet<'static, String>>,
+	) -> Result<()> {
+		let span = tracing::info_span!("ingest", %version);
+		let database = self.database(version);
+		tokio::task::spawn(async move { database.ingest(sheets).await }.instrument(span)).await?
+	}
+
+	fn database(&self, version: VersionKey) -> Arc<Database> {
+		let mut write_handle = self.databases.write().expect("poisoned");
+		let database = match write_handle.entry(version) {
+			Entry::Occupied(entry) => entry.into_mut(),
+			Entry::Vacant(entry) => {
+				// todo log?
+				let database = Database::new(&self.directory.join(format!("version-{version}")));
+				entry.insert(Arc::new(database))
 			}
 		};
-		let pool = Arc::clone(pool);
-		drop(dbw);
 
-		// create the table
-		create_table(pool.as_ref(), &sheet).await;
-
-		// fdsafasd
-		ingest_rows(pool.as_ref(), &sheet).await;
+		Arc::clone(database)
 	}
 }
 
-async fn create_db(version: VersionKey) -> SqlitePool {
-	let options = SqliteConnectOptions::from_str(&format!("{}.db", version.to_string()))
-		.expect("what")
-		.create_if_missing(true)
-		.synchronous(SqliteSynchronous::Off);
-	SqlitePool::connect_with(options).await.expect("todo")
+struct Database {
+	pool: SqlitePool,
 }
 
-async fn create_table(pool: &SqlitePool, sheet: &Sheet<'_, String>) {
-	let kind = sheet.kind().expect("fasdf");
-	let mut ids = vec!["row_id BIGINT"];
+impl Database {
+	pub fn new(path: &Path) -> Self {
+		let options = SqliteConnectOptions::new()
+			.filename(path)
+			.create_if_missing(true)
+			.synchronous(SqliteSynchronous::Off);
+
+		let pool = SqlitePool::connect_lazy_with(options);
+
+		Self { pool }
+	}
+
+	pub async fn ingest(&self, sheets: Vec<Sheet<'static, String>>) -> Result<()> {
+		// NOTE: There's little point in trying to parallelise this, as sqlite only supports one writer at a time.
+		// TODO: WAL mode may impact this - r&d required.
+		for sheet in sheets {
+			self.ingest_sheet(sheet).await?;
+		}
+
+		Ok(())
+	}
+
+	async fn ingest_sheet(&self, sheet: Sheet<'static, String>) -> Result<()> {
+		// TODO: This is suspciously similar to create_table shit. inline?
+		let name = sheet.name();
+		let kind = sheet.kind()?;
+
+		// TODO: Check if table already exists, can exit early if it does
+		//       ^ needs to account for partial completion - do i store a seperate ingestion state table, or derive it from inserted data?
+
+		tracing::debug!(sheet = name, "ingesting");
+
+		// TODO: drop existing table (is this needed?)
+
+		// Create table for the sheet.
+		let query = create_table(&sheet)?.build(SqliteQueryBuilder);
+		sqlx::query(&query).execute(&self.pool).await?;
+
+		// TODO: insert
+		//       work out what i can get away with for batching
+
+		// TODO: should I reuse the idens for stuff like table name within this code path?
+		let sheet_columns = sheet.columns()?;
+		let mut table_columns = vec![Alias::new("row_id")];
+		if matches!(kind, exh::SheetKind::Subrows) {
+			table_columns.push(Alias::new("subrow_id"))
+		}
+		for column in &sheet_columns {
+			table_columns.push(column_name(column))
+		}
+		let base_query = Query::insert()
+			.into_table(Alias::new(name))
+			.columns(table_columns)
+			.to_owned();
+
+		// TODO: I _need_ to handle languages. How? do i split columns or tables? columns would risk blow out pretty quickly. game uses tables.hm.
+		for row in sheet.with().language(Language::English).iter() {
+			//
+			let mut values: Vec<SimpleExpr> = vec![row.row_id().into()];
+			if matches!(kind, exh::SheetKind::Subrows) {
+				values.push(row.subrow_id().into())
+			}
+			for column in &sheet_columns {
+				let field = row.field(column)?;
+				use Field as F;
+				values.push(match field {
+					F::String(sestring) => sestring.to_string().into(),
+					F::Bool(value) => value.into(),
+					F::I8(value) => value.into(),
+					F::I16(value) => value.into(),
+					F::I32(value) => value.into(),
+					F::I64(value) => value.into(),
+					F::U8(value) => value.into(),
+					F::U16(value) => value.into(),
+					F::U32(value) => value.into(),
+					F::U64(value) => value.into(),
+					F::F32(value) => value.into(),
+				})
+			}
+			let (query, values) = base_query
+				.clone()
+				.values_panic(values)
+				.build_sqlx(SqliteQueryBuilder);
+			sqlx::query_with(&query, values).execute(&self.pool).await?;
+		}
+
+		Ok(())
+	}
+}
+
+fn create_table(sheet: &Sheet<String>) -> Result<TableCreateStatement> {
+	let name = sheet.name();
+	let kind = sheet.kind()?;
+
+	// NOTE: Opting against a WITHOUT ROWID table for these - the benefits they
+	// confer aren't particularly meaningful for our workload.
+	let mut table = Table::create();
+	table
+		.table(Alias::new(name))
+		// TODO: use well-known aliases for these?
+		.col(ColumnDef::new(Alias::new("row_id")).integer().primary_key());
+
 	if matches!(kind, exh::SheetKind::Subrows) {
-		ids.push("subrow_id INTEGER");
+		table.col(ColumnDef::new(Alias::new("subrow_id")).integer());
 	}
 
-	// TODO: other languages - should they be different tables?
-	let table_name = sheet.name();
-	let columns = sheet
-		.columns()
-		.expect("todo")
-		.into_iter()
-		.map(|column| Cow::Owned(create_column(&column)));
+	for column in sheet.columns()? {
+		table.col(&mut column_definition(&column));
+	}
 
-	// todo: jsonb lol?
-
-	let thing = ids.into_iter().map(Cow::Borrowed).chain(columns).join(",");
-
-	sqlx::query(&format!(
-		"CREATE TABLE IF NOT EXISTS \"{table_name}\" ({thing});"
-	))
-	.execute(pool)
-	.await
-	.expect("boom");
-
-	let indexcols = match kind {
-		exh::SheetKind::Subrows => "row_id, subrow_id",
-		_ => "row_id",
-	};
-	sqlx::query(&format!(
-		"CREATE UNIQUE INDEX \"{table_name}$id\" ON {table_name} ({indexcols})"
-	))
-	.execute(pool)
-	.await
-	.expect("boom");
+	Ok(table.take())
 }
 
-fn create_column(column: &exh::ColumnDefinition) -> String {
-	let name = column_field_name(&column);
+fn column_definition(column: &exh::ColumnDefinition) -> ColumnDef {
+	let name = column_name(column);
 
 	use exh::ColumnKind as CK;
 	let kind = match column.kind() {
-		CK::String => "TEXT",
+		// Using text for this because we have absolutely no idea how large any given string is going to be.
+		CK::String => ColumnType::Text,
 
-		CK::Int8 | CK::UInt8 | CK::Int16 => "SMALLINT",
-		CK::UInt16 | CK::Int32 => "INTEGER",
-		CK::UInt32 | CK::Int64 => "BIGINT",
-		CK::UInt64 => "NUMERIC",
-		CK::Float32 => "REAL",
+		// Pretty much all of this will collapse to "INTEGER" on sqlite but hey. Accuracy.
+		CK::Int8 => ColumnType::TinyInteger,
+		CK::UInt8 => ColumnType::TinyUnsigned,
+		CK::Int16 => ColumnType::SmallInteger,
+		CK::UInt16 => ColumnType::SmallUnsigned,
+		CK::Int32 => ColumnType::Integer,
+		CK::UInt32 => ColumnType::Unsigned,
+		CK::Int64 => ColumnType::BigInteger,
+		CK::UInt64 => ColumnType::BigUnsigned,
+		CK::Float32 => ColumnType::Float,
 
 		CK::Bool
 		| CK::PackedBool0
@@ -143,68 +245,15 @@ fn create_column(column: &exh::ColumnDefinition) -> String {
 		| CK::PackedBool4
 		| CK::PackedBool5
 		| CK::PackedBool6
-		| CK::PackedBool7 => "BOOLEAN",
+		| CK::PackedBool7 => ColumnType::Boolean,
 	};
 
-	format!("\"{name}\" {kind}")
+	ColumnDef::new_with_type(name, kind)
 }
 
-async fn ingest_rows(pool: &SqlitePool, sheet: &Sheet<'_, String>) {
-	let name = sheet.name();
-	tracing::info!("ingesting {}", name);
-	let columns = sheet.columns().expect("boop");
-	let kind = sheet.kind().expect("fdsa");
+fn column_name(column: &exh::ColumnDefinition) -> Alias {
+	let offset = column.offset();
 
-	for row in sheet.with().language(Language::English).iter() {
-		// TODO: work out how to use a prepared query for this
-		let q = row_values(row, kind, &columns);
-		let rq = format!("INSERT INTO \"{}\" VALUES ({q})", name);
-		let fdsa = sqlx::query(&rq).execute(pool).await;
-		if let Err(error) = fdsa {
-			tracing::error!("bang {error}");
-		}
-	}
-
-	// note: insert value count is bounded by max column count, which would mean >1 row would fail for charamaketype and such. if i want to chunk, i'll need to drastically bump max column count
-}
-
-fn row_values(row: Row, kind: exh::SheetKind, columns: &[exh::ColumnDefinition]) -> String {
-	// todo: work out how the hell you're supposed to bind an array of this shit. sqlx has an outstanding thing for years though
-
-	let mut ids = vec![Cow::Owned(row.row_id().to_string())];
-	if matches!(kind, exh::SheetKind::Subrows) {
-		ids.push(Cow::Owned(row.subrow_id().to_string()));
-	}
-
-	let eml = columns.iter().map(|column| -> Cow<str> {
-		let field = row.field(column).expect("whatever");
-		use Field as F;
-		match field {
-			F::String(sestring) => format!("'{}'", sestring.to_string().replace("'", "''")).into(),
-			F::Bool(value) => (match value {
-				true => "1",
-				false => "0",
-			})
-			.into(),
-			F::I8(value) => value.to_string().into(),
-			F::I16(value) => value.to_string().into(),
-			F::I32(value) => value.to_string().into(),
-			F::I64(value) => value.to_string().into(),
-			F::U8(value) => value.to_string().into(),
-			F::U16(value) => value.to_string().into(),
-			F::U32(value) => value.to_string().into(),
-			F::U64(value) => value.to_string().into(),
-			F::F32(value) => value.to_string().into(),
-		}
-	});
-
-	let fuck = ids.into_iter().chain(eml).join(",");
-
-	fuck
-}
-
-// todo: language shit?
-pub fn column_field_name(column: &exh::ColumnDefinition) -> String {
 	// For packed bool columns, offset alone is not enough to disambiguate a
 	// field - add a suffix of the packed bit position.
 	use exh::ColumnKind as CK;
@@ -220,6 +269,5 @@ pub fn column_field_name(column: &exh::ColumnDefinition) -> String {
 		_ => "",
 	};
 
-	let offset = column.offset();
-	format!("{offset}{suffix}")
+	Alias::new(format!("{offset}{suffix}"))
 }

@@ -36,6 +36,11 @@ nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
 regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
+sea-query = { verson = "0.30.7", default-features = false, features = [
+    "thread-safe",
+    "backend-sqlite",
+] }
+sea-query-binder = { version = "0.5", features = ["sqlx-sqlite"] }
 seahash = "4.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.95"
