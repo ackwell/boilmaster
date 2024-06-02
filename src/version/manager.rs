@@ -49,6 +49,9 @@ pub struct Manager {
 
 impl Manager {
 	pub fn new(config: Config) -> Result<Self> {
+		let directory = config.directory.relative();
+		fs::create_dir_all(&directory)?;
+
 		let (sender, _receiver) = watch::channel(vec![]);
 
 		Ok(Self {
@@ -56,7 +59,7 @@ impl Manager {
 			patcher: patcher::Patcher::new(config.patch),
 
 			update_interval: config.interval,
-			directory: config.directory.relative(),
+			directory,
 			repositories: config.repositories,
 
 			versions: Default::default(),
