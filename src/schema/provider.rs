@@ -16,6 +16,8 @@ use super::{
 };
 
 pub trait Source: Send + Sync {
+	fn ready(&self) -> bool;
+
 	fn update(&self) -> Result<()>;
 
 	fn canonicalize(&self, schema_version: Option<&str>, version_key: VersionKey)
@@ -51,6 +53,11 @@ impl Provider {
 				boxed(exdschema::ExdSchema::new(config.exdschema, data)?),
 			)]),
 		})
+	}
+
+	pub fn ready(&self) -> bool {
+		// Schema is ready if all of its sources are ready.
+		self.sources.values().all(|source| source.ready())
 	}
 
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {

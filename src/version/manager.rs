@@ -69,6 +69,12 @@ impl Manager {
 		})
 	}
 
+	pub fn ready(&self) -> bool {
+		// Mark ready once we've got at least one version - existing systems will
+		// hydrate metadata from disk in one go.
+		self.versions.read().expect("poisoned").len() > 0
+	}
+
 	/// Subscribe to changes to the version list.
 	pub fn subscribe(&self) -> watch::Receiver<Vec<VersionKey>> {
 		self.channel.subscribe()

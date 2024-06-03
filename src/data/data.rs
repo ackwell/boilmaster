@@ -48,6 +48,12 @@ impl Data {
 		}
 	}
 
+	pub fn ready(&self) -> bool {
+		// We don't know how many versions there might be in total, but there should
+		// be at least one. Mark ready when we have _something_.
+		self.versions.read().expect("poisoned").len() > 0
+	}
+
 	pub fn default_language(&self) -> Language {
 		self.default_language
 	}

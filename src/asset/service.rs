@@ -15,6 +15,11 @@ impl Service {
 		Self { data }
 	}
 
+	pub fn ready(&self) -> bool {
+		// No warmup in this service, we're always ready.
+		true
+	}
+
 	pub fn convert(&self, version: VersionKey, path: &str, format: Format) -> Result<Vec<u8>> {
 		// TODO: presumably this is where caching would be resolved
 
