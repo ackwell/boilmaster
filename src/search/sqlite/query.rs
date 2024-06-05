@@ -1,5 +1,5 @@
 use ironworks::{
-	excel::{Field, Row, Sheet},
+	excel::{Field, Language, Row, Sheet},
 	file::exh,
 };
 use sea_query::{
@@ -7,7 +7,7 @@ use sea_query::{
 	TableCreateStatement,
 };
 
-use crate::search::error::Result;
+use crate::{data::LanguageString, search::error::Result};
 
 #[derive(Iden)]
 enum KnownColumn {
@@ -15,14 +15,14 @@ enum KnownColumn {
 	SubrowId,
 }
 
-pub fn table_create(sheet: &Sheet<String>) -> Result<TableCreateStatement> {
+pub fn table_create(sheet: &Sheet<String>, language: Language) -> Result<TableCreateStatement> {
 	let kind = sheet.kind()?;
 
 	// NOTE: Opting against a WITHOUT ROWID table for these - the benefits they
 	// confer aren't particularly meaningful for our workload.
 	let mut table = Table::create();
 	table
-		.table(table_name(sheet))
+		.table(table_name(sheet, language))
 		.col(ColumnDef::new(KnownColumn::RowId).integer().primary_key());
 
 	if matches!(kind, exh::SheetKind::Subrows) {
@@ -39,7 +39,7 @@ pub fn table_create(sheet: &Sheet<String>) -> Result<TableCreateStatement> {
 	Ok(table.take())
 }
 
-pub fn table_insert(sheet: &Sheet<String>) -> Result<InsertStatement> {
+pub fn table_insert(sheet: &Sheet<String>, language: Language) -> Result<InsertStatement> {
 	let kind = sheet.kind()?;
 
 	let mut columns = vec![DynIden::new(KnownColumn::RowId)];
@@ -53,15 +53,16 @@ pub fn table_insert(sheet: &Sheet<String>) -> Result<InsertStatement> {
 	}
 
 	let statement = Query::insert()
-		.into_table(table_name(sheet))
+		.into_table(table_name(sheet, language))
 		.columns(columns)
 		.to_owned();
 
 	Ok(statement)
 }
 
-fn table_name(sheet: &Sheet<String>) -> Alias {
-	Alias::new(sheet.name())
+fn table_name(sheet: &Sheet<String>, language: Language) -> Alias {
+	let language_string = LanguageString::from(language);
+	Alias::new(format!("{}@{language_string}", sheet.name()))
 }
 
 // TODO: update IW to return an iterator over col defs so this cols param isn't required for shared access
