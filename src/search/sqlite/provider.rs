@@ -62,7 +62,7 @@ impl Provider {
 			.map(|(version, sheets)| self.ingest_version(version, sheets));
 
 		select! {
-			_ = cancel.cancelled() => { todo!() }
+			_ = cancel.cancelled() => { }
 			result = try_join_all(pending_ingestions) => { result?; }
 		}
 

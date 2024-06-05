@@ -4,7 +4,7 @@ use ironworks::{
 };
 use sea_query::{
 	Alias, ColumnDef, ColumnType, DynIden, Iden, InsertStatement, Query, SimpleExpr, Table,
-	TableCreateStatement,
+	TableCreateStatement, TableDropStatement,
 };
 
 use crate::{data::LanguageString, search::error::Result};
@@ -39,6 +39,13 @@ pub fn table_create(sheet: &Sheet<String>, language: Language) -> Result<TableCr
 	Ok(table.take())
 }
 
+pub fn table_drop(sheet: &Sheet<String>, language: Language) -> TableDropStatement {
+	Table::drop()
+		.table(table_name(&sheet, language))
+		.if_exists()
+		.take()
+}
+
 pub fn table_insert(sheet: &Sheet<String>, language: Language) -> Result<InsertStatement> {
 	let kind = sheet.kind()?;
 
@@ -62,7 +69,7 @@ pub fn table_insert(sheet: &Sheet<String>, language: Language) -> Result<InsertS
 
 fn table_name(sheet: &Sheet<String>, language: Language) -> Alias {
 	let language_string = LanguageString::from(language);
-	Alias::new(format!("{}@{language_string}", sheet.name()))
+	Alias::new(format!("sheet-{}@{language_string}", sheet.name()))
 }
 
 // TODO: update IW to return an iterator over col defs so this cols param isn't required for shared access
