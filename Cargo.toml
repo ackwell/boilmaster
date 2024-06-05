@@ -37,8 +37,9 @@ nom = "7.1.1"
 regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
 sea-query = { verson = "0.30.7", default-features = false, features = [
-    "thread-safe",
     "backend-sqlite",
+    "derive",
+    "thread-safe",
 ] }
 sea-query-binder = { version = "0.5", features = ["sqlx-sqlite"] }
 seahash = "4.1.0"

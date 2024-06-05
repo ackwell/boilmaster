@@ -1427,6 +1427,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "ironworks"
 version = "0.4.1"
+source = "git+https://github.com/ackwell/ironworks.git#931a5190a0734d26cecf9fc37cdb8e56d5fb3ffd"
 dependencies = [
  "binrw",
  "derivative",
@@ -2383,6 +2384,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4166a1e072292d46dc91f31617c2a1cdaf55a8be4b5c9f4bf2ba248e3ac4999b"
 dependencies = [
  "inherent",
+ "sea-query-derive",
 ]
 
 [[package]]
@@ -2393,6 +2395,19 @@ checksum = "36bbb68df92e820e4d5aeb17b4acd5cc8b5d18b2c36a4dd6f4626aabfa7ab1b9"
 dependencies = [
  "sea-query",
  "sqlx",
+]
+
+[[package]]
+name = "sea-query-derive"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25a82fcb49253abcb45cdcb2adf92956060ec0928635eb21b4f7a6d8f25ab0bc"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.59",
+ "thiserror",
 ]
 
 [[package]]
