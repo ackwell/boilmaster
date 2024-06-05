@@ -60,6 +60,7 @@ limit_max = 500
 
 [search.sqlite]
 directory = "search"
+max_batch_size = 50
 
 # [search.tantivy]
 # directory = "search"

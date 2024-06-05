@@ -5,6 +5,8 @@ rustflags = ["--cfg", "tokio_unstable"]
 CARGO_MANIFEST_DIR = { value = "../", relative = true }
 # Tables in our dataset like CharaMakeType have more columns than are supported by sqlite by default.
 LIBSQLITE3_FLAGS = { value = "-DSQLITE_MAX_COLUMN=5000", force = true }
+# Not actually linked to the above, impacted by SQLITE_MAX_VARIABLE_NUMBER.
+BM_SQLITE_MAX_VALUES = { value = "10000", force = true }
 
 [profile.dev]
 opt-level = 1

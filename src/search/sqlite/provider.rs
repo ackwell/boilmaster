@@ -20,10 +20,12 @@ use super::database::Database;
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	directory: RelativePathBuf,
+	max_batch_size: usize,
 }
 
 pub struct Provider {
 	directory: PathBuf,
+	max_batch_size: usize,
 
 	databases: RwLock<HashMap<VersionKey, Arc<Database>>>,
 }
@@ -37,6 +39,7 @@ impl Provider {
 
 		Ok(Self {
 			directory,
+			max_batch_size: config.max_batch_size,
 			databases: Default::default(),
 		})
 	}
@@ -82,7 +85,10 @@ impl Provider {
 			Entry::Occupied(entry) => entry.into_mut(),
 			Entry::Vacant(entry) => {
 				// todo log?
-				let database = Database::new(&self.directory.join(format!("version-{version}")));
+				let database = Database::new(
+					&self.directory.join(format!("version-{version}")),
+					self.max_batch_size,
+				);
 				entry.insert(Arc::new(database))
 			}
 		};
