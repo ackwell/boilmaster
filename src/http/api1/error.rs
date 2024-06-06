@@ -6,13 +6,7 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::{
-	asset,
-	data,
-	read,
-	schema,
-	// search
-};
+use crate::{asset, data, read, schema, search};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -74,20 +68,20 @@ impl From<schema::Error> for Error {
 	}
 }
 
-// impl From<search::Error> for Error {
-// 	fn from(error: search::Error) -> Self {
-// 		use search::Error as SE;
-// 		match error {
-// 			SE::FieldType(..)
-// 			| SE::MalformedQuery(..)
-// 			| SE::QuerySchemaMismatch(..)
-// 			| SE::QueryGameMismatch(..)
-// 			| SE::SchemaGameMismatch(..)
-// 			| SE::UnknownCursor(..) => Self::Invalid(error.to_string()),
-// 			SE::Failure(inner) => Self::Other(inner),
-// 		}
-// 	}
-// }
+impl From<search::Error> for Error {
+	fn from(error: search::Error) -> Self {
+		use search::Error as SE;
+		match error {
+			SE::FieldType(..)
+			| SE::MalformedQuery(..)
+			| SE::QuerySchemaMismatch(..)
+			| SE::QueryGameMismatch(..)
+			| SE::SchemaGameMismatch(..)
+			| SE::UnknownCursor(..) => Self::Invalid(error.to_string()),
+			SE::Failure(inner) => Self::Other(inner),
+		}
+	}
+}
 
 impl From<PathRejection> for Error {
 	fn from(value: PathRejection) -> Self {

@@ -82,7 +82,7 @@ impl Source for ExdSchema {
 		))
 	}
 
-	fn version(&self, version: &str) -> Result<Box<dyn ironworks_schema::Schema>> {
+	fn version(&self, version: &str) -> Result<Box<dyn ironworks_schema::Schema + Send>> {
 		let (reference, game_version) = version.split_once('-').ok_or_else(|| {
 			Error::Failure(anyhow!("invalid canonical version string: \"{version}\""))
 		})?;

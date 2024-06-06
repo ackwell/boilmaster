@@ -7,12 +7,15 @@ use uuid::Uuid;
 
 use crate::{
 	data::LanguageString,
+	http::service,
 	schema,
 	search::{query, SearchRequest as InnerSearchRequest, SearchRequestQuery},
-	version::VersionKey,
 };
 
-use super::{error::Result, extract::Query, service};
+use super::{
+	error::Result,
+	extract::{Query, VersionQuery},
+};
 
 pub fn router() -> Router<service::State> {
 	Router::new().route("/", get(search))
@@ -60,7 +63,7 @@ struct SearchResult {
 
 #[debug_handler(state = service::State)]
 async fn search(
-	version_key: VersionKey,
+	VersionQuery(version_key): VersionQuery,
 	Query(search_query): Query<SearchQuery>,
 	Query(schema_query): Query<SchemaQuery>,
 	Query(language_query): Query<LanguageQuery>,
@@ -85,7 +88,9 @@ async fn search(
 					.collect::<HashSet<_>>()
 			});
 
-			let schema = schema_provider.schema(schema_query.schema.as_ref())?;
+			let schema_specifier =
+				schema_provider.canonicalize(schema_query.schema, version_key)?;
+			let schema = schema_provider.schema(schema_specifier)?;
 
 			InnerSearchRequest::Query(SearchRequestQuery {
 				version: version_key,
@@ -97,7 +102,7 @@ async fn search(
 		}
 	};
 
-	let (results, next_cursor) = search.search(request, search_query.limit)?;
+	let (results, next_cursor) = search.search(request, search_query.limit).await?;
 
 	let http_results = results
 		.into_iter()

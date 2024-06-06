@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::http::service;
 
-use super::{asset, sheet};
+use super::{asset, search, sheet};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -12,6 +12,7 @@ pub struct Config {
 
 pub fn router(config: Config) -> Router<service::State> {
 	Router::new()
+		.nest("/search", search::router())
 		.nest("/sheet", sheet::router(config.sheet))
 		.nest("/asset", asset::router())
 }

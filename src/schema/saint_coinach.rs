@@ -46,7 +46,7 @@ impl Source for SaintCoinach {
 		Ok(schema_version.unwrap_or("HEAD").to_string())
 	}
 
-	fn version(&self, version: &str) -> Result<Box<dyn Schema>> {
+	fn version(&self, version: &str) -> Result<Box<dyn Schema + Send>> {
 		let version = self.provider.version(version)?;
 
 		Ok(Box::new(version))

@@ -3,6 +3,7 @@ mod asset;
 mod error;
 mod extract;
 mod filter;
+mod search;
 mod sheet;
 mod value;
 

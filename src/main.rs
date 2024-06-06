@@ -66,7 +66,7 @@ async fn main() {
 			data.clone(),
 			asset,
 			schema.clone(),
-			// search.clone(),
+			search.clone(),
 			version.clone(),
 		),
 	)

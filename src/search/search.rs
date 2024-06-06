@@ -48,7 +48,7 @@ pub struct SearchRequestQuery {
 	pub sheets: Option<HashSet<String>>,
 
 	#[derivative(Debug = "ignore")]
-	pub schema: Box<dyn Schema>,
+	pub schema: Box<dyn Schema + Send>,
 }
 
 #[derive(Debug)]
@@ -130,7 +130,7 @@ impl Search {
 		Ok(())
 	}
 
-	pub fn search(
+	pub async fn search(
 		&self,
 		request: SearchRequest,
 		limit: Option<u32>,
