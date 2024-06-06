@@ -12,7 +12,7 @@ use crate::search::{
 	error::Result,
 	internal_query::post,
 	search::SearchResult,
-	sqlite::query::{row_values, table_insert},
+	sqlite::query::{resolve_queries, row_values, table_insert},
 };
 
 use super::query;
@@ -157,6 +157,8 @@ impl Database {
 	}
 
 	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Vec<SearchResult> {
-		todo!("db search {queries:#?}")
+		let statement = resolve_queries(queries);
+		let db_query = statement.build_sqlx(SqliteQueryBuilder);
+		todo!("db search {db_query:#?}")
 	}
 }

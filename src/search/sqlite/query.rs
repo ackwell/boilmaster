@@ -3,11 +3,14 @@ use ironworks::{
 	file::exh,
 };
 use sea_query::{
-	Alias, ColumnDef, ColumnType, DynIden, Iden, InsertStatement, Query, SimpleExpr, Table,
-	TableCreateStatement, TableDropStatement,
+	Alias, ColumnDef, ColumnType, Condition, DynIden, Expr, Iden, InsertStatement, IntoCondition,
+	Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, TableDropStatement,
 };
 
-use crate::{data::LanguageString, search::error::Result};
+use crate::{
+	data::LanguageString,
+	search::{error::Result, internal_query::post},
+};
 
 #[derive(Iden)]
 enum KnownColumn {
@@ -159,4 +162,71 @@ fn field_value(field: Field) -> SimpleExpr {
 		F::U64(value) => value.into(),
 		F::F32(value) => value.into(),
 	}
+}
+
+// ---
+
+pub fn resolve_queries(queries: Vec<(String, post::Node)>) -> SelectStatement {
+	// temp. obviously.
+	let q1 = queries.into_iter().next().unwrap();
+	resolve_query(q1.1)
+}
+
+fn resolve_query(node: post::Node) -> SelectStatement {
+	let mut query = Query::select();
+	query.from(Alias::new("BOGUSTEST"));
+
+	let condition = resolve_node(node);
+	query.cond_where(condition);
+
+	query.take()
+}
+
+fn resolve_node(node: post::Node) -> Condition {
+	// Query::select().cond_where(condition)
+	// Condition::;
+	match node {
+		post::Node::Group(group) => resolve_group(group),
+		post::Node::Leaf(leaf) => resolve_leaf(leaf),
+	}
+}
+
+fn resolve_group(group: post::Group) -> Condition {
+	// for a given group, MUST are top-level AND, SHOULD are "AND (A OR B OR C...)", and MUSTNOT are AND NOT
+	// given that, the root of a group is all ANDs, so we can use ::all and collect ORs for the SHOULD
+	let mut condition = Condition::all();
+	let mut shoulds = Condition::any();
+	for (occur, node) in group.clauses {
+		let inner_condition = resolve_node(node);
+		match occur {
+			post::Occur::Must => condition = condition.add(inner_condition),
+			post::Occur::Should => shoulds = shoulds.add(inner_condition),
+			// todo: is this correct?
+			post::Occur::MustNot => condition = condition.add(inner_condition.not()),
+		}
+	}
+	// NOTE: we're only adding if c.len=0 here because any number of SHOULDs do not effect the _filtering_ of a query if there's 1 or more MUSTs - only the scoring. which i don't have any idea how to do. well, that's a lie. but still.
+	if shoulds.len() > 0 && condition.len() == 0 {
+		condition = condition.add(shoulds)
+	}
+
+	// TODO: this would need to record a condition for scoring as well
+	// realistically; MUSTs in queries will always match, so a scoring structure only needs to account for the SHOULDs as actual conditions, and can pass up a static integer of the number of MUSTs that can be added to the score
+
+	condition
+}
+
+fn resolve_leaf(leaf: post::Leaf) -> Condition {
+	// TODO: this is obviously bollocks - needs a table/alias reference, and handle language
+	let (column_definition, language) = leaf.field;
+	let expression = Expr::col(column_name(&column_definition));
+
+	let se = match leaf.operation {
+		post::Operation::Relation(relation) => todo!(),
+		// TODO: need to handle escaping
+		post::Operation::Match(string) => expression.like(format!("%{string}%")),
+		post::Operation::Equal(value) => todo!(),
+	};
+
+	se.into_condition()
 }
