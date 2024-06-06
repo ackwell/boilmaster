@@ -135,61 +135,64 @@ impl Search {
 		request: SearchRequest,
 		limit: Option<u32>,
 	) -> Result<(Vec<SearchResult>, Option<Uuid>)> {
-		todo!("querying disabled for prototyping purposes")
-		// // Work out the actual result limit we'll use for this query.
-		// let result_limit = limit
-		// 	.unwrap_or(self.pagination_config.limit_default)
-		// 	.min(self.pagination_config.limit_max);
+		// Work out the actual result limit we'll use for this query.
+		let result_limit = limit
+			.unwrap_or(self.pagination_config.limit_default)
+			.min(self.pagination_config.limit_max);
 
-		// // Translate the request into the format used by providers.
-		// let provider_request = match request {
-		// 	SearchRequest::Query(query) => self.normalize_request_query(query)?,
-		// 	SearchRequest::Cursor(uuid) => ProviderSearchRequest::Cursor(uuid),
-		// };
+		// Translate the request into the format used by providers.
+		let provider_request = match request {
+			SearchRequest::Query(query) => self.normalize_request_query(query)?,
+			// SearchRequest::Cursor(uuid) => ProviderSearchRequest::Cursor(uuid),
+			SearchRequest::Cursor(uuid) => todo!("cursor {uuid}"),
+		};
 
-		// // Execute the search.
+		// Execute the search.
 		// let executor = Executor {
 		// 	provider: &self.provider,
 		// };
 
 		// executor.search(provider_request, Some(result_limit))
+		let results = self.provider.search(provider_request).await;
+
+		todo!("results {results:?}")
 	}
 
-	// fn normalize_request_query(&self, query: SearchRequestQuery) -> Result<ProviderSearchRequest> {
-	// 	// Get references to the game data we'll need.
-	// 	let excel = self
-	// 		.data
-	// 		.version(query.version)
-	// 		.with_context(|| format!("data for version {} not ready", query.version))?
-	// 		.excel();
-	// 	let list = excel.list()?;
+	fn normalize_request_query(&self, query: SearchRequestQuery) -> Result<sqlite::SearchRequest> {
+		// Get references to the game data we'll need.
+		let excel = self
+			.data
+			.version(query.version)
+			.with_context(|| format!("data for version {} not ready", query.version))?
+			.excel();
+		let list = excel.list()?;
 
-	// 	// Build the helpers for this search call.
-	// 	let normalizer = Normalizer::new(&excel, query.schema.as_ref());
+		// Build the helpers for this search call.
+		let normalizer = Normalizer::new(&excel, query.schema.as_ref());
 
-	// 	// Get an iterator over the provided sheet filter, falling back to the full list of sheets.
-	// 	let sheet_names = query
-	// 		.sheets
-	// 		.map(|filter| Either::Left(filter.into_iter().map(Cow::from)))
-	// 		.unwrap_or_else(|| Either::Right(list.iter()));
+		// Get an iterator over the provided sheet filter, falling back to the full list of sheets.
+		let sheet_names = query
+			.sheets
+			.map(|filter| Either::Left(filter.into_iter().map(Cow::from)))
+			.unwrap_or_else(|| Either::Right(list.iter()));
 
-	// 	let normalized_queries = sheet_names
-	// 		.map(|name| {
-	// 			let normalized_query = normalizer.normalize(&query.query, &name, query.language)?;
-	// 			Ok((name.to_string(), normalized_query))
-	// 		})
-	// 		// TODO: Much like the analogue in index, this is filtering out non-fatal errors. To raise as warnings, these will need to be split out at this point.
-	// 		.filter(|query| match query {
-	// 			Err(Error::Failure(_)) | Ok(_) => true,
-	// 			Err(_) => false,
-	// 		})
-	// 		.collect::<Result<Vec<_>>>()?;
+		let normalized_queries = sheet_names
+			.map(|name| {
+				let normalized_query = normalizer.normalize(&query.query, &name, query.language)?;
+				Ok((name.to_string(), normalized_query))
+			})
+			// TODO: This is filtering out non-fatal errors. To raise as warnings, these will need to be split out at this point.
+			.filter(|query| match query {
+				Err(Error::Failure(_)) | Ok(_) => true,
+				Err(_) => false,
+			})
+			.collect::<Result<Vec<_>>>()?;
 
-	// 	Ok(ProviderSearchRequest::Query {
-	// 		version: query.version,
-	// 		queries: normalized_queries,
-	// 	})
-	// }
+		Ok(sqlite::SearchRequest::Query {
+			version: query.version,
+			queries: normalized_queries,
+		})
+	}
 }
 
 // // TODO: can probably store the number of search executions on this to feed into rate limiting

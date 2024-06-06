@@ -10,6 +10,8 @@ use sqlx::{
 
 use crate::search::{
 	error::Result,
+	internal_query::post,
+	search::SearchResult,
 	sqlite::query::{row_values, table_insert},
 };
 
@@ -152,5 +154,9 @@ impl Database {
 		sqlx::query_with(&query, values).execute(&self.pool).await?;
 
 		Ok(())
+	}
+
+	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Vec<SearchResult> {
+		todo!("db search {queries:#?}")
 	}
 }

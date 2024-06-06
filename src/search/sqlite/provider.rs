@@ -13,7 +13,10 @@ use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
-use crate::{search::error::Result, version::VersionKey};
+use crate::{
+	search::{error::Result, internal_query::post, search::SearchResult},
+	version::VersionKey,
+};
 
 use super::database::Database;
 
@@ -21,6 +24,14 @@ use super::database::Database;
 pub struct Config {
 	directory: RelativePathBuf,
 	max_batch_size: usize,
+}
+
+pub enum SearchRequest {
+	Query {
+		version: VersionKey,
+		queries: Vec<(String, post::Node)>,
+	},
+	// TODO: cursor
 }
 
 pub struct Provider {
@@ -33,8 +44,6 @@ pub struct Provider {
 impl Provider {
 	pub fn new(config: Config) -> Result<Self> {
 		let directory = config.directory.relative();
-
-		// ensure shit exists ig
 		fs::create_dir_all(&directory)?;
 
 		Ok(Self {
@@ -77,6 +86,17 @@ impl Provider {
 		let span = tracing::info_span!("ingest", %version);
 		let database = self.database(version);
 		tokio::task::spawn(async move { database.ingest(sheets).await }.instrument(span)).await?
+	}
+
+	pub async fn search(&self, request: SearchRequest) -> Vec<SearchResult> {
+		let (version, queries) = match request {
+			SearchRequest::Query { version, queries } => (version, queries),
+			// TODO: presumably cursor will just have an offset we fetch? - try and find some sorting key that can be used in a where instead?
+		};
+
+		let database = self.database(version);
+
+		database.search(queries).await
 	}
 
 	fn database(&self, version: VersionKey) -> Arc<Database> {
