@@ -36,7 +36,7 @@ nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
 regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
-sea-query = { verson = "0.30.7", default-features = false, features = [
+sea-query = { version = "0.30.7", default-features = false, features = [
     "backend-sqlite",
     "derive",
     "thread-safe",

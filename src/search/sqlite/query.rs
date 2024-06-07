@@ -194,26 +194,32 @@ fn resolve_node(node: post::Node) -> Condition {
 fn resolve_group(group: post::Group) -> Condition {
 	// for a given group, MUST are top-level AND, SHOULD are "AND (A OR B OR C...)", and MUSTNOT are AND NOT
 	// given that, the root of a group is all ANDs, so we can use ::all and collect ORs for the SHOULD
-	let mut condition = Condition::all();
-	let mut shoulds = Condition::any();
+	let mut must = Condition::all();
+	let mut should = Condition::any();
+	let mut must_not = Condition::any().not();
+
 	for (occur, node) in group.clauses {
 		let inner_condition = resolve_node(node);
 		match occur {
-			post::Occur::Must => condition = condition.add(inner_condition),
-			post::Occur::Should => shoulds = shoulds.add(inner_condition),
-			// todo: is this correct?
-			post::Occur::MustNot => condition = condition.add(inner_condition.not()),
+			post::Occur::Must => must = must.add(inner_condition),
+			post::Occur::Should => should = should.add(inner_condition),
+			post::Occur::MustNot => must_not = must_not.add(inner_condition),
 		}
 	}
+
 	// NOTE: we're only adding if c.len=0 here because any number of SHOULDs do not effect the _filtering_ of a query if there's 1 or more MUSTs - only the scoring. which i don't have any idea how to do. well, that's a lie. but still.
-	if shoulds.len() > 0 && condition.len() == 0 {
-		condition = condition.add(shoulds)
+	if should.len() > 0 && must.len() == 0 {
+		must = must.add(should)
+	}
+
+	if must_not.len() > 0 {
+		must = must.add(must_not)
 	}
 
 	// TODO: this would need to record a condition for scoring as well
 	// realistically; MUSTs in queries will always match, so a scoring structure only needs to account for the SHOULDs as actual conditions, and can pass up a static integer of the number of MUSTs that can be added to the score
 
-	condition
+	must
 }
 
 fn resolve_leaf(leaf: post::Leaf) -> Condition {
