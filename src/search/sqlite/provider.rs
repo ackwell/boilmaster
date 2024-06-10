@@ -88,7 +88,7 @@ impl Provider {
 		tokio::task::spawn(async move { database.ingest(sheets).await }.instrument(span)).await?
 	}
 
-	pub async fn search(&self, request: SearchRequest) -> Vec<SearchResult> {
+	pub async fn search(&self, request: SearchRequest) -> Result<Vec<SearchResult>> {
 		let (version, queries) = match request {
 			SearchRequest::Query { version, queries } => (version, queries),
 			// TODO: presumably cursor will just have an offset we fetch? - try and find some sorting key that can be used in a where instead?

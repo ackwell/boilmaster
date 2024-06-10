@@ -212,6 +212,9 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 		);
 	}
 
+	query.expr(Expr::val(&sheet_name));
+	query.column((base_alias, KnownColumn::RowId));
+
 	query.cond_where(condition);
 
 	query.take()

@@ -156,9 +156,13 @@ impl Database {
 		Ok(())
 	}
 
-	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Vec<SearchResult> {
+	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Result<Vec<SearchResult>> {
 		let statement = resolve_queries(queries);
-		let db_query = statement.build_sqlx(SqliteQueryBuilder);
-		todo!("db search {db_query:#?}")
+		let (db_query, values) = statement.build_sqlx(SqliteQueryBuilder);
+		// TODO: not a fan of this implicit structure shared between query and here
+		let results: Vec<(String, u32)> = sqlx::query_as_with(&db_query, values)
+			.fetch_all(&self.pool)
+			.await?;
+		todo!("db search {results:#?}")
 	}
 }
