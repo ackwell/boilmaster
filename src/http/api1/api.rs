@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use aide::{axum::ApiRouter, openapi};
+use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
 use axum::{debug_handler, response::IntoResponse, routing::get, Extension, Json, Router};
 use maud::{html, DOCTYPE};
 use serde::{Deserialize, Serialize};
@@ -22,10 +22,28 @@ pub fn router(config: Config) -> Router<service::State> {
 	ApiRouter::new()
 		.nest("/sheet", sheet::router(config.sheet))
 		.nest("/asset", asset::router())
-		.finish_api(&mut openapi)
+		.finish_api_with(&mut openapi, api_docs)
 		.route(OPENAPI_JSON_ROUTE, get(openapi_json))
 		.route("/docs", get(scalar))
 		.layer(Extension(Arc::new(openapi)))
+}
+
+fn api_docs(mut api: TransformOpenApi) -> TransformOpenApi {
+	let openapi = api.inner_mut();
+
+	// Ensure we've not ended up with any trailing slashes.
+	if let Some(paths) = openapi.paths.take() {
+		openapi.paths = Some(openapi::Paths {
+			paths: paths
+				.paths
+				.into_iter()
+				.map(|(path, item)| (path.trim_end_matches('/').into(), item))
+				.collect(),
+			..paths
+		})
+	}
+
+	api
 }
 
 // We want to avoid cloning the OpenApi struct, but need runtime information to
