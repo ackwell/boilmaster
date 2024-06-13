@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
-use aide::{axum::ApiRouter, openapi::OpenApi};
+use aide::{axum::ApiRouter, openapi};
 use axum::{debug_handler, response::IntoResponse, routing::get, Extension, Json, Router};
-use serde::Deserialize;
+use maud::{html, DOCTYPE};
+use serde::{Deserialize, Serialize};
 
 use crate::http::service;
 
-use super::{asset, sheet};
+use super::{asset, extract::RouterPath, sheet};
+
+const OPENAPI_JSON_ROUTE: &str = "/openapi.json";
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -14,17 +17,57 @@ pub struct Config {
 }
 
 pub fn router(config: Config) -> Router<service::State> {
-	let mut openapi = OpenApi::default();
+	let mut openapi = openapi::OpenApi::default();
 
 	ApiRouter::new()
 		.nest("/sheet", sheet::router(config.sheet))
 		.nest("/asset", asset::router())
 		.finish_api(&mut openapi)
-		.route("/openapi.json", get(openapi_json))
+		.route(OPENAPI_JSON_ROUTE, get(openapi_json))
+		.route("/docs", get(scalar))
 		.layer(Extension(Arc::new(openapi)))
 }
 
+// We want to avoid cloning the OpenApi struct, but need runtime information to
+// know the location of the API routes within the routing heirachy. As such, we're
+// overriding the `servers` here by including it after the flattened base.
+#[derive(Serialize)]
+struct OpenApiOverrides<'a> {
+	#[serde(flatten)]
+	base: &'a openapi::OpenApi,
+
+	servers: &'a [openapi::Server],
+}
+
 #[debug_handler]
-async fn openapi_json(Extension(openapi): Extension<Arc<OpenApi>>) -> impl IntoResponse {
-	Json(&*openapi).into_response()
+async fn openapi_json(
+	RouterPath(router_path): RouterPath,
+	Extension(openapi): Extension<Arc<openapi::OpenApi>>,
+) -> impl IntoResponse {
+	Json(OpenApiOverrides {
+		base: &*openapi,
+		servers: &[openapi::Server {
+			url: router_path,
+			..Default::default()
+		}],
+	})
+	.into_response()
+}
+
+#[debug_handler]
+async fn scalar(RouterPath(router_path): RouterPath) -> impl IntoResponse {
+	html! {
+		(DOCTYPE)
+		html {
+			head {
+				title { "Boilmaster Documentation" }
+				meta charset="utf-8";
+				meta name="viewport" content="width=device-width, initial-scale=1";
+			}
+			body {
+				script id="api-reference" data-url={ (router_path) (OPENAPI_JSON_ROUTE) } {}
+				script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference" {}
+			}
+		}
+	}
 }
