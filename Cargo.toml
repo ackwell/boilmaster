@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+aide = { version = "0.13.4", features = ["axum", "axum-headers", "macros"] }
 anyhow = "1.0.55"
 axum = { version = "0.7.5", features = ["macros"] }
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
@@ -35,6 +36,7 @@ nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
 regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
+schemars = "0.8.21"
 seahash = "4.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.95"

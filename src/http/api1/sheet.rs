@@ -1,10 +1,10 @@
 use std::{collections::HashMap, num::ParseIntError, str::FromStr};
 
-use axum::{
-	debug_handler, extract::State, response::IntoResponse, routing::get, Extension, Json, Router,
-};
+use aide::axum::{routing::get, ApiRouter, IntoApiResponse};
+use axum::{debug_handler, extract::State, Extension, Json};
 use either::Either;
 use ironworks::{excel::Language, file::exh};
+use schemars::JsonSchema;
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 use crate::{data::LanguageString, http::service, read, schema, utility::anyhow::Anyhow};
@@ -35,11 +35,11 @@ struct FilterConfig {
 	entry: Option<FilterString>,
 }
 
-pub fn router(config: Config) -> Router<service::State> {
-	Router::new()
-		.route("/", get(list))
-		.route("/:sheet", get(sheet))
-		.route("/:sheet/:row", get(row))
+pub fn router(config: Config) -> ApiRouter<service::State> {
+	ApiRouter::new()
+		.api_route("/", get(list))
+		.api_route("/:sheet", get(sheet))
+		.api_route("/:sheet/:row", get(row))
 		// Using Extension so I don't need to worry about nested state destructuring.
 		.layer(Extension(config))
 }
@@ -48,7 +48,7 @@ pub fn router(config: Config) -> Router<service::State> {
 async fn list(
 	VersionQuery(version_key): VersionQuery,
 	State(data): State<service::Data>,
-) -> Result<impl IntoResponse> {
+) -> Result<impl IntoApiResponse> {
 	let excel = data.version(version_key)?.excel();
 
 	let list = excel.list().anyhow()?;
@@ -61,7 +61,7 @@ async fn list(
 	Ok(Json(names))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct SheetPath {
 	sheet: String,
 }
@@ -101,15 +101,20 @@ impl<'de> Deserialize<'de> for RowSpecifier {
 	}
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct SheetQuery {
 	// Data resolution
+	// TODO: these two are external types. How do I want to handle that?
+	#[schemars(with = "Option<String>")]
 	language: Option<LanguageString>,
+	#[schemars(with = "Option<String>")]
 	schema: Option<schema::Specifier>,
 	fields: Option<FilterString>,
 
 	// ID pagination/filtering
+	// TODO: rows needs a format or something
 	#[serde(default, deserialize_with = "deserialize_rows")]
+	#[schemars(with = "Option<String>")]
 	rows: Option<Vec<RowSpecifier>>,
 	page: Option<usize>,
 	limit: Option<usize>,
@@ -136,14 +141,16 @@ where
 	Ok(Some(parsed))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 struct SheetResponse {
+	// TODO: this is an external type - how do I want to handle that?
+	#[schemars(with = "String")]
 	schema: schema::CanonicalSpecifier,
 	rows: Vec<RowResult>,
 }
 
 // TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 struct RowResult {
 	row_id: u32,
 
@@ -161,7 +168,7 @@ async fn sheet(
 	State(data): State<service::Data>,
 	State(schema_provider): State<service::Schema>,
 	Extension(config): Extension<Config>,
-) -> Result<impl IntoResponse> {
+) -> Result<impl IntoApiResponse> {
 	// Resolve arguments with the services.
 	let excel = data.version(version_key)?.excel();
 
@@ -258,21 +265,26 @@ async fn sheet(
 	Ok(Json(response))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct RowPath {
 	sheet: String,
+	// TODO: this is wrong
+	#[schemars(with = "String")]
 	row: RowSpecifier,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct RowQuery {
+	#[schemars(with = "Option<String>")]
 	language: Option<LanguageString>,
+	#[schemars(with = "Option<String>")]
 	schema: Option<schema::Specifier>,
 	fields: Option<FilterString>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 struct RowResponse {
+	#[schemars(with = "String")]
 	schema: schema::CanonicalSpecifier,
 
 	#[serde(flatten)]
@@ -287,7 +299,7 @@ async fn row(
 	State(data): State<service::Data>,
 	State(schema_provider): State<service::Schema>,
 	Extension(config): Extension<Config>,
-) -> Result<impl IntoResponse> {
+) -> Result<impl IntoApiResponse> {
 	let excel = data.version(version_key)?.excel();
 
 	let language = query

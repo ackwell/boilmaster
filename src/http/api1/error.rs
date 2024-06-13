@@ -1,3 +1,4 @@
+use aide::OperationOutput;
 use axum::{
 	extract::rejection::{PathRejection, QueryRejection},
 	http::StatusCode,
@@ -110,7 +111,7 @@ impl From<QueryRejection> for Error {
 }
 
 #[derive(Serialize)]
-struct ErrorResponse {
+pub struct ErrorResponse {
 	code: u16,
 	message: String,
 }
@@ -139,6 +140,10 @@ impl IntoResponse for Error {
 		)
 			.into_response()
 	}
+}
+
+impl OperationOutput for Error {
+	type Inner = ErrorResponse;
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

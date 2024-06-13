@@ -1,20 +1,24 @@
+use aide::OperationIo;
 use axum::{
 	async_trait,
 	extract::{FromRef, FromRequestParts},
 	http::request::Parts,
 	RequestPartsExt,
 };
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{http::service, version::VersionKey};
 
 use super::error::Error;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct VersionQueryParams {
 	version: Option<String>,
 }
 
+#[derive(OperationIo)]
+#[aide(input_with = "Query<VersionQueryParams>")]
 pub struct VersionQuery(pub VersionKey);
 
 #[async_trait]
@@ -45,10 +49,12 @@ where
 	}
 }
 
-#[derive(FromRequestParts)]
+#[derive(FromRequestParts, OperationIo)]
 #[from_request(via(axum::extract::Path), rejection(Error))]
+#[aide(input_with = "axum::extract::Path<T>", json_schema)]
 pub struct Path<T>(pub T);
 
-#[derive(FromRequestParts)]
+#[derive(FromRequestParts, OperationIo)]
 #[from_request(via(axum::extract::Query), rejection(Error))]
+#[aide(input_with = "axum::extract::Query<T>", json_schema)]
 pub struct Query<T>(pub T);

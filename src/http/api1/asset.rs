@@ -3,19 +3,14 @@ use std::{
 	hash::{Hash, Hasher},
 };
 
-use axum::{
-	debug_handler,
-	extract::State,
-	http::header,
-	response::{IntoResponse, Response},
-	routing::get,
-	Router,
-};
+use aide::axum::{routing::get, ApiRouter, IntoApiResponse};
+use axum::{debug_handler, extract::State, http::header, response::IntoResponse};
 use axum_extra::{
 	headers::{ContentType, ETag, IfNoneMatch},
 	TypedHeader,
 };
 use reqwest::StatusCode;
+use schemars::JsonSchema;
 use seahash::SeaHasher;
 use serde::Deserialize;
 
@@ -26,12 +21,14 @@ use super::{
 	extract::{Path, Query, VersionQuery},
 };
 
-pub fn router() -> Router<service::State> {
-	Router::new().route("/*path", get(asset))
+pub fn router() -> ApiRouter<service::State> {
+	ApiRouter::new().api_route("/*path", get(asset))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct AssetQuery {
+	// TODO: again, this is deser'd externally to http. i really need to work out the rules around this shit.
+	#[schemars(with = "String")]
 	format: Format,
 }
 
@@ -42,7 +39,7 @@ async fn asset(
 	Query(query): Query<AssetQuery>,
 	header_if_none_match: Option<TypedHeader<IfNoneMatch>>,
 	State(asset): State<service::Asset>,
-) -> Result<Response> {
+) -> Result<impl IntoApiResponse> {
 	let format = query.format;
 
 	let etag = etag(&path, format, version_key);

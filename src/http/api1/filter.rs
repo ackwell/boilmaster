@@ -11,14 +11,16 @@ use nom::{
 	sequence::{preceded, tuple},
 	Finish, IResult,
 };
+use schemars::JsonSchema;
 use serde::{de, Deserialize};
 
 use crate::{data, read};
 
 use super::error;
 
-#[derive(Debug, Clone)]
-pub struct FilterString(Vec<Path>);
+// TODO: Better docs for this.
+#[derive(Debug, Clone, JsonSchema)]
+pub struct FilterString(#[schemars(with = "String")] Vec<Path>);
 
 type Path = Vec<Entry>;
 
@@ -36,8 +38,8 @@ impl FilterString {
 			.map(|entries| build_filter(entries, default_language));
 
 		let Some(mut output) = filters.next() else {
-      return Ok(read::Filter::All);
-    };
+			return Ok(read::Filter::All);
+		};
 
 		for filter in filters {
 			output = merge_filters(output, filter)?;
