@@ -3,6 +3,7 @@ use std::sync::Arc;
 use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
 use axum::{debug_handler, response::IntoResponse, routing::get, Extension, Json, Router};
 use maud::{html, DOCTYPE};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::http::service;
@@ -31,13 +32,20 @@ pub fn router(config: Config) -> Router<service::State> {
 fn api_docs(mut api: TransformOpenApi) -> TransformOpenApi {
 	let openapi = api.inner_mut();
 
-	// Ensure we've not ended up with any trailing slashes.
+	let wildcard_regex = Regex::new(r#"\*(?<name>\w+)$"#).unwrap();
+
 	if let Some(paths) = openapi.paths.take() {
 		openapi.paths = Some(openapi::Paths {
 			paths: paths
 				.paths
 				.into_iter()
-				.map(|(path, item)| (path.trim_end_matches('/').into(), item))
+				.map(|(path, item)| {
+					// Ensure we've not ended up with any trailing slashes.
+					let path = path.trim_end_matches('/');
+					// Replace any missed `*wildcard`s with openapi compatible syntax
+					let path = wildcard_regex.replace(path, "{$name}");
+					(path.into(), item)
+				})
 				.collect(),
 			..paths
 		})

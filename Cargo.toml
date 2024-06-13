@@ -34,7 +34,8 @@ mini-moka = "0.10.0"
 nohash-hasher = "0.2.0"
 nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
-regex-syntax = "0.8.3"
+regex = "1.10.5"
+# regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
 schemars = "0.8.21"
 seahash = "4.1.0"
