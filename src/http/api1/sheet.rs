@@ -157,7 +157,7 @@ struct RowResult {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	subrow_id: Option<u16>,
 
-	fields: Option<ValueString>,
+	fields: ValueString,
 }
 
 #[debug_handler(state = service::State)]
@@ -251,7 +251,7 @@ async fn sheet(
 				exh::SheetKind::Subrows => Some(subrow_id),
 				_ => None,
 			},
-			fields: Some(ValueString(fields, language)),
+			fields: ValueString(fields, language),
 		})
 	});
 
@@ -341,7 +341,7 @@ async fn row(
 			row_id,
 			// NOTE: this results in subrow being reported if it's included in path, even on non-subrow sheets (though anything but :0 on those throws an error)
 			subrow_id,
-			fields: Some(ValueString(fields, language)),
+			fields: ValueString(fields, language),
 		},
 	};
 
