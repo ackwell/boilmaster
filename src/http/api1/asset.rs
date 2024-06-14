@@ -3,7 +3,12 @@ use std::{
 	hash::{Hash, Hasher},
 };
 
-use aide::axum::{routing::get, ApiRouter, IntoApiResponse};
+use aide::{
+	axum::{routing::get_with, ApiRouter, IntoApiResponse},
+	openapi,
+	transform::TransformOperation,
+	NoApi,
+};
 use axum::{debug_handler, extract::State, http::header, response::IntoResponse};
 use axum_extra::{
 	headers::{ContentType, ETag, IfNoneMatch},
@@ -13,6 +18,7 @@ use reqwest::StatusCode;
 use schemars::JsonSchema;
 use seahash::SeaHasher;
 use serde::Deserialize;
+use strum::IntoEnumIterator;
 
 use crate::{asset::Format, http::service, version::VersionKey};
 
@@ -22,22 +28,57 @@ use super::{
 };
 
 pub fn router() -> ApiRouter<service::State> {
-	ApiRouter::new().api_route("/*path", get(asset))
+	ApiRouter::new().api_route("/*path", get_with(asset, asset_docs))
 }
 
+/// Path variables accepted by the asset endpoint.
+#[derive(Deserialize, JsonSchema)]
+struct AssetPath {
+	/// Game path of the asset to retrieve.
+	#[schemars(example = "example_path")]
+	path: String,
+}
+
+fn example_path() -> &'static str {
+	"ui/icon/051000/051474_hr1.tex"
+}
+
+/// Query parameters accepted by the asset endpoint.
 #[derive(Deserialize, JsonSchema)]
 struct AssetQuery {
-	// TODO: again, this is deser'd externally to http. i really need to work out the rules around this shit.
-	#[schemars(with = "String")]
+	/// Format that the asset should be converted into.
+	#[schemars(example = "example_format")]
 	format: Format,
+}
+
+fn example_format() -> Format {
+	Format::Png
+}
+
+fn asset_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+		.summary("read an asset")
+		.description("Reads an asset from the game at the specified path, converting it into a usable format. If no valid conversion between the game file type and specified format exists, an error will be returned.")
+		.response_with::<200, Vec<u8>, _>(|mut response| {
+			response.inner().content = Format::iter()
+				.map(|format| {
+					(
+						format_mime(format).to_string(),
+						openapi::MediaType::default(),
+					)
+				})
+				.collect();
+			response
+		})
+		.response_with::<304, (), _>(|res| res.description("not modified"))
 }
 
 #[debug_handler(state = service::State)]
 async fn asset(
-	Path(path): Path<String>,
+	Path(AssetPath { path }): Path<AssetPath>,
 	VersionQuery(version_key): VersionQuery,
 	Query(query): Query<AssetQuery>,
-	header_if_none_match: Option<TypedHeader<IfNoneMatch>>,
+	NoApi(header_if_none_match): NoApi<Option<TypedHeader<IfNoneMatch>>>,
 	State(asset): State<service::Asset>,
 ) -> Result<impl IntoApiResponse> {
 	let format = query.format;

@@ -367,6 +367,7 @@ dependencies = [
  "seahash",
  "serde",
  "serde_json",
+ "strum",
  "texpresso",
  "thiserror",
  "tokio",

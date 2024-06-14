@@ -1,10 +1,16 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
-use serde::{de, Deserialize};
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject},
+	JsonSchema,
+};
+use serde::{de, Deserialize, Serialize};
+use strum::{EnumIter, IntoEnumIterator};
 
 use super::{convert, error::Error};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, EnumIter)]
 pub enum Format {
 	Png,
 }
@@ -20,6 +26,16 @@ impl Format {
 		match self {
 			Self::Png => &convert::Image,
 		}
+	}
+}
+
+// NOTE: Changing the string format is breaking to API1 - isolate if doing so.
+impl Serialize for Format {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		self.extension().serialize(serializer)
 	}
 }
 
@@ -41,5 +57,27 @@ impl<'de> Deserialize<'de> for Format {
 	{
 		let raw = String::deserialize(deserializer)?;
 		raw.parse().map_err(de::Error::custom)
+	}
+}
+
+impl JsonSchema for Format {
+	fn schema_name() -> String {
+		"Format".into()
+	}
+
+	fn schema_id() -> Cow<'static, str> {
+		Cow::Borrowed(concat!(module_path!(), "::Format"))
+	}
+
+	fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
+		Schema::Object(SchemaObject {
+			instance_type: Some(InstanceType::String.into()),
+			enum_values: Some(
+				Format::iter()
+					.map(|format| serde_json::to_value(format).expect("should not fail"))
+					.collect(),
+			),
+			..Default::default()
+		})
 	}
 }
