@@ -14,8 +14,11 @@ use crate::{http::service, version::VersionKey};
 
 use super::error::Error;
 
+/// # VersionQuery
+/// Query parameters accepted by endpoints that interact with versioned game data.
 #[derive(Deserialize, JsonSchema)]
 struct VersionQueryParams {
+	/// Game version to utilise for this query.
 	version: Option<String>,
 }
 

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::http::service;
 
-use super::{asset, extract::RouterPath, sheet};
+use super::{asset, extract::RouterPath, sheet, version};
 
 const OPENAPI_JSON_ROUTE: &str = "/openapi.json";
 
@@ -21,8 +21,9 @@ pub fn router(config: Config) -> Router<service::State> {
 	let mut openapi = openapi::OpenApi::default();
 
 	ApiRouter::new()
-		.nest("/sheet", sheet::router(config.sheet))
 		.nest("/asset", asset::router())
+		.nest("/sheet", sheet::router(config.sheet))
+		.nest("/version", version::router())
 		.finish_api_with(&mut openapi, api_docs)
 		.route(OPENAPI_JSON_ROUTE, get(openapi_json))
 		.route("/docs", get(scalar))
