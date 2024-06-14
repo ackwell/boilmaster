@@ -1,6 +1,12 @@
 use std::{collections::HashMap, num::ParseIntError, str::FromStr};
 
-use aide::axum::{routing::get, ApiRouter, IntoApiResponse};
+use aide::{
+	axum::{
+		routing::{get, get_with},
+		ApiRouter, IntoApiResponse,
+	},
+	transform::TransformOperation,
+};
 use axum::{debug_handler, extract::State, Extension, Json};
 use either::Either;
 use ironworks::{excel::Language, file::exh};
@@ -37,11 +43,20 @@ struct FilterConfig {
 
 pub fn router(config: Config) -> ApiRouter<service::State> {
 	ApiRouter::new()
-		.api_route("/", get(list))
+		.api_route("/", get_with(list, list_docs))
 		.api_route("/:sheet", get(sheet))
 		.api_route("/:sheet/:row", get(row))
 		// Using Extension so I don't need to worry about nested state destructuring.
 		.layer(Extension(config))
+}
+
+fn list_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+		.summary("list sheets")
+		.description("List known excel sheet names that can be read by the API.")
+		.response_with::<200, Json<Vec<&'static str>>, _>(|response| {
+			response.example(vec!["Action", "Item", "Status"])
+		})
 }
 
 #[debug_handler(state = service::State)]
