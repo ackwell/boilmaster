@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
 use axum::{debug_handler, response::IntoResponse, routing::get, Extension, Json, Router};
+use git_version::git_version;
 use maud::{html, DOCTYPE};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -30,7 +31,11 @@ pub fn router(config: Config) -> Router<service::State> {
 		.layer(Extension(Arc::new(openapi)))
 }
 
-fn api_docs(mut api: TransformOpenApi) -> TransformOpenApi {
+fn api_docs(api: TransformOpenApi) -> TransformOpenApi {
+	let mut api = api
+		.title("boilmaster")
+		.version(git_version!(prefix = "1-", fallback = "unknown"));
+
 	let openapi = api.inner_mut();
 
 	let wildcard_regex = Regex::new(r#"\*(?<name>\w+)$"#).unwrap();
