@@ -21,8 +21,14 @@ use super::error;
 /// A filter string for selecting fields within a row.
 ///
 /// Filters are comprised of a comma-seperated list of field paths, i.e. `a,b`
-/// will select the fields `a` and `b`. Nested fields may be selected using dot
-/// notation, i.e. `a.b` will select the field `b` contained in the struct `a`.
+/// will select the fields `a` and `b`.
+///
+/// A language may be specified on a field by field bases with an `@` suffix, i.e.
+/// `a@ja` will select the field `a`, retrieving the Japanese data associated with it.
+///
+/// Nested fields may be selected using dot notation, i.e. `a.b` will select
+/// the field `b` contained in the struct `a`.
+///
 /// Arrays must be targeted if selecting fields within them, i.e. `a[].b` will
 /// select _all_ `b` fields of structs within the array `a`, however `a.b` will
 /// select nothing.
