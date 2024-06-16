@@ -115,10 +115,11 @@ fn read_scalar_reference(
 
 	let mut reference = Reference::Scalar(target_value);
 
-	// A target less than 0 (typically -1) is usually used to signify that a link is not
-	// present on this row. Also ensure that we've not run out of recursion depth.
+	// A target less than 0 (typically -1) is usually used to signify that a link
+	// is not present on this row. Also ensure that we've not run out of recursion
+	// depth. We avoid early return if following an active reference chain.
 	// TODO: would be neat to halt recursion later, but target checking does have a cost that needs to be considered.
-	if target_value < 0 || context.depth == 0 {
+	if target_value < 0 || (context.depth == 0 && context.filter == &Filter::All) {
 		return Ok(Value::Reference(reference));
 	}
 	let target_value = u32::try_from(target_value)
@@ -166,7 +167,7 @@ fn read_scalar_reference(
 			subrow_id,
 
 			rows: &mut HashMap::from([(context.language, row_data)]),
-			depth: context.depth - 1,
+			depth: context.depth.max(1) - 1,
 
 			..context
 		})?;
