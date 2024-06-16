@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
-use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
+use aide::{
+	axum::ApiRouter,
+	openapi::{self, Tag},
+	transform::TransformOpenApi,
+};
 use axum::{debug_handler, response::IntoResponse, routing::get, Extension, Json, Router};
 use git_version::git_version;
 use maud::{html, DOCTYPE};
@@ -22,9 +26,18 @@ pub fn router(config: Config) -> Router<service::State> {
 	let mut openapi = openapi::OpenApi::default();
 
 	ApiRouter::new()
-		.nest("/asset", asset::router())
-		.nest("/sheet", sheet::router(config.sheet))
-		.nest("/version", version::router())
+		.nest(
+			"/asset",
+			asset::router().with_path_items(|item| item.tag("assets")),
+		)
+		.nest(
+			"/sheet",
+			sheet::router(config.sheet).with_path_items(|item| item.tag("sheets")),
+		)
+		.nest(
+			"/version",
+			version::router().with_path_items(|item| item.tag("versions")),
+		)
 		.finish_api_with(&mut openapi, api_docs)
 		.route(OPENAPI_JSON_ROUTE, get(openapi_json))
 		.route("/docs", get(scalar))
@@ -34,7 +47,22 @@ pub fn router(config: Config) -> Router<service::State> {
 fn api_docs(api: TransformOpenApi) -> TransformOpenApi {
 	let mut api = api
 		.title("boilmaster")
-		.version(git_version!(prefix = "1-", fallback = "unknown"));
+		.version(git_version!(prefix = "1-", fallback = "unknown"))
+		.tag(Tag {
+			name: "assets".into(),
+			description: Some("Endpoints for accessing game data on a file-by-file basis. Commonly useful for fetching icons or other textures to display on the web.".into()),
+			..Default::default()
+		})
+		.tag(Tag {
+			name: "sheets".into(),
+			description: Some("Endpoints for reading data from the game's static relational data store.".into()),
+			..Default::default()
+		})
+		.tag(Tag {
+			name: "versions".into(),
+			description: Some("Endpoints for querying metadata about the versions recorded by the boilmaster system.".into()),
+			..Default::default()
+		});
 
 	let openapi = api.inner_mut();
 
