@@ -58,6 +58,7 @@ impl From<read::Error> for Error {
 	fn from(error: read::Error) -> Self {
 		use read::Error as RE;
 		match error {
+			RE::NotFound(..) => Self::NotFound(error.to_string()),
 			RE::FilterSchemaMismatch(..) | RE::SchemaGameMismatch(..) => {
 				Self::Invalid(error.to_string())
 			}
