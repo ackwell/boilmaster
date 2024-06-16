@@ -66,10 +66,10 @@ struct SheetPath {
 	sheet: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 struct RowSpecifier {
 	row_id: u32,
-	subrow_id: Option<u16>,
+	subrow_id: u16,
 }
 
 impl FromStr for RowSpecifier {
@@ -79,11 +79,11 @@ impl FromStr for RowSpecifier {
 		let out = match string.split_once(':') {
 			Some((row_id, subrow_id)) => Self {
 				row_id: row_id.parse()?,
-				subrow_id: Some(subrow_id.parse()?),
+				subrow_id: subrow_id.parse()?,
 			},
 			None => Self {
 				row_id: string.parse()?,
-				subrow_id: None,
+				subrow_id: 0,
 			},
 		};
 
@@ -111,8 +111,8 @@ struct SheetQuery {
 	// ID pagination/filtering
 	#[serde(default, deserialize_with = "deserialize_rows")]
 	rows: Option<Vec<RowSpecifier>>,
-	page: Option<usize>,
 	limit: Option<usize>,
+	after: Option<RowSpecifier>,
 }
 
 // TODO: this can probably be made as a general purpose "comma seperated" deserializer struct
@@ -208,7 +208,7 @@ async fn sheet(
 		// TODO: Currently, read:: does _all_ the row fetching itself, which means that we're effectively iterating the sheet here _just_ to get the row IDs, then re-fetching in the read:: code. This... probably isn't too problematic, but worth considering how to approach more betterer. If read:: can be modified to take a row, then the Some() case above can be specailised to the read-row logic and this case can be simplified.
 		None => Either::Right(builder.iter().map(|row| RowSpecifier {
 			row_id: row.row_id(),
-			subrow_id: Some(row.subrow_id()),
+			subrow_id: row.subrow_id(),
 		})),
 	};
 
@@ -217,14 +217,16 @@ async fn sheet(
 		.limit
 		.unwrap_or(config.limit.default)
 		.min(config.limit.max);
-	let offset = query.page.unwrap_or(0) * limit;
-	let sheet_iterator = sheet_iterator.skip(offset).take(limit);
+	let sheet_iterator = sheet_iterator
+		// TODO: Improve this - introducing an explicit "after" method on a sheet iterator would allow skipping a lot of busywork. As-is, this is fetching every single row's data.
+		.skip_while(|specifier| Some(specifier) <= query.after.as_ref())
+		.take(limit);
 
 	// Build Results for the targeted rows.
 	let sheet_kind = sheet.kind().anyhow()?;
 	let sheet_iterator = sheet_iterator.map(|specifier| {
 		let row_id = specifier.row_id;
-		let subrow_id = specifier.subrow_id.unwrap_or(0);
+		let subrow_id = specifier.subrow_id;
 
 		// TODO: This is pretty wasteful to call inside a loop, revisit actual read logic.
 		// TODO: at the moment, an unknown row specifier will cause excel to error with a NotFound (which is fine), however read:: then squashes that with anyhow, meaning the error gets hidden in a 500 ISE. revisit error handling in read:: while i'm at it ref. the above.
@@ -318,17 +320,23 @@ async fn row(
 		schema.as_ref(),
 		&path.sheet,
 		row_id,
-		subrow_id.unwrap_or(0),
+		subrow_id,
 		language,
 		&filter,
 	)?;
+
+	// Check the kind of the sheet to determine if we should report a subrow id.
+	// TODO: this is theoretically wasteful, though IW will have cached it anyway.
+	let result_subrow_id = match excel.sheet(&path.sheet).anyhow()?.kind().anyhow()? {
+		exh::SheetKind::Subrows => Some(subrow_id),
+		_ => None,
+	};
 
 	let response = RowResponse {
 		schema: schema_specifier,
 		row: RowResult {
 			row_id,
-			// NOTE: this results in subrow being reported if it's included in path, even on non-subrow sheets (though anything but :0 on those throws an error)
-			subrow_id,
+			subrow_id: result_subrow_id,
 			fields: Some(ValueString(fields, language)),
 		},
 	};
