@@ -9,7 +9,7 @@ use aide::{
 };
 use axum::{debug_handler, extract::State, Extension, Json};
 use either::Either;
-use ironworks::{excel::Language, file::exh};
+use ironworks::{excel, file::exh};
 use schemars::{
 	gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject, StringValidation},
@@ -198,11 +198,14 @@ struct SheetResponse {
 // TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
 #[derive(Serialize, JsonSchema)]
 struct RowResult {
+	/// ID of this row.
 	row_id: u32,
 
+	/// Subrow ID of this row, when relevant.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	subrow_id: Option<u16>,
 
+	/// Field values for this row, according to the current schema.
 	fields: ValueString,
 }
 
@@ -220,7 +223,7 @@ async fn sheet(
 
 	let language = query
 		.language
-		.map(Language::from)
+		.map(excel::Language::from)
 		.unwrap_or_else(|| data.default_language());
 
 	// TODO: Consider extractor for this.
@@ -231,7 +234,7 @@ async fn sheet(
 		.or_else(|| {
 			config
 				.filter
-				.get(schema_specifier.source())
+				.get(&schema_specifier.source)
 				.and_then(|filter_config| filter_config.list.clone())
 		})
 		.map(|filter_string| filter_string.to_filter(language))
@@ -325,15 +328,20 @@ struct RowPath {
 /// Query parameters accepted by the row endpoint.
 #[derive(Deserialize, JsonSchema)]
 struct RowQuery {
-	#[schemars(with = "Option<String>")]
+	/// Language to use for data with no language otherwise specified in the fields filter.
 	language: Option<LanguageString>,
-	#[schemars(with = "Option<String>")]
+
+	/// Schema that row data should be read with.
 	schema: Option<schema::Specifier>,
+
+	/// Data fields to read for selected rows.
 	fields: Option<FilterString>,
 }
 
+/// Response structure for the row endpoint.
 #[derive(Serialize, JsonSchema)]
 struct RowResponse {
+	/// The canonical specifier for the schema used in this response.
 	#[schemars(with = "String")]
 	schema: schema::CanonicalSpecifier,
 
@@ -342,9 +350,33 @@ struct RowResponse {
 }
 
 fn row_docs(operation: TransformOperation) -> TransformOperation {
-	operation.summary("read a sheet row").description(
-		"Read detailed, filterable information from a single sheet row and its related data.",
-	)
+	operation
+		.summary("read a sheet row")
+		.description(
+			"Read detailed, filterable information from a single sheet row and its related data.",
+		)
+		.response_with::<200, Json<RowResponse>, _>(|response| {
+			response.example(RowResponse {
+				schema: schema::CanonicalSpecifier {
+					source: "source".into(),
+					version: "version".into(),
+				},
+				row: RowResult {
+					row_id: 1,
+					subrow_id: None,
+					fields: ValueString(
+						read::Value::Struct(HashMap::from([(
+							read::StructKey {
+								name: "FieldName".into(),
+								language: excel::Language::English,
+							},
+							read::Value::Scalar(excel::Field::U32(14)),
+						)])),
+						excel::Language::English,
+					),
+				},
+			})
+		})
 }
 
 #[debug_handler(state = service::State)]
@@ -360,7 +392,7 @@ async fn row(
 
 	let language = query
 		.language
-		.map(Language::from)
+		.map(excel::Language::from)
 		.unwrap_or_else(|| data.default_language());
 
 	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
@@ -370,7 +402,7 @@ async fn row(
 		.or_else(|| {
 			config
 				.filter
-				.get(schema_specifier.source())
+				.get(&schema_specifier.source)
 				.and_then(|filter_config| filter_config.entry.clone())
 		})
 		.map(|filter_string| filter_string.to_filter(language))

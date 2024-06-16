@@ -1,6 +1,11 @@
-use std::{fmt, str::FromStr};
+use std::{borrow::Cow, fmt, str::FromStr};
 
 use ironworks::excel::Language;
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject},
+	JsonSchema,
+};
 use serde::de;
 
 use super::error::Error;
@@ -69,5 +74,39 @@ impl<'de> de::Deserialize<'de> for LanguageString {
 	{
 		let raw = String::deserialize(deserializer)?;
 		raw.parse().map_err(de::Error::custom)
+	}
+}
+
+impl JsonSchema for LanguageString {
+	fn schema_name() -> String {
+		"LanguageString".into()
+	}
+
+	fn schema_id() -> Cow<'static, str> {
+		Cow::Borrowed(concat!(module_path!(), "::LanguageString"))
+	}
+
+	fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
+		// TODO: keep this up to date with the full list.
+		let languages = [
+			Language::None,
+			Language::Japanese,
+			Language::English,
+			Language::German,
+			Language::French,
+			Language::ChineseSimplified,
+			Language::ChineseTraditional,
+			Language::Korean,
+		];
+
+		Schema::Object(SchemaObject {
+			instance_type: Some(InstanceType::String.into()),
+			enum_values: Some(
+				languages
+					.map(|language| LanguageString(language).to_string().into())
+					.to_vec(),
+			),
+			..Default::default()
+		})
 	}
 }

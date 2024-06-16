@@ -18,7 +18,14 @@ use crate::{data, read};
 
 use super::error;
 
-// TODO: Better docs for this.
+/// A filter string for selecting fields within a row.
+///
+/// Filters are comprised of a comma-seperated list of field paths, i.e. `a,b`
+/// will select the fields `a` and `b`. Nested fields may be selected using dot
+/// notation, i.e. `a.b` will select the field `b` contained in the struct `a`.
+/// Arrays must be targeted if selecting fields within them, i.e. `a[].b` will
+/// select _all_ `b` fields of structs within the array `a`, however `a.b` will
+/// select nothing.
 #[derive(Debug, Clone, JsonSchema)]
 pub struct FilterString(#[schemars(with = "String")] Vec<Path>);
 
