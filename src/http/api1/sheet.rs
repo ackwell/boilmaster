@@ -39,6 +39,7 @@ pub struct Config {
 struct LimitConfig {
 	default: usize,
 	max: usize,
+	depth: u8,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -325,6 +326,7 @@ async fn sheet(
 			subrow_id,
 			language,
 			&filter,
+			config.limit.depth,
 		)?;
 
 		Ok(RowResult {
@@ -456,6 +458,7 @@ async fn row(
 		subrow_id,
 		language,
 		&filter,
+		config.limit.depth,
 	)?;
 
 	// Check the kind of the sheet to determine if we should report a subrow id.

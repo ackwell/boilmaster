@@ -14,6 +14,7 @@ password = "password"
 [http.api1.sheet]
 limit.default = 100
 limit.max = 500
+limit.depth = 2
 # TODO: should this be shared with search eventually, or nah?
 filter.exdschema.list = "Name,Singular,Icon"
 

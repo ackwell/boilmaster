@@ -26,6 +26,7 @@ pub fn read(
 	default_language: excel::Language,
 
 	filter: &Filter,
+	depth: u8,
 ) -> Result<Value> {
 	let value = read_sheet(ReaderContext {
 		excel,
@@ -39,7 +40,7 @@ pub fn read(
 		filter,
 		rows: &mut HashMap::new(),
 		columns: &[],
-		depth: 1,
+		depth,
 	})?;
 
 	Ok(value)
