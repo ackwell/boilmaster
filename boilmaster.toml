@@ -16,7 +16,6 @@ limit.default = 100
 limit.max = 500
 # TODO: should this be shared with search eventually, or nah?
 filter.exdschema.list = "Name,Singular,Icon"
-filter.saint-coinach.list = "Name,Singular,Icon"
 
 [data]
 language = "en"

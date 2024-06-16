@@ -4,3 +4,7 @@
 /search
 /target
 /versions
+/__pycache__
+locustfile.py
+perf.*
+flamegraph.svg
