@@ -115,6 +115,7 @@ impl ValueReference<'_> {
 				subrow_id,
 				fields,
 			} => {
+				// TODO: this should be merged with RowResult for consistency
 				let mut state = serializer.serialize_struct("Reference", 4)?;
 				state.serialize_field("value", value)?;
 				state.serialize_field("sheet", sheet)?;

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::ParseIntError, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, num::ParseIntError, str::FromStr};
 
 use aide::{
 	axum::{
@@ -10,7 +10,11 @@ use aide::{
 use axum::{debug_handler, extract::State, Extension, Json};
 use either::Either;
 use ironworks::{excel::Language, file::exh};
-use schemars::JsonSchema;
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject, StringValidation},
+	JsonSchema,
+};
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 use crate::{data::LanguageString, http::service, read, schema, utility::anyhow::Anyhow};
@@ -45,7 +49,7 @@ pub fn router(config: Config) -> ApiRouter<service::State> {
 	ApiRouter::new()
 		.api_route("/", get_with(list, list_docs))
 		.api_route("/:sheet", get(sheet))
-		.api_route("/:sheet/:row", get(row))
+		.api_route("/:sheet/:row", get_with(row, row_docs))
 		// Using Extension so I don't need to worry about nested state destructuring.
 		.layer(Extension(config))
 }
@@ -76,8 +80,10 @@ async fn list(
 	Ok(Json(names))
 }
 
+/// Path variables accepted by the sheet endpoint.
 #[derive(Deserialize, JsonSchema)]
 struct SheetPath {
+	/// Name of the sheet to read.
 	sheet: String,
 }
 
@@ -116,6 +122,31 @@ impl<'de> Deserialize<'de> for RowSpecifier {
 	}
 }
 
+impl JsonSchema for RowSpecifier {
+	fn schema_name() -> String {
+		"RowSpecifier".into()
+	}
+
+	fn schema_id() -> Cow<'static, str> {
+		Cow::Borrowed(concat!(module_path!(), "::RowSpecifier"))
+	}
+
+	fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
+		Schema::Object(SchemaObject {
+			instance_type: Some(InstanceType::String.into()),
+			string: Some(
+				StringValidation {
+					pattern: Some("^\\d+(:\\d+)?$".into()),
+					..Default::default()
+				}
+				.into(),
+			),
+			..Default::default()
+		})
+	}
+}
+
+/// Query parameters accepted by the sheet endpoint.
 #[derive(Deserialize, JsonSchema)]
 struct SheetQuery {
 	// Data resolution
@@ -280,14 +311,16 @@ async fn sheet(
 	Ok(Json(response))
 }
 
+/// Path variables accepted by the row endpoint.
 #[derive(Deserialize, JsonSchema)]
 struct RowPath {
+	/// Name of the sheet to read.
 	sheet: String,
-	// TODO: this is wrong
-	#[schemars(with = "String")]
+	/// Row to read.
 	row: RowSpecifier,
 }
 
+/// Query parameters accepted by the row endpoint.
 #[derive(Deserialize, JsonSchema)]
 struct RowQuery {
 	#[schemars(with = "Option<String>")]
@@ -304,6 +337,12 @@ struct RowResponse {
 
 	#[serde(flatten)]
 	row: RowResult,
+}
+
+fn row_docs(operation: TransformOperation) -> TransformOperation {
+	operation.summary("read a sheet row").description(
+		"Read detailed, filterable information from a single sheet row and its related data.",
+	)
 }
 
 #[debug_handler(state = service::State)]

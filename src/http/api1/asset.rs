@@ -58,7 +58,7 @@ fn example_format() -> Format {
 fn asset_docs(operation: TransformOperation) -> TransformOperation {
 	operation
 		.summary("read an asset")
-		.description("Reads an asset from the game at the specified path, converting it into a usable format. If no valid conversion between the game file type and specified format exists, an error will be returned.")
+		.description("Read an asset from the game at the specified path, converting it into a usable format. If no valid conversion between the game file type and specified format exists, an error will be returned.")
 		.response_with::<200, Vec<u8>, _>(|mut response| {
 			response.inner().content = Format::iter()
 				.map(|format| {
