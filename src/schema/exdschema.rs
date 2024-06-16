@@ -31,6 +31,7 @@ impl ExdSchema {
 		let provider = exdschema::Provider::with()
 			.remote(config.remote)
 			.directory(config.directory)
+			.cache(true)
 			.build()?;
 
 		Ok(Self {
