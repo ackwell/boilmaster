@@ -1,14 +1,13 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
 use ironworks::excel;
 use schemars::{
 	gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject},
-	JsonSchema,
 };
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
-use crate::{data, read};
+use crate::{data, read, utility::jsonschema::impl_jsonschema};
 
 #[derive(Debug)]
 pub struct ValueString(pub read::Value, pub excel::Language);
@@ -26,21 +25,12 @@ impl Serialize for ValueString {
 	}
 }
 
-impl JsonSchema for ValueString {
-	fn schema_name() -> String {
-		"Value".into()
-	}
-
-	fn schema_id() -> Cow<'static, str> {
-		Cow::Borrowed(concat!(module_path!(), "::ValueString"))
-	}
-
-	fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
-		Schema::Object(SchemaObject {
-			instance_type: Some(InstanceType::Object.into()),
-			..Default::default()
-		})
-	}
+impl_jsonschema!(ValueString, valuestring_schema);
+fn valuestring_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::Object.into()),
+		..Default::default()
+	})
 }
 
 struct ValueReference<'a> {

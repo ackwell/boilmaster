@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, num::ParseIntError, str::FromStr};
+use std::{collections::HashMap, num::ParseIntError, str::FromStr};
 
 use aide::{
 	axum::{
@@ -17,7 +17,12 @@ use schemars::{
 };
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use crate::{data::LanguageString, http::service, read, schema, utility::anyhow::Anyhow};
+use crate::{
+	data::LanguageString,
+	http::service,
+	read, schema,
+	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
+};
 
 use super::{
 	error::{Error, Result},
@@ -122,28 +127,19 @@ impl<'de> Deserialize<'de> for RowSpecifier {
 	}
 }
 
-impl JsonSchema for RowSpecifier {
-	fn schema_name() -> String {
-		"RowSpecifier".into()
-	}
-
-	fn schema_id() -> Cow<'static, str> {
-		Cow::Borrowed(concat!(module_path!(), "::RowSpecifier"))
-	}
-
-	fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
-		Schema::Object(SchemaObject {
-			instance_type: Some(InstanceType::String.into()),
-			string: Some(
-				StringValidation {
-					pattern: Some("^\\d+(:\\d+)?$".into()),
-					..Default::default()
-				}
-				.into(),
-			),
-			..Default::default()
-		})
-	}
+impl_jsonschema!(RowSpecifier, rowspecifier_schema);
+fn rowspecifier_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		string: Some(
+			StringValidation {
+				pattern: Some("^\\d+(:\\d+)?$".into()),
+				..Default::default()
+			}
+			.into(),
+		),
+		..Default::default()
+	})
 }
 
 /// Query parameters accepted by the sheet endpoint.

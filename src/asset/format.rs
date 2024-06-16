@@ -1,12 +1,13 @@
-use std::{borrow::Cow, str::FromStr};
+use std::str::FromStr;
 
 use schemars::{
 	gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject},
-	JsonSchema,
 };
 use serde::{de, Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
+
+use crate::utility::jsonschema::impl_jsonschema;
 
 use super::{convert, error::Error};
 
@@ -60,24 +61,15 @@ impl<'de> Deserialize<'de> for Format {
 	}
 }
 
-impl JsonSchema for Format {
-	fn schema_name() -> String {
-		"Format".into()
-	}
-
-	fn schema_id() -> Cow<'static, str> {
-		Cow::Borrowed(concat!(module_path!(), "::Format"))
-	}
-
-	fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
-		Schema::Object(SchemaObject {
-			instance_type: Some(InstanceType::String.into()),
-			enum_values: Some(
-				Format::iter()
-					.map(|format| serde_json::to_value(format).expect("should not fail"))
-					.collect(),
-			),
-			..Default::default()
-		})
-	}
+impl_jsonschema!(Format, format_schema);
+fn format_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		enum_values: Some(
+			Format::iter()
+				.map(|format| serde_json::to_value(format).expect("should not fail"))
+				.collect(),
+		),
+		..Default::default()
+	})
 }
