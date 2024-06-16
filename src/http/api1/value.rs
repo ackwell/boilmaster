@@ -102,7 +102,6 @@ impl ValueReference<'_> {
 				value,
 				sheet,
 				row_id,
-				subrow_id,
 				fields,
 			} => {
 				// TODO: this should be merged with RowResult for consistency
@@ -110,10 +109,6 @@ impl ValueReference<'_> {
 				state.serialize_field("value", value)?;
 				state.serialize_field("sheet", sheet)?;
 				state.serialize_field("row_id", row_id)?;
-				match subrow_id {
-					Some(value) => state.serialize_field("subrow_id", value)?,
-					None => state.skip_field("subrow_id")?,
-				};
 				state.serialize_field(
 					"fields",
 					&ValueReference {

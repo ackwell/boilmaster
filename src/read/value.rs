@@ -18,7 +18,6 @@ pub enum Reference {
 		value: u32,
 		sheet: String,
 		row_id: u32,
-		subrow_id: Option<u16>,
 		fields: Box<Value>,
 	},
 }
