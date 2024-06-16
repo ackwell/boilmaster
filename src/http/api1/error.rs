@@ -1,9 +1,11 @@
+use aide::{openapi::Response as AideResponse, transform::TransformResponse, OperationOutput};
 use axum::{
 	extract::rejection::{PathRejection, QueryRejection},
 	http::StatusCode,
-	response::{IntoResponse, Response},
+	response::{IntoResponse, Response as AxumResponse},
 	Json,
 };
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
@@ -109,35 +111,69 @@ impl From<QueryRejection> for Error {
 	}
 }
 
-#[derive(Serialize)]
-struct ErrorResponse {
-	code: u16,
+/// General purpose error response structure.
+#[derive(Serialize, JsonSchema)]
+pub struct ErrorResponse {
+	/// HTTP status code of the error. Will match the server response code.
+	#[serde(with = "StatusCodeDef")]
+	code: StatusCode,
+
+	/// Description of what went wrong.
 	message: String,
 }
 
+#[derive(Serialize, JsonSchema)]
+#[serde(remote = "StatusCode")]
+struct StatusCodeDef(#[serde(getter = "StatusCode::as_u16")] u16);
+
+impl From<Error> for ErrorResponse {
+	fn from(value: Error) -> Self {
+		// TODO: INCREDIBLY IMPORTANT: work out how to worm IM_A_TEAPOT into this
+		let status_code = match value {
+			Error::NotFound(..) => StatusCode::NOT_FOUND,
+			Error::Invalid(..) => StatusCode::BAD_REQUEST,
+			// Error::Unavailable(..) => StatusCode::SERVICE_UNAVAILABLE,
+			Error::Other(..) => StatusCode::INTERNAL_SERVER_ERROR,
+		};
+
+		Self {
+			code: status_code,
+			message: value.to_string(),
+		}
+	}
+}
+
 impl IntoResponse for Error {
-	fn into_response(self) -> Response {
+	fn into_response(self) -> AxumResponse {
 		// Log the full error for ISEs - we don't show this info anywhere else in case it contains something sensitive.
 		if let Self::Other(ref error) = self {
 			tracing::error!("{error:?}")
 		}
 
-		// TODO: INCREDIBLY IMPORTANT: work out how to worm IM_A_TEAPOT into this
-		let status_code = match self {
-			Self::NotFound(..) => StatusCode::NOT_FOUND,
-			Self::Invalid(..) => StatusCode::BAD_REQUEST,
-			// Self::Unavailable(..) => StatusCode::SERVICE_UNAVAILABLE,
-			Self::Other(..) => StatusCode::INTERNAL_SERVER_ERROR,
+		let response = ErrorResponse::from(self);
+
+		(response.code, Json(response)).into_response()
+	}
+}
+
+impl OperationOutput for Error {
+	type Inner = ErrorResponse;
+
+	fn inferred_responses(
+		ctx: &mut aide::gen::GenContext,
+		operation: &mut aide::openapi::Operation,
+	) -> Vec<(Option<u16>, AideResponse)> {
+		let Some(mut error_response) = Json::<ErrorResponse>::operation_response(ctx, operation)
+		else {
+			return vec![];
 		};
 
-		(
-			status_code,
-			Json(ErrorResponse {
-				code: status_code.as_u16(),
-				message: self.to_string(),
-			}),
-		)
-			.into_response()
+		let _ = TransformResponse::<ErrorResponse>::new(&mut error_response)
+			.description("failed operation")
+			.example(Error::Invalid("example error response".into()));
+
+		// NOTE: Using `None` here as otherwise we bloat out responses with a bunch of copy paste errors. Is there a better approach?
+		vec![(None, error_response)]
 	}
 }
 

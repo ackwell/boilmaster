@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+aide = { version = "0.13.4", features = ["axum", "axum-headers", "macros"] }
 anyhow = "1.0.55"
 axum = { version = "0.7.5", features = ["macros"] }
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
@@ -15,6 +16,7 @@ figment = { version = "0.10.8", features = ["env", "toml"] }
 # 0.6.4 does not compile on windows
 fs4 = { version = "= 0.8.2", features = ["sync"] }
 futures = "0.3.25"
+git-version = "0.3.9"
 graphql_client = { version = "0.14.0" }
 image = { version = "0.25.1", default-features = false, features = ["png"] }
 ironworks = { git = "https://github.com/ackwell/ironworks.git", features = [
@@ -33,11 +35,14 @@ mini-moka = "0.10.0"
 nohash-hasher = "0.2.0"
 nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
-regex-syntax = "0.8.3"
+regex = "1.10.5"
+# regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
+schemars = { version = "0.8.21", features = ["preserve_order"] }
 seahash = "4.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.95"
+strum = { version = "0.26.2", features = ["derive"] }
 # tantivy = "0.22.0"
 texpresso = "2.0.1"
 thiserror = "1.0.30"

@@ -1,12 +1,17 @@
 use std::collections::HashMap;
 
 use ironworks::excel;
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject},
+};
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
-use crate::{data, read};
+use crate::{data, read, utility::jsonschema::impl_jsonschema};
 
 #[derive(Debug)]
 pub struct ValueString(pub read::Value, pub excel::Language);
+
 impl Serialize for ValueString {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where
@@ -18,6 +23,14 @@ impl Serialize for ValueString {
 		}
 		.serialize(serializer)
 	}
+}
+
+impl_jsonschema!(ValueString, valuestring_schema);
+fn valuestring_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::Object.into()),
+		..Default::default()
+	})
 }
 
 struct ValueReference<'a> {
@@ -92,6 +105,7 @@ impl ValueReference<'_> {
 				subrow_id,
 				fields,
 			} => {
+				// TODO: this should be merged with RowResult for consistency
 				let mut state = serializer.serialize_struct("Reference", 4)?;
 				state.serialize_field("value", value)?;
 				state.serialize_field("sheet", sheet)?;
