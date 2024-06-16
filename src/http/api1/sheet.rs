@@ -1,10 +1,7 @@
 use std::{collections::HashMap, num::ParseIntError, str::FromStr};
 
 use aide::{
-	axum::{
-		routing::{get, get_with},
-		ApiRouter, IntoApiResponse,
-	},
+	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	transform::TransformOperation,
 };
 use axum::{debug_handler, extract::State, Extension, Json};
@@ -53,7 +50,7 @@ struct FilterConfig {
 pub fn router(config: Config) -> ApiRouter<service::State> {
 	ApiRouter::new()
 		.api_route("/", get_with(list, list_docs))
-		.api_route("/:sheet", get(sheet))
+		.api_route("/:sheet", get_with(sheet, sheet_docs))
 		.api_route("/:sheet/:row", get_with(row, row_docs))
 		// Using Extension so I don't need to worry about nested state destructuring.
 		.layer(Extension(config))
@@ -146,19 +143,25 @@ fn rowspecifier_schema(_generator: &mut SchemaGenerator) -> Schema {
 #[derive(Deserialize, JsonSchema)]
 struct SheetQuery {
 	// Data resolution
-	// TODO: these two are external types. How do I want to handle that?
-	#[schemars(with = "Option<String>")]
+	/// Language to use for data with no language otherwise specified in the fields filter.
 	language: Option<LanguageString>,
-	#[schemars(with = "Option<String>")]
+
+	/// Schema that row data should be read with.
 	schema: Option<schema::Specifier>,
+
+	// Data fields to read for selected rows.
 	fields: Option<FilterString>,
 
 	// ID pagination/filtering
-	// TODO: rows needs a format or something
+	/// Rows to fetch from the sheet, as a comma-separated list. Behavior is undefined if both `rows` and `after` are provided.
 	#[serde(default, deserialize_with = "deserialize_rows")]
-	#[schemars(with = "Option<String>")]
+	#[schemars(schema_with = "rows_schema")]
 	rows: Option<Vec<RowSpecifier>>,
+
+	/// Maximum number of rows to return. To paginate, provide the last returned row to the next request's `after` parameter.
 	limit: Option<usize>,
+
+	/// Fetch rows after the specified row. Behavior is undefined if both `rows` and `after` are provided.
 	after: Option<RowSpecifier>,
 }
 
@@ -183,11 +186,28 @@ where
 	Ok(Some(parsed))
 }
 
+fn rows_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		string: Some(
+			StringValidation {
+				pattern: Some("^\\d+(:\\d+)?(,\\d+(:\\d+)?)*$".into()),
+				..Default::default()
+			}
+			.into(),
+		),
+		..Default::default()
+	})
+}
+
+/// Response structure for the sheet endpoint.
 #[derive(Serialize, JsonSchema)]
 struct SheetResponse {
-	// TODO: this is an external type - how do I want to handle that?
+	/// The canonical specifier for the schema used in this response.
 	#[schemars(with = "String")]
 	schema: schema::CanonicalSpecifier,
+
+	/// Array of rows retrieved by the query.
 	rows: Vec<RowResult>,
 }
 
@@ -203,6 +223,21 @@ struct RowResult {
 
 	/// Field values for this row, according to the current schema.
 	fields: ValueString,
+}
+
+fn sheet_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+		.summary("list rows in a sheet")
+		.description("Read information about one or more rows and their related data.")
+		.response_with::<200, Json<SheetResponse>, _>(|response| {
+			response.example(SheetResponse {
+				schema: schema::CanonicalSpecifier {
+					source: "source".into(),
+					version: "version".into(),
+				},
+				rows: vec![row_result_example(1), row_result_example(2)],
+			})
+		})
 }
 
 #[debug_handler(state = service::State)]
@@ -357,22 +392,26 @@ fn row_docs(operation: TransformOperation) -> TransformOperation {
 					source: "source".into(),
 					version: "version".into(),
 				},
-				row: RowResult {
-					row_id: 1,
-					subrow_id: None,
-					fields: ValueString(
-						read::Value::Struct(HashMap::from([(
-							read::StructKey {
-								name: "FieldName".into(),
-								language: excel::Language::English,
-							},
-							read::Value::Scalar(excel::Field::U32(14)),
-						)])),
-						excel::Language::English,
-					),
-				},
+				row: row_result_example(1),
 			})
 		})
+}
+
+fn row_result_example(row_id: u32) -> RowResult {
+	RowResult {
+		row_id,
+		subrow_id: None,
+		fields: ValueString(
+			read::Value::Struct(HashMap::from([(
+				read::StructKey {
+					name: "FieldName".into(),
+					language: excel::Language::English,
+				},
+				read::Value::Scalar(excel::Field::U32(14)),
+			)])),
+			excel::Language::English,
+		),
+	}
 }
 
 #[debug_handler(state = service::State)]
