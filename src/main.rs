@@ -42,17 +42,17 @@ async fn main() {
 	// is read, in case any of it traces.
 	let tracing_config = figment
 		.extract_inner::<tracing::Config>("tracing")
-		.expect("TODO: Error handling");
+		.expect("Failed to initialize tracing config");
 	tracing::init(tracing_config);
 
 	// Load the rest of the configuration.
-	let config = figment.extract::<Config>().expect("TODO: Error handling");
+	let config = figment.extract::<Config>().expect("Failed to extract config");
 
-	let version = Arc::new(version::Manager::new(config.version).expect("TODO"));
+	let version = Arc::new(version::Manager::new(config.version).expect("Failed to create version manager"));
 	let data = Arc::new(data::Data::new(config.data));
 	let asset = Arc::new(asset::Service::new(data.clone()));
 	let schema =
-		Arc::new(schema::Provider::new(config.schema, data.clone()).expect("TODO: Error handling"));
+		Arc::new(schema::Provider::new(config.schema, data.clone()).expect("Failed to create schema provider"));
 	// let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
 
 	// Set up a cancellation token that will fire when a shutdown signal is recieved.
@@ -78,7 +78,7 @@ async fn main() {
 			version.clone(),
 		),
 	)
-	.expect("TODO: Error handling");
+	.expect("Failed to start server");
 }
 
 fn shutdown_token() -> CancellationToken {
