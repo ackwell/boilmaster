@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::Context;
 use boilmaster::{
 	asset,
 	data,
@@ -29,7 +30,7 @@ struct Config {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
 	// Prepare the configuration hierarchy.
 	// TODO: is it worth having a cli flag to specify the config path or is that just immense overkill?
 	let figment = Figment::new()
@@ -42,17 +43,23 @@ async fn main() {
 	// is read, in case any of it traces.
 	let tracing_config = figment
 		.extract_inner::<tracing::Config>("tracing")
-		.expect("Failed to initialize tracing config");
+		.context("failed to initialize tracing config")?;
 	tracing::init(tracing_config);
 
 	// Load the rest of the configuration.
-	let config = figment.extract::<Config>().expect("Failed to extract config");
+	let config = figment
+		.extract::<Config>()
+		.context("failed to extract config")?;
 
-	let version = Arc::new(version::Manager::new(config.version).expect("Failed to create version manager"));
+	let version = Arc::new(
+		version::Manager::new(config.version).context("failed to create version manager")?,
+	);
 	let data = Arc::new(data::Data::new(config.data));
 	let asset = Arc::new(asset::Service::new(data.clone()));
-	let schema =
-		Arc::new(schema::Provider::new(config.schema, data.clone()).expect("Failed to create schema provider"));
+	let schema = Arc::new(
+		schema::Provider::new(config.schema, data.clone())
+			.context("failed to create schema provider")?,
+	);
 	// let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
 
 	// Set up a cancellation token that will fire when a shutdown signal is recieved.
@@ -78,7 +85,9 @@ async fn main() {
 			version.clone(),
 		),
 	)
-	.expect("Failed to start server");
+	.context("failed to start server")?;
+
+	Ok(())
 }
 
 fn shutdown_token() -> CancellationToken {
