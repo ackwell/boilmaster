@@ -15,7 +15,7 @@ COPY . .
 RUN cargo chef prepare --bin boilmaster --recipe-path recipe.json
 
 # Build Boilmaster
-FROM planner AS builder
+FROM base AS builder
 
 WORKDIR /app
 
