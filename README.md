@@ -29,7 +29,7 @@ Then we can create a `docker-compose.yml` using the example below:
 ```
 services:
   boilmaster:
-    image: ghcr.io/arcanedisgea/boilmaster:image-creation-test
+    image: ghcr.io/ackwell/boilmaster:release
     container_name: boilmaster
     environment:
      - BM_HTTP_ADMIN_AUTH_USERNAME="CHANGE-ME"
