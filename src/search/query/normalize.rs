@@ -55,7 +55,14 @@ impl<'a> Normalizer<'a> {
 		})?;
 
 		let languages = sheet_data.languages()?;
-		let columns = sheet_data.columns()?;
+
+		// TODO: this sort logic (along with much of the walking) is duplicated with read::
+		//       work out if, and how, it could be shared.
+		let mut columns = sheet_data.columns()?;
+		match sheet_schema.order {
+			schema::Order::Index => (),
+			schema::Order::Offset => columns.sort_by_key(|column| column.offset()),
+		}
 
 		// Check if the ambient language is valid for this sheet, trying to fall
 		// back to `None` if it is not, to mimic read behavior.
@@ -288,8 +295,6 @@ impl<'a> Normalizer<'a> {
 						})
 					})?;
 
-				// NOTE: The collect is not actually needless - .filter precludes ExactSizeIterator
-				#[allow(clippy::needless_collect)]
 				let string_columns = scalar_columns
 					.into_iter()
 					.filter(|column| column.kind() == exh::ColumnKind::String)

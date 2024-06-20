@@ -26,6 +26,7 @@ pub struct Config {
 	max_batch_size: usize,
 }
 
+#[derive(Debug)]
 pub enum SearchRequest {
 	Query {
 		version: VersionKey,
