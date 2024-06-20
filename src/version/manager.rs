@@ -49,6 +49,9 @@ pub struct Manager {
 
 impl Manager {
 	pub fn new(config: Config) -> Result<Self> {
+		let directory = config.directory.relative();
+		fs::create_dir_all(&directory)?;
+
 		let (sender, _receiver) = watch::channel(vec![]);
 
 		Ok(Self {
@@ -56,7 +59,7 @@ impl Manager {
 			patcher: patcher::Patcher::new(config.patch),
 
 			update_interval: config.interval,
-			directory: config.directory.relative(),
+			directory,
 			repositories: config.repositories,
 
 			versions: Default::default(),
@@ -64,6 +67,12 @@ impl Manager {
 
 			channel: sender,
 		})
+	}
+
+	pub fn ready(&self) -> bool {
+		// Mark ready once we've got at least one version - existing systems will
+		// hydrate metadata from disk in one go.
+		self.versions.read().expect("poisoned").len() > 0
 	}
 
 	/// Subscribe to changes to the version list.
@@ -91,7 +100,17 @@ impl Manager {
 			.copied()
 	}
 
-	// Get a list of names for a given version key.
+	/// Get a list of all known version names.
+	pub fn all_names(&self) -> Vec<String> {
+		self.names
+			.read()
+			.expect("poisoned")
+			.keys()
+			.cloned()
+			.collect()
+	}
+
+	/// Get a list of names for a given version key.
 	pub fn names(&self, key: VersionKey) -> Option<Vec<String>> {
 		// Make sure the version is actually known to exist, to distinguish between an unknown key and a key with no names.
 		if !self.versions.read().expect("poisoned").contains_key(&key) {

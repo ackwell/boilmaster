@@ -1,7 +1,10 @@
 *.ignore.*
 /exdschema
 /patches
-/saint_coinach
 /search
 /target
 /versions
+/__pycache__
+locustfile.py
+perf.*
+flamegraph.svg

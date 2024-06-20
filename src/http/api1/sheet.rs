@@ -1,13 +1,25 @@
 use std::{collections::HashMap, num::ParseIntError, str::FromStr};
 
-use axum::{
-	debug_handler, extract::State, response::IntoResponse, routing::get, Extension, Json, Router,
+use aide::{
+	axum::{routing::get_with, ApiRouter, IntoApiResponse},
+	transform::TransformOperation,
 };
+use axum::{debug_handler, extract::State, Extension, Json};
 use either::Either;
-use ironworks::{excel::Language, file::exh};
+use ironworks::{excel, file::exh};
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject, StringValidation},
+	JsonSchema,
+};
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use crate::{data::LanguageString, http::service, read, schema, utility::anyhow::Anyhow};
+use crate::{
+	data::LanguageString,
+	http::service,
+	read, schema,
+	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
+};
 
 use super::{
 	error::{Error, Result},
@@ -27,6 +39,7 @@ pub struct Config {
 struct LimitConfig {
 	default: usize,
 	max: usize,
+	depth: u8,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -35,20 +48,29 @@ struct FilterConfig {
 	entry: Option<FilterString>,
 }
 
-pub fn router(config: Config) -> Router<service::State> {
-	Router::new()
-		.route("/", get(list))
-		.route("/:sheet", get(sheet))
-		.route("/:sheet/:row", get(row))
+pub fn router(config: Config) -> ApiRouter<service::State> {
+	ApiRouter::new()
+		.api_route("/", get_with(list, list_docs))
+		.api_route("/:sheet", get_with(sheet, sheet_docs))
+		.api_route("/:sheet/:row", get_with(row, row_docs))
 		// Using Extension so I don't need to worry about nested state destructuring.
 		.layer(Extension(config))
+}
+
+fn list_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+		.summary("list sheets")
+		.description("List known excel sheet names that can be read by the API.")
+		.response_with::<200, Json<Vec<&'static str>>, _>(|response| {
+			response.example(vec!["Action", "Item", "Status"])
+		})
 }
 
 #[debug_handler(state = service::State)]
 async fn list(
 	VersionQuery(version_key): VersionQuery,
 	State(data): State<service::Data>,
-) -> Result<impl IntoResponse> {
+) -> Result<impl IntoApiResponse> {
 	let excel = data.version(version_key)?.excel();
 
 	let list = excel.list().anyhow()?;
@@ -61,15 +83,17 @@ async fn list(
 	Ok(Json(names))
 }
 
-#[derive(Deserialize)]
+/// Path variables accepted by the sheet endpoint.
+#[derive(Deserialize, JsonSchema)]
 struct SheetPath {
+	/// Name of the sheet to read.
 	sheet: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 struct RowSpecifier {
 	row_id: u32,
-	subrow_id: Option<u16>,
+	subrow_id: u16,
 }
 
 impl FromStr for RowSpecifier {
@@ -79,11 +103,11 @@ impl FromStr for RowSpecifier {
 		let out = match string.split_once(':') {
 			Some((row_id, subrow_id)) => Self {
 				row_id: row_id.parse()?,
-				subrow_id: Some(subrow_id.parse()?),
+				subrow_id: subrow_id.parse()?,
 			},
 			None => Self {
 				row_id: string.parse()?,
-				subrow_id: None,
+				subrow_id: 0,
 			},
 		};
 
@@ -101,18 +125,45 @@ impl<'de> Deserialize<'de> for RowSpecifier {
 	}
 }
 
-#[derive(Deserialize)]
+impl_jsonschema!(RowSpecifier, rowspecifier_schema);
+fn rowspecifier_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		string: Some(
+			StringValidation {
+				pattern: Some("^\\d+(:\\d+)?$".into()),
+				..Default::default()
+			}
+			.into(),
+		),
+		..Default::default()
+	})
+}
+
+/// Query parameters accepted by the sheet endpoint.
+#[derive(Deserialize, JsonSchema)]
 struct SheetQuery {
 	// Data resolution
+	/// Language to use for data with no language otherwise specified in the fields filter.
 	language: Option<LanguageString>,
+
+	/// Schema that row data should be read with.
 	schema: Option<schema::Specifier>,
+
+	// Data fields to read for selected rows.
 	fields: Option<FilterString>,
 
 	// ID pagination/filtering
+	/// Rows to fetch from the sheet, as a comma-separated list. Behavior is undefined if both `rows` and `after` are provided.
 	#[serde(default, deserialize_with = "deserialize_rows")]
+	#[schemars(schema_with = "rows_schema")]
 	rows: Option<Vec<RowSpecifier>>,
-	page: Option<usize>,
+
+	/// Maximum number of rows to return. To paginate, provide the last returned row to the next request's `after` parameter.
 	limit: Option<usize>,
+
+	/// Fetch rows after the specified row. Behavior is undefined if both `rows` and `after` are provided.
+	after: Option<RowSpecifier>,
 }
 
 // TODO: this can probably be made as a general purpose "comma seperated" deserializer struct
@@ -136,21 +187,58 @@ where
 	Ok(Some(parsed))
 }
 
-#[derive(Serialize)]
+fn rows_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		string: Some(
+			StringValidation {
+				pattern: Some("^\\d+(:\\d+)?(,\\d+(:\\d+)?)*$".into()),
+				..Default::default()
+			}
+			.into(),
+		),
+		..Default::default()
+	})
+}
+
+/// Response structure for the sheet endpoint.
+#[derive(Serialize, JsonSchema)]
 struct SheetResponse {
+	/// The canonical specifier for the schema used in this response.
+	#[schemars(with = "String")]
 	schema: schema::CanonicalSpecifier,
+
+	/// Array of rows retrieved by the query.
 	rows: Vec<RowResult>,
 }
 
 // TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 struct RowResult {
+	/// ID of this row.
 	row_id: u32,
 
+	/// Subrow ID of this row, when relevant.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	subrow_id: Option<u16>,
 
-	fields: Option<ValueString>,
+	/// Field values for this row, according to the current schema.
+	fields: ValueString,
+}
+
+fn sheet_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+		.summary("list rows in a sheet")
+		.description("Read information about one or more rows and their related data.")
+		.response_with::<200, Json<SheetResponse>, _>(|response| {
+			response.example(SheetResponse {
+				schema: schema::CanonicalSpecifier {
+					source: "source".into(),
+					version: "version".into(),
+				},
+				rows: vec![row_result_example(1), row_result_example(2)],
+			})
+		})
 }
 
 #[debug_handler(state = service::State)]
@@ -161,13 +249,13 @@ async fn sheet(
 	State(data): State<service::Data>,
 	State(schema_provider): State<service::Schema>,
 	Extension(config): Extension<Config>,
-) -> Result<impl IntoResponse> {
+) -> Result<impl IntoApiResponse> {
 	// Resolve arguments with the services.
 	let excel = data.version(version_key)?.excel();
 
 	let language = query
 		.language
-		.map(Language::from)
+		.map(excel::Language::from)
 		.unwrap_or_else(|| data.default_language());
 
 	// TODO: Consider extractor for this.
@@ -178,7 +266,7 @@ async fn sheet(
 		.or_else(|| {
 			config
 				.filter
-				.get(schema_specifier.source())
+				.get(&schema_specifier.source)
 				.and_then(|filter_config| filter_config.list.clone())
 		})
 		.map(|filter_string| filter_string.to_filter(language))
@@ -208,7 +296,7 @@ async fn sheet(
 		// TODO: Currently, read:: does _all_ the row fetching itself, which means that we're effectively iterating the sheet here _just_ to get the row IDs, then re-fetching in the read:: code. This... probably isn't too problematic, but worth considering how to approach more betterer. If read:: can be modified to take a row, then the Some() case above can be specailised to the read-row logic and this case can be simplified.
 		None => Either::Right(builder.iter().map(|row| RowSpecifier {
 			row_id: row.row_id(),
-			subrow_id: Some(row.subrow_id()),
+			subrow_id: row.subrow_id(),
 		})),
 	};
 
@@ -217,14 +305,16 @@ async fn sheet(
 		.limit
 		.unwrap_or(config.limit.default)
 		.min(config.limit.max);
-	let offset = query.page.unwrap_or(0) * limit;
-	let sheet_iterator = sheet_iterator.skip(offset).take(limit);
+	let sheet_iterator = sheet_iterator
+		// TODO: Improve this - introducing an explicit "after" method on a sheet iterator would allow skipping a lot of busywork. As-is, this is fetching every single row's data.
+		.skip_while(|specifier| Some(specifier) <= query.after.as_ref())
+		.take(limit);
 
 	// Build Results for the targeted rows.
 	let sheet_kind = sheet.kind().anyhow()?;
 	let sheet_iterator = sheet_iterator.map(|specifier| {
 		let row_id = specifier.row_id;
-		let subrow_id = specifier.subrow_id.unwrap_or(0);
+		let subrow_id = specifier.subrow_id;
 
 		// TODO: This is pretty wasteful to call inside a loop, revisit actual read logic.
 		// TODO: at the moment, an unknown row specifier will cause excel to error with a NotFound (which is fine), however read:: then squashes that with anyhow, meaning the error gets hidden in a 500 ISE. revisit error handling in read:: while i'm at it ref. the above.
@@ -236,6 +326,7 @@ async fn sheet(
 			subrow_id,
 			language,
 			&filter,
+			config.limit.depth,
 		)?;
 
 		Ok(RowResult {
@@ -244,7 +335,7 @@ async fn sheet(
 				exh::SheetKind::Subrows => Some(subrow_id),
 				_ => None,
 			},
-			fields: Some(ValueString(fields, language)),
+			fields: ValueString(fields, language),
 		})
 	});
 
@@ -258,25 +349,71 @@ async fn sheet(
 	Ok(Json(response))
 }
 
-#[derive(Deserialize)]
+/// Path variables accepted by the row endpoint.
+#[derive(Deserialize, JsonSchema)]
 struct RowPath {
+	/// Name of the sheet to read.
 	sheet: String,
+	/// Row to read.
 	row: RowSpecifier,
 }
 
-#[derive(Deserialize)]
+/// Query parameters accepted by the row endpoint.
+#[derive(Deserialize, JsonSchema)]
 struct RowQuery {
+	/// Language to use for data with no language otherwise specified in the fields filter.
 	language: Option<LanguageString>,
+
+	/// Schema that row data should be read with.
 	schema: Option<schema::Specifier>,
+
+	/// Data fields to read for selected rows.
 	fields: Option<FilterString>,
 }
 
-#[derive(Serialize)]
+/// Response structure for the row endpoint.
+#[derive(Serialize, JsonSchema)]
 struct RowResponse {
+	/// The canonical specifier for the schema used in this response.
+	#[schemars(with = "String")]
 	schema: schema::CanonicalSpecifier,
 
 	#[serde(flatten)]
 	row: RowResult,
+}
+
+fn row_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+		.summary("read a sheet row")
+		.description(
+			"Read detailed, filterable information from a single sheet row and its related data.",
+		)
+		.response_with::<200, Json<RowResponse>, _>(|response| {
+			response.example(RowResponse {
+				schema: schema::CanonicalSpecifier {
+					source: "source".into(),
+					version: "version".into(),
+				},
+				row: row_result_example(1),
+			})
+		})
+}
+
+fn row_result_example(row_id: u32) -> RowResult {
+	RowResult {
+		row_id,
+		subrow_id: None,
+		fields: ValueString(
+			read::Value::Struct(HashMap::from([(
+				read::StructKey {
+					name: "FieldName".into(),
+					language: excel::Language::English,
+				},
+				read::Value::Scalar(excel::Field::U32(14)),
+			)])),
+			excel::Language::English,
+		),
+	}
 }
 
 #[debug_handler(state = service::State)]
@@ -287,12 +424,12 @@ async fn row(
 	State(data): State<service::Data>,
 	State(schema_provider): State<service::Schema>,
 	Extension(config): Extension<Config>,
-) -> Result<impl IntoResponse> {
+) -> Result<impl IntoApiResponse> {
 	let excel = data.version(version_key)?.excel();
 
 	let language = query
 		.language
-		.map(Language::from)
+		.map(excel::Language::from)
 		.unwrap_or_else(|| data.default_language());
 
 	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
@@ -302,7 +439,7 @@ async fn row(
 		.or_else(|| {
 			config
 				.filter
-				.get(schema_specifier.source())
+				.get(&schema_specifier.source)
 				.and_then(|filter_config| filter_config.entry.clone())
 		})
 		.map(|filter_string| filter_string.to_filter(language))
@@ -318,18 +455,25 @@ async fn row(
 		schema.as_ref(),
 		&path.sheet,
 		row_id,
-		subrow_id.unwrap_or(0),
+		subrow_id,
 		language,
 		&filter,
+		config.limit.depth,
 	)?;
+
+	// Check the kind of the sheet to determine if we should report a subrow id.
+	// TODO: this is theoretically wasteful, though IW will have cached it anyway.
+	let result_subrow_id = match excel.sheet(&path.sheet).anyhow()?.kind().anyhow()? {
+		exh::SheetKind::Subrows => Some(subrow_id),
+		_ => None,
+	};
 
 	let response = RowResponse {
 		schema: schema_specifier,
 		row: RowResult {
 			row_id,
-			// NOTE: this results in subrow being reported if it's included in path, even on non-subrow sheets (though anything but :0 on those throws an error)
-			subrow_id,
-			fields: Some(ValueString(fields, language)),
+			subrow_id: result_subrow_id,
+			fields: ValueString(fields, language),
 		},
 	};
 

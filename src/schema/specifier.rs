@@ -1,22 +1,18 @@
 use std::{convert::Infallible, str::FromStr};
 
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject, StringValidation},
+};
 use serde::{de, Deserialize, Serialize};
+
+use crate::utility::jsonschema::impl_jsonschema;
 
 // TODO: will probably need eq/hash so i can use these as cache keys?
 #[derive(Debug, Clone)]
 pub struct CanonicalSpecifier {
-	pub(super) source: String,
-	pub(super) version: String,
-}
-
-impl CanonicalSpecifier {
-	pub fn source(&self) -> &str {
-		&self.source
-	}
-
-	pub fn version(&self) -> &str {
-		&self.version
-	}
+	pub source: String,
+	pub version: String,
 }
 
 impl ToString for CanonicalSpecifier {
@@ -67,4 +63,19 @@ impl<'de> Deserialize<'de> for Specifier {
 		let raw = String::deserialize(deserializer)?;
 		raw.parse().map_err(de::Error::custom)
 	}
+}
+
+impl_jsonschema!(Specifier, specifier_jsonschema);
+fn specifier_jsonschema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		string: Some(
+			StringValidation {
+				pattern: Some("^.+(@.+)?$".into()),
+				..Default::default()
+			}
+			.into(),
+		),
+		..Default::default()
+	})
 }

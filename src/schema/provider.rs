@@ -10,12 +10,14 @@ use crate::{data, version::VersionKey};
 
 use super::{
 	error::{Error, Result},
-	exdschema, saint_coinach,
+	exdschema,
 	specifier::CanonicalSpecifier,
 	Specifier,
 };
 
 pub trait Source: Send + Sync {
+	fn ready(&self) -> bool;
+
 	fn update(&self) -> Result<()>;
 
 	fn canonicalize(&self, schema_version: Option<&str>, version_key: VersionKey)
@@ -30,7 +32,6 @@ pub struct Config {
 	interval: u64,
 
 	exdschema: exdschema::Config,
-	saint_coinach: saint_coinach::Config,
 }
 
 // TODO: need a way to handle updating the repo
@@ -47,17 +48,16 @@ impl Provider {
 		Ok(Self {
 			default: config.default,
 			update_interval: config.interval,
-			sources: HashMap::from([
-				(
-					"saint-coinach",
-					boxed(saint_coinach::SaintCoinach::new(config.saint_coinach)?),
-				),
-				(
-					"exdschema",
-					boxed(exdschema::ExdSchema::new(config.exdschema, data)?),
-				),
-			]),
+			sources: HashMap::from([(
+				"exdschema",
+				boxed(exdschema::ExdSchema::new(config.exdschema, data)?),
+			)]),
 		})
+	}
+
+	pub fn ready(&self) -> bool {
+		// Schema is ready if all of its sources are ready.
+		self.sources.values().all(|source| source.ready())
 	}
 
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {

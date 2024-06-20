@@ -31,6 +31,7 @@ impl ExdSchema {
 		let provider = exdschema::Provider::with()
 			.remote(config.remote)
 			.directory(config.directory)
+			.cache(true)
 			.build()?;
 
 		Ok(Self {
@@ -42,6 +43,12 @@ impl ExdSchema {
 }
 
 impl Source for ExdSchema {
+	fn ready(&self) -> bool {
+		// The backing git repository is cloned as part of `::new`, so if this is
+		// being called, we should be ready already.
+		true
+	}
+
 	fn update(&self) -> Result<()> {
 		if self.provider.update()? {
 			tracing::info!("EXDSchema updated")

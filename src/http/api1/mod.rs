@@ -6,5 +6,6 @@ mod filter;
 mod search;
 mod sheet;
 mod value;
+mod version;
 
 pub use api::{router, Config};

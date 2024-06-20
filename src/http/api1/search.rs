@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Json, Router};
+use aide::axum::ApiRouter;
+use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Json};
 use ironworks::excel::Language;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -17,8 +18,8 @@ use super::{
 	extract::{Query, VersionQuery},
 };
 
-pub fn router() -> Router<service::State> {
-	Router::new().route("/", get(search))
+pub fn router() -> ApiRouter<service::State> {
+	ApiRouter::new().route("/", get(search))
 }
 
 #[derive(Debug, Deserialize)]

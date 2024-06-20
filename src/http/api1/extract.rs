@@ -1,20 +1,29 @@
+use std::convert::Infallible;
+
+use aide::OperationIo;
 use axum::{
 	async_trait,
-	extract::{FromRef, FromRequestParts},
-	http::request::Parts,
+	extract::{FromRef, FromRequestParts, OriginalUri},
+	http::{request::Parts, Uri},
 	RequestPartsExt,
 };
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{http::service, version::VersionKey};
 
 use super::error::Error;
 
-#[derive(Deserialize)]
+/// # VersionQuery
+/// Query parameters accepted by endpoints that interact with versioned game data.
+#[derive(Deserialize, JsonSchema)]
 struct VersionQueryParams {
+	/// Game version to utilise for this query.
 	version: Option<String>,
 }
 
+#[derive(OperationIo)]
+#[aide(input_with = "Query<VersionQueryParams>")]
 pub struct VersionQuery(pub VersionKey);
 
 #[async_trait]
@@ -45,10 +54,29 @@ where
 	}
 }
 
-#[derive(FromRequestParts)]
+// This cursed garbage courtesy of trying to get the path of the parent router. Fun.
+pub struct RouterPath(pub String);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for RouterPath {
+	type Rejection = Infallible;
+
+	async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+		let uri = parts.extract::<Uri>().await?;
+		let OriginalUri(original_uri) = parts.extract::<OriginalUri>().await?;
+
+		let router_path = original_uri.path().strip_suffix(uri.path()).unwrap_or("");
+
+		Ok(Self(router_path.into()))
+	}
+}
+
+#[derive(FromRequestParts, OperationIo)]
 #[from_request(via(axum::extract::Path), rejection(Error))]
+#[aide(input_with = "axum::extract::Path<T>", json_schema)]
 pub struct Path<T>(pub T);
 
-#[derive(FromRequestParts)]
+#[derive(FromRequestParts, OperationIo)]
 #[from_request(via(axum::extract::Query), rejection(Error))]
+#[aide(input_with = "axum::extract::Query<T>", json_schema)]
 pub struct Query<T>(pub T);

@@ -7,7 +7,7 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
-use super::{admin, api1, service};
+use super::{admin, api1, health, service};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -37,6 +37,7 @@ pub async fn serve(
 	let router = Router::new()
 		.nest("/admin", admin::router(config.admin))
 		.nest("/api/1", api1::router(config.api1))
+		.nest("/health", health::router())
 		.layer(TraceLayer::new_for_http())
 		.with_state(service::State {
 			asset,

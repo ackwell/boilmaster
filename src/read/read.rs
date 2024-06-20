@@ -8,6 +8,9 @@ use std::{
 use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
+use nohash_hasher::IntMap;
+
+use crate::read::Language;
 
 use super::{
 	error::{Error, MismatchError, Result},
@@ -26,6 +29,7 @@ pub fn read(
 	default_language: excel::Language,
 
 	filter: &Filter,
+	depth: u8,
 ) -> Result<Value> {
 	let value = read_sheet(ReaderContext {
 		excel,
@@ -39,7 +43,7 @@ pub fn read(
 		filter,
 		rows: &mut HashMap::new(),
 		columns: &[],
-		depth: 1,
+		depth,
 	})?;
 
 	Ok(value)
@@ -115,10 +119,11 @@ fn read_scalar_reference(
 
 	let mut reference = Reference::Scalar(target_value);
 
-	// A target less than 0 (typically -1) is usually used to signify that a link is not
-	// present on this row. Also ensure that we've not run out of recursion depth.
+	// A target less than 0 (typically -1) is usually used to signify that a link
+	// is not present on this row. Also ensure that we've not run out of recursion
+	// depth. We avoid early return if following an active reference chain.
 	// TODO: would be neat to halt recursion later, but target checking does have a cost that needs to be considered.
-	if target_value < 0 || context.depth == 0 {
+	if target_value < 0 || (context.depth == 0 && context.filter == &Filter::All) {
 		return Ok(Value::Reference(reference));
 	}
 	let target_value = u32::try_from(target_value)
@@ -126,10 +131,40 @@ fn read_scalar_reference(
 
 	// NOTE: a lot of the TODOs here are immediately break;ing - this is to avoid a potentially correct target that is simply unhandled being ignored and a later, incorrect target being picked as a result.
 	for target in targets {
-		// TODO: handle conditions
-		if target.condition.is_some() {
-			tracing::warn!("unhandled target condition: {target:?}");
-			break;
+		if let Some(condition) = &target.condition {
+			// TODO: This is effectively spinning an entirely new read tree just to check the condition, which is dumb. It'll technically hit cache all the way down, but this is incredibly dumb.
+			let mut language_map = IntMap::default();
+			language_map.insert(Language(context.language), Filter::All);
+			let data = read_sheet(ReaderContext {
+				filter: &Filter::Struct(HashMap::from([(
+					condition.selector.clone(),
+					language_map,
+				)])),
+				rows: &mut *context.rows,
+				..context
+			})?;
+
+			let struct_value = match data {
+				Value::Struct(mut map) => map
+					.remove(&StructKey {
+						name: condition.selector.clone(),
+						language: context.language,
+					})
+					.ok_or_else(|| Error::Failure(anyhow!("Schema target condition mismatch.")))?,
+				_ => Err(anyhow!(
+					"Did not recieve a struct from target condition lookup."
+				))?,
+			};
+			let scalar_value = match struct_value {
+				Value::Scalar(field) => read_scalar_u32(field)?,
+				_ => Err(anyhow!(
+					"Did not recieve a scalar from struct in target condition lookup."
+				))?,
+			};
+
+			if scalar_value != condition.value {
+				continue;
+			}
 		}
 
 		// TODO: handle retargeted refs
@@ -166,7 +201,7 @@ fn read_scalar_reference(
 			subrow_id,
 
 			rows: &mut HashMap::from([(context.language, row_data)]),
-			depth: context.depth - 1,
+			depth: context.depth.max(1) - 1,
 
 			..context
 		})?;
@@ -175,10 +210,6 @@ fn read_scalar_reference(
 			value: target_value,
 			sheet: target.sheet.to_string(),
 			row_id,
-			subrow_id: match sheet_data.kind()? {
-				exh::SheetKind::Subrows => Some(subrow_id),
-				_ => None,
-			},
 			fields: child_data.into(),
 		}
 	}
@@ -204,9 +235,13 @@ fn convert_reference_value(field: excel::Field) -> Result<i32> {
 }
 
 fn read_scalar_icon(field: excel::Field) -> Result<Value> {
+	Ok(Value::Icon(read_scalar_u32(field)?))
+}
+
+fn read_scalar_u32(field: excel::Field) -> Result<u32> {
 	// TODO: this is getting dumb.
 	use excel::Field as F;
-	let id = match field {
+	let result = match field {
 		F::I8(value) => u32::try_from(value)?,
 		F::I16(value) => u32::try_from(value)?,
 		F::I32(value) => u32::try_from(value)?,
@@ -216,10 +251,9 @@ fn read_scalar_icon(field: excel::Field) -> Result<Value> {
 		F::U32(value) => value,
 		F::U64(value) => u32::try_from(value)?,
 
-		other => Err(anyhow!("invalid icon type {other:?}"))?,
+		other => Err(anyhow!("invalid u32 type {other:?}"))?,
 	};
-
-	Ok(Value::Icon(id))
+	Ok(result)
 }
 
 fn read_node_array(
