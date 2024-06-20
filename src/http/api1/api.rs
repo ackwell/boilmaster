@@ -26,10 +26,13 @@ pub fn router(config: Config) -> Router<service::State> {
 	let mut openapi = openapi::OpenApi::default();
 
 	ApiRouter::new()
-		.nest("/search", search::router())
 		.nest(
 			"/asset",
 			asset::router().with_path_items(|item| item.tag("assets")),
+		)
+		.nest(
+			"/search",
+			search::router().with_path_items(|item| item.tag("search")),
 		)
 		.nest(
 			"/sheet",
@@ -52,6 +55,11 @@ fn api_docs(api: TransformOpenApi) -> TransformOpenApi {
 		.tag(Tag {
 			name: "assets".into(),
 			description: Some("Endpoints for accessing game data on a file-by-file basis. Commonly useful for fetching icons or other textures to display on the web.".into()),
+			..Default::default()
+		})
+		.tag(Tag {
+			name: "search".into(),
+			description: Some("Endpoints for seaching and filtering the game's relational data store.".into()),
 			..Default::default()
 		})
 		.tag(Tag {
