@@ -35,6 +35,7 @@ services:
       - ${PWD}/exdschema:/app/exdschema
       # Need roughly 100gb of free space for patches
       - ${PWD}/patches:/app/patches
+      - ${PWD}/seach:/app/search
     ports:
       - 8080:8080
     restart: unless-stopped

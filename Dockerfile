@@ -38,7 +38,7 @@ COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.s
 COPY --from=builder /app/boilmaster.toml /app
 COPY --from=builder /app/target/release/boilmaster /app
 
-VOLUME /app/patches /app/exdschema /app/versions
+VOLUME /app/patches /app/exdschema /app/versions /app/search
 
 HEALTHCHECK --start-period=45s --interval=15s --retries=3 --timeout=5s CMD curl -sf http://localhost:8080/health/live || exit 1
 
