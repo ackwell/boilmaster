@@ -6,7 +6,8 @@ use ironworks::{
 };
 use sea_query::{
 	Alias, ColumnDef, ColumnType, Condition, DynIden, Expr, Iden, InsertStatement, IntoCondition,
-	Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, TableDropStatement, TableRef,
+	Order, Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, TableDropStatement,
+	TableRef,
 };
 
 use crate::{
@@ -179,6 +180,7 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 
 	let ResolveResult {
 		condition,
+		score,
 		languages,
 	} = resolve_node(
 		node,
@@ -215,6 +217,10 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 	query.expr(Expr::val(&sheet_name));
 	query.column((base_alias, KnownColumn::RowId));
 
+	let alias_score = Alias::new("score");
+	query.expr_as(score, alias_score.clone());
+	query.order_by(alias_score, Order::Desc);
+
 	query.cond_where(condition);
 
 	query.take()
@@ -226,6 +232,7 @@ struct ResolveContext {
 
 struct ResolveResult {
 	condition: Condition,
+	score: SimpleExpr,
 	languages: HashSet<Language>,
 }
 
@@ -242,22 +249,44 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 	let mut must = Condition::all();
 	let mut should = Condition::any();
 	let mut must_not = Condition::any().not();
+	let mut score_expressions = vec![];
 
 	let mut languages = HashSet::new();
 
 	for (occur, node) in group.clauses {
 		let ResolveResult {
 			condition: inner_condition,
+			score: inner_score,
 			languages: inner_languages,
 		} = resolve_node(node, context);
 
 		match occur {
-			post::Occur::Must => must = must.add(inner_condition),
-			post::Occur::Should => should = should.add(inner_condition),
+			// MUST: Score is gated by the entire group, add inner score directly.
+			post::Occur::Must => {
+				must = must.add(inner_condition);
+				score_expressions.push(inner_score);
+			}
+			// SHOULD: Score needs to be gated per-expression.
+			post::Occur::Should => {
+				should = should.add(inner_condition.clone());
+				score_expressions.push(Expr::case(inner_condition, inner_score).finally(0).into());
+			}
+			// MUSTNOT: Not scored.
 			post::Occur::MustNot => must_not = must_not.add(inner_condition),
 		}
 
 		languages.extend(inner_languages)
+	}
+
+	// Add all the score expressions together.
+	let mut score = score_expressions
+		.into_iter()
+		.reduce(|a, b| a.add(b))
+		.unwrap_or_else(|| Expr::value(0));
+
+	// If we have a MUST conditional, scope the scoring to require the MUSTs match first.
+	if must.len() > 0 {
+		score = Expr::case(must.clone(), score).finally(0).into();
 	}
 
 	// NOTE: we're only adding if c.len=0 here because any number of SHOULDs do not effect the _filtering_ of a query if there's 1 or more MUSTs - only the scoring. which i don't have any idea how to do. well, that's a lie. but still.
@@ -274,6 +303,7 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 
 	ResolveResult {
 		condition: must,
+		score,
 		languages,
 	}
 }
@@ -285,15 +315,16 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 		column_name(&column_definition),
 	));
 
-	let resolved_expression = match leaf.operation {
+	let (resolved_expression, score) = match leaf.operation {
 		post::Operation::Relation(relation) => todo!(),
 		// TODO: need to handle escaping
-		post::Operation::Match(string) => expression.like(format!("%{string}%")),
+		post::Operation::Match(string) => (expression.like(format!("%{string}%")), Expr::value(1)),
 		post::Operation::Equal(value) => todo!(),
 	};
 
 	ResolveResult {
 		condition: resolved_expression.into_condition(),
+		score,
 		languages: HashSet::from([language]),
 	}
 }
