@@ -153,9 +153,9 @@ impl Search {
 		// };
 
 		// executor.search(provider_request, Some(result_limit))
-		let results = self.provider.search(provider_request).await;
+		let results = self.provider.search(provider_request).await?;
 
-		todo!("results {results:?}")
+		Ok((results, None))
 	}
 
 	fn normalize_request_query(&self, query: SearchRequestQuery) -> Result<sqlite::SearchRequest> {
