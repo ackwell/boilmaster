@@ -244,8 +244,6 @@ fn resolve_node(node: post::Node, context: &ResolveContext) -> ResolveResult {
 }
 
 fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult {
-	// for a given group, MUST are top-level AND, SHOULD are "AND (A OR B OR C...)", and MUSTNOT are AND NOT
-	// given that, the root of a group is all ANDs, so we can use ::all and collect ORs for the SHOULD
 	let mut must = Condition::all();
 	let mut should = Condition::any();
 	let mut must_not = Condition::any().not();
@@ -298,9 +296,6 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 		must = must.add(must_not)
 	}
 
-	// TODO: this would need to record a condition for scoring as well
-	// realistically; MUSTs in queries will always match, so a scoring structure only needs to account for the SHOULDs as actual conditions, and can pass up a static integer of the number of MUSTs that can be added to the score
-
 	ResolveResult {
 		condition: must,
 		score,
@@ -319,7 +314,7 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 		post::Operation::Relation(relation) => todo!(),
 		// TODO: need to handle escaping
 		post::Operation::Match(string) => (expression.like(format!("%{string}%")), Expr::value(1)),
-		post::Operation::Equal(value) => todo!(),
+		post::Operation::Equal(value) => (expression.eq(value), Expr::value(1)),
 	};
 
 	ResolveResult {
@@ -331,4 +326,15 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 
 fn table_alias(alias_base: &str, language: Language) -> Alias {
 	Alias::new(format!("{alias_base}@{}", LanguageString::from(language)))
+}
+
+impl From<post::Value> for sea_query::Value {
+	fn from(value: post::Value) -> Self {
+		match value {
+			post::Value::U64(value) => sea_query::Value::BigUnsigned(Some(value)),
+			post::Value::I64(value) => sea_query::Value::BigInt(Some(value)),
+			post::Value::F64(value) => sea_query::Value::Double(Some(value)),
+			post::Value::String(value) => sea_query::Value::String(Some(value.into())),
+		}
+	}
 }
