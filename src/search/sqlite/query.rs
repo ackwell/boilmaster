@@ -5,9 +5,9 @@ use ironworks::{
 	file::exh,
 };
 use sea_query::{
-	Alias, ColumnDef, ColumnType, Condition, DynIden, Expr, Iden, InsertStatement, IntoCondition,
-	Order, Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, TableDropStatement,
-	TableRef, UnionType,
+	Alias, ColumnDef, ColumnRef, ColumnType, Condition, DynIden, Expr, Iden, InsertStatement,
+	IntoColumnRef, IntoCondition, Order, Query, SelectStatement, SimpleExpr, Table,
+	TableCreateStatement, TableDropStatement, TableRef, UnionType,
 };
 
 use crate::{
@@ -190,20 +190,24 @@ pub fn resolve_queries(queries: Vec<(String, post::Node)>) -> SelectStatement {
 }
 
 fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
-	let alias = "alias-0".to_string();
+	let alias = "alias-base";
 
 	let ResolveResult {
 		condition,
 		score,
 		languages,
+		relations,
 	} = resolve_node(
 		node,
 		&ResolveContext {
-			alias: alias.clone(),
+			alias,
+			next_alias: "alias-0",
 		},
 	);
 
 	let mut query = Query::select();
+
+	// Base sheet and language joins.
 
 	// TODO: this will probably need to be split out for reuse at relation boundaries
 	let mut table_references = languages.into_iter().map(|language| {
@@ -218,16 +222,47 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 	});
 
 	// TODO: is it possible for there to be no languages and hence no joins? is that a failure? what about on relation boundaries
-	let (base_alias, base_reference) = table_references.next().expect("TODO: handle");
+	let (base_alias, base_reference) = table_references.next().expect("TODO: handle no languages");
 	query.from(base_reference);
 	for (join_alias, join_reference) in table_references {
 		query.inner_join(
 			join_reference,
+			// TODO: this, and the copy below, only function on rowid - what about joining subrow sheets?
 			Expr::col((join_alias, KnownColumn::RowId))
 				.equals((base_alias.clone(), KnownColumn::RowId)),
 		);
 	}
 
+	// Relations.
+	for relation in relations {
+		let mut relation_references = relation.languages.into_iter().map(|language| {
+			let alias = table_alias(&relation.alias, language);
+			(
+				alias.clone(),
+				TableRef::TableAlias(
+					DynIden::new(table_name(&relation.sheet, language)),
+					DynIden::new(alias),
+				),
+			)
+		});
+
+		let (base_alias, base_reference) = relation_references
+			.next()
+			.expect("TODO: handle no languages");
+		query.left_join(
+			base_reference,
+			Expr::col(relation.foreign_key).equals((base_alias.clone(), KnownColumn::RowId)),
+		);
+		for (join_alias, join_reference) in relation_references {
+			query.inner_join(
+				join_reference,
+				Expr::col((join_alias, KnownColumn::RowId))
+					.equals((base_alias.clone(), KnownColumn::RowId)),
+			);
+		}
+	}
+
+	// Select fields.
 	query.expr(Expr::val(&sheet_name));
 	query.column((base_alias, KnownColumn::RowId));
 	query.expr_as(score, KnownResolveColumn::Score);
@@ -237,13 +272,23 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 	query.take()
 }
 
-struct ResolveContext {
-	alias: String,
+struct ResolveContext<'a> {
+	alias: &'a str,
+	next_alias: &'a str,
 }
 
 struct ResolveResult {
 	condition: Condition,
 	score: SimpleExpr,
+	languages: HashSet<Language>,
+	relations: Vec<ResolveRelation>,
+}
+
+#[derive(Debug)]
+struct ResolveRelation {
+	sheet: String,
+	alias: String,
+	foreign_key: ColumnRef,
 	languages: HashSet<Language>,
 }
 
@@ -259,15 +304,23 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 	let mut should = Condition::any();
 	let mut must_not = Condition::any().not();
 	let mut score_expressions = vec![];
+	let mut relations = vec![];
 
 	let mut languages = HashSet::new();
 
-	for (occur, node) in group.clauses {
+	for (index, (occur, node)) in group.clauses.into_iter().enumerate() {
 		let ResolveResult {
 			condition: inner_condition,
 			score: inner_score,
 			languages: inner_languages,
-		} = resolve_node(node, context);
+			relations: inner_relations,
+		} = resolve_node(
+			node,
+			&ResolveContext {
+				alias: context.alias,
+				next_alias: &format!("{}-{}", context.next_alias, index),
+			},
+		);
 
 		match occur {
 			// MUST: Score is gated by the entire group, add inner score directly.
@@ -284,7 +337,8 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 			post::Occur::MustNot => must_not = must_not.add(inner_condition),
 		}
 
-		languages.extend(inner_languages)
+		languages.extend(inner_languages);
+		relations.extend(inner_relations);
 	}
 
 	// Add all the score expressions together.
@@ -311,27 +365,72 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 		condition: must,
 		score,
 		languages,
+		relations,
 	}
 }
 
 fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
+	let mut relations = vec![];
+
 	let (column_definition, language) = leaf.field;
-	let expression = Expr::col((
+	let column_ref = (
 		table_alias(&context.alias, language),
 		column_name(&column_definition),
-	));
+	)
+		.into_column_ref();
+	let expression = Expr::col(column_ref.clone());
 
 	let (resolved_expression, score) = match leaf.operation {
-		post::Operation::Relation(relation) => todo!(),
+		// TODO: break this into seperate function?
+		post::Operation::Relation(post::Relation { target, query }) => {
+			let target_alias = context.next_alias.to_string();
+
+			let ResolveResult {
+				condition: inner_condition,
+				score,
+				languages,
+				relations: inner_relations,
+			} = resolve_node(
+				*query,
+				&ResolveContext {
+					alias: &target_alias,
+					next_alias: &format!("{}-0", target_alias),
+				},
+			);
+
+			// TODO: Need to include target.condition (unscored) - possibly an Option<Condition> on the reference?
+			let condition = expression
+				.equals((table_alias(&target_alias, language), KnownColumn::RowId))
+				.into_condition();
+
+			relations.push(ResolveRelation {
+				sheet: target.sheet,
+				alias: target_alias,
+				// condition,
+				foreign_key: column_ref,
+				languages,
+			});
+			relations.extend(inner_relations);
+
+			(inner_condition, score)
+		}
+
 		// TODO: need to handle escaping
-		post::Operation::Match(string) => (expression.like(format!("%{string}%")), Expr::value(1)),
-		post::Operation::Equal(value) => (expression.eq(value), Expr::value(1)),
+		// TODO: this is case insensitive due to LIKE semantics - if opting into case sensitive (is this something we want), will need to use GLOB or something with pragmas/collates, idk
+		// TODO: score - can use stringlen / length(column)
+		post::Operation::Match(string) => (
+			expression.like(format!("%{string}%")).into_condition(),
+			Expr::value(1),
+		),
+
+		post::Operation::Equal(value) => (expression.eq(value).into_condition(), Expr::value(1)),
 	};
 
 	ResolveResult {
 		condition: resolved_expression.into_condition(),
 		score,
 		languages: HashSet::from([language]),
+		relations,
 	}
 }
 
