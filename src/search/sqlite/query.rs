@@ -175,13 +175,14 @@ enum KnownResolveColumn {
 }
 
 pub fn resolve_queries(queries: Vec<(String, post::Node)>) -> SelectStatement {
-	let selects = queries
+	let mut selects = queries
 		.into_iter()
 		.map(|(sheet_name, node)| resolve_query(sheet_name, node));
 
-	let mut query = selects
-		.reduce(|mut a, b| a.union(UnionType::All, b).take())
-		.expect("TODO: what if there's no queries?");
+	let mut query = selects.next().expect("TODO: what if there's no queries?");
+	for select in selects {
+		query.union(UnionType::All, select);
+	}
 
 	query.order_by(KnownResolveColumn::Score, Order::Desc);
 	// TODO: limit goes here
@@ -208,44 +209,20 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 	let mut query = Query::select();
 
 	// Base sheet and language joins.
-
-	// TODO: this will probably need to be split out for reuse at relation boundaries
-	let mut table_references = languages.into_iter().map(|language| {
-		let alias = table_alias(&alias, language);
-		(
-			alias.clone(),
-			TableRef::TableAlias(
-				DynIden::new(table_name(&sheet_name, language)),
-				DynIden::new(alias),
-			),
-		)
-	});
+	let mut table_references = iter_language_references(languages, alias, &sheet_name);
 
 	// TODO: is it possible for there to be no languages and hence no joins? is that a failure? what about on relation boundaries
 	let (base_alias, base_reference) = table_references.next().expect("TODO: handle no languages");
 	query.from(base_reference);
-	for (join_alias, join_reference) in table_references {
-		query.inner_join(
-			join_reference,
-			// TODO: this, and the copy below, only function on rowid - what about joining subrow sheets?
-			Expr::col((join_alias, KnownColumn::RowId))
-				.equals((base_alias.clone(), KnownColumn::RowId)),
-		);
-	}
+
+	inner_join_references(&mut query, table_references, &base_alias);
 
 	// Relations.
 	for relation in relations {
-		let mut relation_references = relation.languages.into_iter().map(|language| {
-			let alias = table_alias(&relation.alias, language);
-			(
-				alias.clone(),
-				TableRef::TableAlias(
-					DynIden::new(table_name(&relation.sheet, language)),
-					DynIden::new(alias),
-				),
-			)
-		});
+		let mut relation_references =
+			iter_language_references(relation.languages, &relation.alias, &relation.sheet);
 
+		// Use the first language to join the primary FK relation.
 		let (base_alias, base_reference) = relation_references
 			.next()
 			.expect("TODO: handle no languages");
@@ -253,13 +230,9 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 			base_reference,
 			Expr::col(relation.foreign_key).equals((base_alias.clone(), KnownColumn::RowId)),
 		);
-		for (join_alias, join_reference) in relation_references {
-			query.inner_join(
-				join_reference,
-				Expr::col((join_alias, KnownColumn::RowId))
-					.equals((base_alias.clone(), KnownColumn::RowId)),
-			);
-		}
+
+		// Remaining languages can be joined on the row ID.
+		inner_join_references(&mut query, relation_references, &base_alias);
 	}
 
 	// Select fields.
@@ -270,6 +243,36 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 	query.cond_where(condition);
 
 	query.take()
+}
+
+fn iter_language_references<'a>(
+	languages: impl IntoIterator<Item = Language> + 'a,
+	alias: &'a str,
+	sheet: &'a str,
+) -> impl Iterator<Item = (Alias, TableRef)> + 'a {
+	languages.into_iter().map(move |language| {
+		let alias = table_alias(&alias, language);
+		let reference = TableRef::TableAlias(
+			DynIden::new(table_name(&sheet, language)),
+			DynIden::new(alias.clone()),
+		);
+		(alias, reference)
+	})
+}
+
+fn inner_join_references(
+	query: &mut SelectStatement,
+	references: impl Iterator<Item = (Alias, TableRef)>,
+	target_alias: &Alias,
+) {
+	// TODO: this only functions on rowid - what about joining subrow sheets?
+	for (join_alias, join_reference) in references {
+		query.inner_join(
+			join_reference,
+			Expr::col((join_alias, KnownColumn::RowId))
+				.equals((target_alias.clone(), KnownColumn::RowId)),
+		);
+	}
 }
 
 struct ResolveContext<'a> {
