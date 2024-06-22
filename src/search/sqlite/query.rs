@@ -281,17 +281,25 @@ struct ResolveContext<'a> {
 }
 
 struct ResolveResult {
+	/// Condition for the result tree.
 	condition: Condition,
+	/// Expression to calculate the score for the result tree.
 	score: SimpleExpr,
+	/// Languages used in the result tree that will need to be joined.
 	languages: HashSet<Language>,
+	/// Relationships required by this result tree.
 	relations: Vec<ResolveRelation>,
 }
 
 #[derive(Debug)]
 struct ResolveRelation {
+	/// Sheet name.
 	sheet: String,
+	/// Alias used by this relationship.
 	alias: String,
+	/// Foreign key reference for the relationship join.
 	foreign_key: ColumnRef,
+	/// Languages that will be required by the query for this relationship.
 	languages: HashSet<Language>,
 }
 

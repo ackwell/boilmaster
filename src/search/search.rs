@@ -117,6 +117,7 @@ impl Search {
 					"EquipSlotCategory",
 					"Status",
 					"Action",
+					"ItemRepairResource",
 				];
 
 				list.iter()
@@ -157,6 +158,7 @@ impl Search {
 		// executor.search(provider_request, Some(result_limit))
 		let results = self.provider.search(provider_request).await?;
 
+		// TODO: cursor
 		Ok((results, None))
 	}
 

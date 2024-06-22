@@ -15,6 +15,8 @@ struct Context<'a> {
 	schema: &'a schema::Node,
 	columns: &'a [exh::ColumnDefinition],
 	language: excel::Language,
+
+	ambient_language: excel::Language,
 }
 
 pub struct Normalizer<'a> {
@@ -84,6 +86,7 @@ impl<'a> Normalizer<'a> {
 				schema: &sheet_schema.node,
 				columns: &columns,
 				language,
+				ambient_language,
 			},
 		)
 	}
@@ -164,6 +167,8 @@ impl<'a> Normalizer<'a> {
 					})
 				})?;
 
+				// TODO: by leaving ambient_language as-is here, a query of `A@ja.B(Relation)` will fall back to the default language of the query for B.
+				//       tempting to say that language overrides shouldn't spill outside their immediate field at all, honestly
 				self.normalize_operation(
 					operation,
 					Context {
@@ -241,11 +246,10 @@ impl<'a> Normalizer<'a> {
 									todo!("TODO: normalise reference target conditions")
 								}
 
-								// TODO: this needs to handle schema mismatches and discard those branches. error time? error time.
 								let query = self.normalize(
 									&relation.query,
 									&target.sheet,
-									context.language,
+									context.ambient_language,
 								)?;
 
 								let operation = post::Operation::Relation(post::Relation {
