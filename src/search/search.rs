@@ -115,6 +115,8 @@ impl Search {
 					"ClassJob",
 					"ClassJobCategory",
 					"EquipSlotCategory",
+					"Status",
+					"Action",
 				];
 
 				list.iter()

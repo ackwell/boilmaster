@@ -7,7 +7,7 @@ use ironworks::{
 use sea_query::{
 	Alias, ColumnDef, ColumnType, Condition, DynIden, Expr, Iden, InsertStatement, IntoCondition,
 	Order, Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, TableDropStatement,
-	TableRef,
+	TableRef, UnionType,
 };
 
 use crate::{
@@ -169,10 +169,24 @@ fn field_value(field: Field) -> SimpleExpr {
 
 // ---
 
+#[derive(Iden)]
+enum KnownResolveColumn {
+	Score,
+}
+
 pub fn resolve_queries(queries: Vec<(String, post::Node)>) -> SelectStatement {
-	// temp. obviously.
-	let (sheet_name, node) = queries.into_iter().next().unwrap();
-	resolve_query(sheet_name, node)
+	let selects = queries
+		.into_iter()
+		.map(|(sheet_name, node)| resolve_query(sheet_name, node));
+
+	let mut query = selects
+		.reduce(|mut a, b| a.union(UnionType::All, b).take())
+		.expect("TODO: what if there's no queries?");
+
+	query.order_by(KnownResolveColumn::Score, Order::Desc);
+	// TODO: limit goes here
+
+	query.take()
 }
 
 fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
@@ -216,10 +230,7 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 
 	query.expr(Expr::val(&sheet_name));
 	query.column((base_alias, KnownColumn::RowId));
-
-	let alias_score = Alias::new("score");
-	query.expr_as(score, alias_score.clone());
-	query.order_by(alias_score, Order::Desc);
+	query.expr_as(score, KnownResolveColumn::Score);
 
 	query.cond_where(condition);
 
