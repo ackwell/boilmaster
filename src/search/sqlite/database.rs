@@ -160,14 +160,14 @@ impl Database {
 		let statement = resolve_queries(queries);
 		let (db_query, values) = statement.build_sqlx(SqliteQueryBuilder);
 		// TODO: not a fan of this implicit structure shared between query and here
-		let results: Vec<(String, u32, u32)> = sqlx::query_as_with(&db_query, values)
+		let results: Vec<(String, u32, f32)> = sqlx::query_as_with(&db_query, values)
 			.fetch_all(&self.pool)
 			.await?;
 
 		let search_results = results
 			.into_iter()
 			.map(|(sheet, row_id, score)| SearchResult {
-				score: score as f32,
+				score,
 				sheet,
 				row_id,
 				subrow_id: 0,

@@ -5,7 +5,7 @@ use ironworks::{
 	file::exh,
 };
 use sea_query::{
-	Alias, ColumnDef, ColumnRef, ColumnType, Condition, DynIden, Expr, Iden, InsertStatement,
+	Alias, ColumnDef, ColumnRef, ColumnType, Condition, DynIden, Expr, Func, Iden, InsertStatement,
 	IntoColumnRef, IntoCondition, Order, Query, SelectStatement, SimpleExpr, Table,
 	TableCreateStatement, TableDropStatement, TableRef, UnionType,
 };
@@ -265,7 +265,7 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 	// Select fields.
 	query.expr(Expr::val(&sheet_name));
 	query.column((base_alias, KnownColumn::RowId));
-	query.expr_as(score, KnownResolveColumn::Score);
+	query.expr_as(score.cast_as(Alias::new("REAL")), KnownResolveColumn::Score);
 
 	query.cond_where(condition);
 
@@ -399,10 +399,6 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 			);
 
 			// TODO: Need to include target.condition (unscored) - possibly an Option<Condition> on the reference?
-			let condition = expression
-				.equals((table_alias(&target_alias, language), KnownColumn::RowId))
-				.into_condition();
-
 			relations.push(ResolveRelation {
 				sheet: target.sheet,
 				alias: target_alias,
@@ -417,10 +413,12 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 
 		// TODO: need to handle escaping
 		// TODO: this is case insensitive due to LIKE semantics - if opting into case sensitive (is this something we want), will need to use GLOB or something with pragmas/collates, idk
-		// TODO: score - can use stringlen / length(column)
 		post::Operation::Match(string) => (
 			expression.like(format!("%{string}%")).into_condition(),
-			Expr::value(1),
+			Expr::value(u32::try_from(string.len()).expect("TODO: handle but i mean really?")).div(
+				SimpleExpr::from(Func::char_length(Expr::col(column_ref)))
+					.cast_as(Alias::new("REAL")),
+			),
 		),
 
 		post::Operation::Equal(value) => (expression.eq(value).into_condition(), Expr::value(1)),
