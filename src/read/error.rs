@@ -37,9 +37,9 @@ impl From<ironworks::Error> for Error {
 impl From<ironworks_schema::Error> for Error {
 	fn from(error: ironworks_schema::Error) -> Self {
 		use ironworks_schema::Error as ISE;
+		use ironworks_schema::ErrorValue as ISEV;
 		match error {
-			// TODO: Specialise this down to just sheet-related failures once the option is available in schema's error.
-			ISE::NotFound(_) => Error::NotFound(error.to_string()),
+			ISE::NotFound(ISEV::Sheet(_)) => Error::NotFound(error.to_string()),
 			other => Error::Failure(other.into()),
 		}
 	}

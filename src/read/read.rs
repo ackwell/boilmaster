@@ -51,8 +51,18 @@ pub fn read(
 
 fn read_sheet(context: ReaderContext) -> Result<Value> {
 	let sheet_name = context.sheet;
-	let sheet_schema = context.schema.sheet(sheet_name)?;
 	let sheet_data = context.excel.sheet(sheet_name)?;
+
+	// Fabricate an empty schema for missing sheet schemas so we're able to read _something_.
+	let sheet_schema = match context.schema.sheet(sheet_name) {
+		Err(schema::Error::NotFound(schema::ErrorValue::Sheet(sheet_name))) => Ok(schema::Sheet {
+			name: sheet_name,
+			order: schema::Order::Offset,
+			node: schema::Node::Struct(vec![]),
+		}),
+		other => other,
+	}?;
+
 	let columns = get_sorted_columns(&sheet_schema, &sheet_data)?;
 
 	let value = read_node(
@@ -368,9 +378,12 @@ fn iterate_struct_fields<'s, 'c>(
 	columns: &'c [exh::ColumnDefinition],
 ) -> Result<impl Iterator<Item = (Cow<'s, str>, &'s schema::Node, &'c [exh::ColumnDefinition])>> {
 	// Eagerly ensure that we have enough columns available to satisfy the struct field definitions.
-	let last_field = &fields[fields.len() - 1];
-	let fields_length = usize::try_from(last_field.offset + last_field.node.size())
-		.expect("schema field size too large");
+	let fields_length = match fields.last() {
+		Some(field) => {
+			usize::try_from(field.offset + field.node.size()).expect("schema field size too large")
+		}
+		None => 0,
+	};
 
 	if fields_length > columns.len() {
 		// TODO: use context for the mismatch error?
@@ -383,8 +396,13 @@ fn iterate_struct_fields<'s, 'c>(
 	// Utility to generate items for columns not covered by a field.
 	let generate_unknowns = |range: Range<usize>| {
 		range.map(|offset| {
+			let column = &columns[offset];
 			(
-				Cow::<str>::Owned(format!("unknown{offset}")),
+				Cow::<str>::Owned(format!(
+					"unknown{}{}",
+					column.offset(),
+					unknown_suffix(column.kind())
+				)),
 				&schema::Node::Scalar(schema::Scalar::Default),
 				&columns[offset..offset + 1],
 			)
@@ -417,6 +435,21 @@ fn iterate_struct_fields<'s, 'c>(
 		.chain(generate_unknowns(fields_length..columns.len()));
 
 	Ok(items)
+}
+
+fn unknown_suffix(kind: exh::ColumnKind) -> &'static str {
+	use exh::ColumnKind as CK;
+	match kind {
+		CK::PackedBool0 => "_0",
+		CK::PackedBool1 => "_1",
+		CK::PackedBool2 => "_2",
+		CK::PackedBool3 => "_3",
+		CK::PackedBool4 => "_4",
+		CK::PackedBool5 => "_5",
+		CK::PackedBool6 => "_6",
+		CK::PackedBool7 => "_7",
+		_ => "",
+	}
 }
 
 struct ReaderContext<'a> {
