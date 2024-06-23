@@ -4,30 +4,15 @@ use std::{
 };
 
 use anyhow::Context;
-use ironworks::{
-	excel::{Excel, Language},
-	sqpack::SqPack,
-	zipatch, Ironworks,
-};
-use serde::Deserialize;
+use ironworks::{excel::Excel, sqpack::SqPack, zipatch, Ironworks};
 use tokio::{select, sync::watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::version::{self, VersionKey};
 
-use super::{
-	error::{Error, Result},
-	language::LanguageString,
-};
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-	language: LanguageString,
-}
+use super::error::{Error, Result};
 
 pub struct Data {
-	default_language: Language,
-
 	channel: watch::Sender<Vec<VersionKey>>,
 
 	// Root ZiPatch instance, acts as a LUT cache
@@ -37,11 +22,10 @@ pub struct Data {
 }
 
 impl Data {
-	pub fn new(config: Config) -> Self {
+	pub fn new() -> Self {
 		let (sender, _receiver) = watch::channel(vec![]);
 
 		Data {
-			default_language: config.language.into(),
 			channel: sender,
 			zipatch: zipatch::ZiPatch::new().with_persisted_lookups(),
 			versions: Default::default(),
@@ -52,10 +36,6 @@ impl Data {
 		// We don't know how many versions there might be in total, but there should
 		// be at least one. Mark ready when we have _something_.
 		self.versions.read().expect("poisoned").len() > 0
-	}
-
-	pub fn default_language(&self) -> Language {
-		self.default_language
 	}
 
 	pub fn subscribe(&self) -> watch::Receiver<Vec<VersionKey>> {

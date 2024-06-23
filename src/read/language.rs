@@ -61,7 +61,7 @@ impl FromStr for LanguageString {
 			"chs" => Language::ChineseSimplified,
 			"cht" => Language::ChineseTraditional,
 			"kr" => Language::Korean,
-			_ => return Err(Error::UnknownLanguage(string.into())),
+			_ => return Err(Error::InvalidLanguage(string.into())),
 		};
 
 		Ok(Self(language))

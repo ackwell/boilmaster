@@ -14,7 +14,7 @@ use nom::{
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
 
-use crate::{data, read};
+use crate::read;
 
 use super::error;
 
@@ -196,7 +196,7 @@ fn index(input: &str) -> IResult<&str, Entry> {
 fn language(input: &str) -> IResult<&str, excel::Language> {
 	map_res(alphanumeric1, |string: &str| {
 		string
-			.parse::<data::LanguageString>()
+			.parse::<read::LanguageString>()
 			.map(excel::Language::from)
 	})(input)
 }

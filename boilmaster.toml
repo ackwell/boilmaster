@@ -18,8 +18,8 @@ limit.depth = 2
 # TODO: should this be shared with search eventually, or nah?
 filter.exdschema.list = "Name,Singular,Icon"
 
-[data]
-language = "en"
+[read.language]
+default = "en"
 
 [version]
 interval = 3600 # 1 hour

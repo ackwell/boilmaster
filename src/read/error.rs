@@ -4,6 +4,9 @@ pub enum Error {
 	#[error("{0}")]
 	NotFound(String),
 
+	#[error("invalid or unsupported language \"{0}\"")]
+	InvalidLanguage(String),
+
 	/// The provided filter does not map cleanly onto the sheet schema.
 	#[error("filter <-> schema mismatch on {}: {}", .0.field, .0.reason)]
 	FilterSchemaMismatch(MismatchError),

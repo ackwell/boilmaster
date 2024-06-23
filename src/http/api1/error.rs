@@ -48,7 +48,7 @@ impl From<data::Error> for Error {
 	fn from(error: data::Error) -> Self {
 		use data::Error as DE;
 		match error {
-			DE::UnknownVersion(..) | DE::UnknownLanguage(..) => Self::Invalid(error.to_string()),
+			DE::UnknownVersion(..) => Self::Invalid(error.to_string()),
 			DE::Failure(inner) => Self::Other(inner),
 		}
 	}
@@ -59,7 +59,7 @@ impl From<read::Error> for Error {
 		use read::Error as RE;
 		match error {
 			RE::NotFound(..) => Self::NotFound(error.to_string()),
-			RE::FilterSchemaMismatch(..) | RE::SchemaGameMismatch(..) => {
+			RE::FilterSchemaMismatch(..) | RE::SchemaGameMismatch(..) | RE::InvalidLanguage(..) => {
 				Self::Invalid(error.to_string())
 			}
 			RE::Failure(inner) => Self::Other(inner),

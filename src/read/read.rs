@@ -9,44 +9,73 @@ use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 use nohash_hasher::IntMap;
+use serde::Deserialize;
 
 use crate::read::Language;
 
 use super::{
 	error::{Error, MismatchError, Result},
 	filter::Filter,
+	language::LanguageString,
 	value::{Reference, StructKey, Value},
 };
 
-pub fn read(
-	excel: &excel::Excel,
-	schema: &dyn schema::Schema,
+#[derive(Debug, Deserialize)]
+pub struct Config {
+	language: LanguageConfig,
+}
 
-	sheet_name: &str,
-	row_id: u32,
-	subrow_id: u16,
+#[derive(Debug, Deserialize)]
+struct LanguageConfig {
+	default: LanguageString,
+}
 
+pub struct Read {
 	default_language: excel::Language,
+}
 
-	filter: &Filter,
-	depth: u8,
-) -> Result<Value> {
-	let value = read_sheet(ReaderContext {
-		excel,
-		schema,
+impl Read {
+	pub fn new(config: Config) -> Self {
+		Self {
+			default_language: config.language.default.into(),
+		}
+	}
 
-		sheet: sheet_name,
-		language: default_language,
-		row_id,
-		subrow_id,
+	pub fn default_language(&self) -> excel::Language {
+		self.default_language
+	}
 
-		filter,
-		rows: &mut HashMap::new(),
-		columns: &[],
-		depth,
-	})?;
+	pub fn read(
+		&self,
+		excel: &excel::Excel,
+		schema: &dyn schema::Schema,
 
-	Ok(value)
+		sheet_name: &str,
+		row_id: u32,
+		subrow_id: u16,
+
+		default_language: excel::Language,
+
+		filter: &Filter,
+		depth: u8,
+	) -> Result<Value> {
+		let value = read_sheet(ReaderContext {
+			excel,
+			schema,
+
+			sheet: sheet_name,
+			language: default_language,
+			row_id,
+			subrow_id,
+
+			filter,
+			rows: &mut HashMap::new(),
+			columns: &[],
+			depth,
+		})?;
+
+		Ok(value)
+	}
 }
 
 fn read_sheet(context: ReaderContext) -> Result<Value> {

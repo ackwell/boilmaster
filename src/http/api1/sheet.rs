@@ -15,7 +15,6 @@ use schemars::{
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 use crate::{
-	data::LanguageString,
 	http::service,
 	read, schema,
 	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
@@ -145,7 +144,7 @@ fn rowspecifier_schema(_generator: &mut SchemaGenerator) -> Schema {
 struct SheetQuery {
 	// Data resolution
 	/// Language to use for data with no language otherwise specified in the fields filter.
-	language: Option<LanguageString>,
+	language: Option<read::LanguageString>,
 
 	/// Schema that row data should be read with.
 	schema: Option<schema::Specifier>,
@@ -247,6 +246,7 @@ async fn sheet(
 	VersionQuery(version_key): VersionQuery,
 	Query(query): Query<SheetQuery>,
 	State(data): State<service::Data>,
+	State(read): State<service::Read>,
 	State(schema_provider): State<service::Schema>,
 	Extension(config): Extension<Config>,
 ) -> Result<impl IntoApiResponse> {
@@ -256,7 +256,7 @@ async fn sheet(
 	let language = query
 		.language
 		.map(excel::Language::from)
-		.unwrap_or_else(|| data.default_language());
+		.unwrap_or_else(|| read.default_language());
 
 	// TODO: Consider extractor for this.
 	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
@@ -318,7 +318,7 @@ async fn sheet(
 
 		// TODO: This is pretty wasteful to call inside a loop, revisit actual read logic.
 		// TODO: at the moment, an unknown row specifier will cause excel to error with a NotFound (which is fine), however read:: then squashes that with anyhow, meaning the error gets hidden in a 500 ISE. revisit error handling in read:: while i'm at it ref. the above.
-		let fields = read::read(
+		let fields = read.read(
 			&excel,
 			schema.as_ref(),
 			&path.sheet,
@@ -362,7 +362,7 @@ struct RowPath {
 #[derive(Deserialize, JsonSchema)]
 struct RowQuery {
 	/// Language to use for data with no language otherwise specified in the fields filter.
-	language: Option<LanguageString>,
+	language: Option<read::LanguageString>,
 
 	/// Schema that row data should be read with.
 	schema: Option<schema::Specifier>,
@@ -422,6 +422,7 @@ async fn row(
 	VersionQuery(version_key): VersionQuery,
 	Query(query): Query<RowQuery>,
 	State(data): State<service::Data>,
+	State(read): State<service::Read>,
 	State(schema_provider): State<service::Schema>,
 	Extension(config): Extension<Config>,
 ) -> Result<impl IntoApiResponse> {
@@ -430,7 +431,7 @@ async fn row(
 	let language = query
 		.language
 		.map(excel::Language::from)
-		.unwrap_or_else(|| data.default_language());
+		.unwrap_or_else(|| read.default_language());
 
 	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
 
@@ -450,7 +451,7 @@ async fn row(
 	let row_id = path.row.row_id;
 	let subrow_id = path.row.subrow_id;
 
-	let fields = read::read(
+	let fields = read.read(
 		&excel,
 		schema.as_ref(),
 		&path.sheet,

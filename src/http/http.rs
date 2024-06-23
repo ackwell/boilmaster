@@ -27,8 +27,9 @@ pub struct Config {
 pub async fn serve(
 	cancel: CancellationToken,
 	config: Config,
-	data: service::Data,
 	asset: service::Asset,
+	data: service::Data,
+	read: service::Read,
 	schema: service::Schema,
 	// search: service::Search,
 	version: service::Version,
@@ -49,6 +50,7 @@ pub async fn serve(
 		.with_state(service::State {
 			asset,
 			data,
+			read,
 			schema,
 			// search,
 			version,
