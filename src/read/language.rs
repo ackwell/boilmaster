@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use ironworks::excel::Language;
 use schemars::{
 	gen::SchemaGenerator,
-	schema::{InstanceType, Schema, SchemaObject},
+	schema::{InstanceType, Metadata, Schema, SchemaObject},
 };
 use serde::de;
 
@@ -93,6 +93,13 @@ fn languagestring_schema(_generator: &mut SchemaGenerator) -> Schema {
 	];
 
 	Schema::Object(SchemaObject {
+		metadata: Some(
+			Metadata {
+				description: Some("Known languages supported by the game data format. **NOTE:** Not all languages that are supported by the format are valid for all editions of the game. For example, the global game client acknowledges the existence of `chs` and `kr`, however does not provide any data for them.".into()),
+				..Default::default()
+			}
+			.into(),
+		),
 		instance_type: Some(InstanceType::String.into()),
 		enum_values: Some(
 			languages

@@ -1,6 +1,6 @@
 use std::{
 	borrow::Cow,
-	collections::{hash_map, HashMap},
+	collections::{hash_map, HashMap, HashSet},
 	iter,
 	ops::Range,
 };
@@ -28,16 +28,24 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 struct LanguageConfig {
 	default: LanguageString,
+	exclude: Vec<LanguageString>,
 }
 
 pub struct Read {
 	default_language: excel::Language,
+	excluded_languages: HashSet<excel::Language>,
 }
 
 impl Read {
 	pub fn new(config: Config) -> Self {
 		Self {
 			default_language: config.language.default.into(),
+			excluded_languages: config
+				.language
+				.exclude
+				.into_iter()
+				.map(|language| language.into())
+				.collect(),
 		}
 	}
 
@@ -60,6 +68,8 @@ impl Read {
 		depth: u8,
 	) -> Result<Value> {
 		let value = read_sheet(ReaderContext {
+			read: self,
+
 			excel,
 			schema,
 
@@ -224,7 +234,7 @@ fn read_scalar_reference(
 		// TODO: handle target selectors
 		let row_data = match sheet_data
 			.with()
-			.language(context.language)
+			.language(context.validated_language()?)
 			.row(target_value)
 		{
 			Err(ironworks::Error::NotFound(ironworks::ErrorValue::Row { .. })) => continue,
@@ -482,6 +492,8 @@ fn unknown_suffix(kind: exh::ColumnKind) -> &'static str {
 }
 
 struct ReaderContext<'a> {
+	read: &'a Read,
+
 	excel: &'a excel::Excel<'a>,
 	schema: &'a dyn schema::Schema,
 
@@ -504,18 +516,31 @@ impl ReaderContext<'_> {
 			)
 		})?;
 
-		let row = match self.rows.entry(self.language) {
+		let language = self.validated_language()?;
+
+		let row = match self.rows.entry(language) {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => entry.insert(
 				self.excel
 					.sheet(self.sheet)?
 					.with()
-					.language(self.language)
+					.language(language)
 					.subrow(self.row_id, self.subrow_id)?,
 			),
 		};
 
 		Ok(row.field(column)?)
+	}
+
+	fn validated_language(&self) -> Result<excel::Language> {
+		if self.read.excluded_languages.contains(&self.language) {
+			return Err(Error::InvalidLanguage(format!(
+				"{}",
+				LanguageString::from(self.language)
+			)));
+		}
+
+		Ok(self.language)
 	}
 
 	fn mismatch_error(&self, reason: impl ToString) -> MismatchError {
