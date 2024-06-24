@@ -5,9 +5,9 @@ use ironworks::{
 	file::exh,
 };
 use sea_query::{
-	Alias, ColumnDef, ColumnRef, ColumnType, Condition, DynIden, Expr, Func, Iden, InsertStatement,
-	IntoColumnRef, IntoCondition, Order, Query, SelectStatement, SimpleExpr, Table,
-	TableCreateStatement, TableDropStatement, TableRef, UnionType,
+	Alias, ColumnDef, ColumnRef, ColumnType, Condition, DynIden, Expr, Func, Iden, Index,
+	InsertStatement, IntoColumnRef, IntoCondition, Order, Query, SelectStatement, SimpleExpr,
+	Table, TableCreateStatement, TableDropStatement, TableRef, UnionType,
 };
 
 use crate::{
@@ -27,12 +27,22 @@ pub fn table_create(sheet: &Sheet<String>, language: Language) -> Result<TableCr
 	// NOTE: Opting against a WITHOUT ROWID table for these - the benefits they
 	// confer aren't particularly meaningful for our workload.
 	let mut table = Table::create();
-	table
-		.table(table_name(&sheet.name(), language))
-		.col(ColumnDef::new(KnownColumn::RowId).integer().primary_key());
+	table.table(table_name(&sheet.name(), language));
 
-	if matches!(kind, exh::SheetKind::Subrows) {
-		table.col(ColumnDef::new(KnownColumn::SubrowId).integer());
+	match kind {
+		exh::SheetKind::Subrows => {
+			table
+				.col(ColumnDef::new(KnownColumn::RowId).integer())
+				.col(ColumnDef::new(KnownColumn::SubrowId).integer())
+				.primary_key(
+					Index::create()
+						.col(KnownColumn::RowId)
+						.col(KnownColumn::SubrowId),
+				);
+		}
+		_other => {
+			table.col(ColumnDef::new(KnownColumn::RowId).integer().primary_key());
+		}
 	}
 
 	for column in sheet.columns()? {
