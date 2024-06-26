@@ -62,7 +62,7 @@ impl Provider {
 		let data = response
 			.data
 			.and_then(|data| data.repository)
-			.ok_or_else(|| anyhow::anyhow!("TODO: received no data from thaliak"))?;
+			.ok_or_else(|| anyhow::anyhow!("received no data for repository \"{repository}\""))?;
 
 		// Build a lookup of versions by their name string.
 		let versions = data

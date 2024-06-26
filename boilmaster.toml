@@ -32,6 +32,7 @@ repositories = [
   "f29a3eb2", # ex2 (stb)
   "859d0e24", # ex3 (shb)
   "1bf99b87", # ex4 (ew)
+  "6cfeab11", # ex5 (dt)
 ]
 
 [version.thaliak]
