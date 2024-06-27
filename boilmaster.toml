@@ -38,6 +38,15 @@ repositories = [
 [version.thaliak]
 endpoint = "https://thaliak.xiv.dev/graphql/2022-08-14"
 
+# Thaliak bugged out and failed to link between the last delta patch, and the history patches, at 7.0.
+# This is just a manual specification of those links to restore the patch chain.
+[version.thaliak.overrides]
+4e9a232b = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000z" }
+6b936f08 = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000d" }
+f29a3eb2 = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000e" }
+859d0e24 = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000g" }
+1bf99b87 = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000i" }
+
 [version.patch]
 directory = "patches"
 concurrency = 4
