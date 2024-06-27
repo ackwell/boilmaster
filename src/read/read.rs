@@ -82,6 +82,8 @@ impl Read {
 			rows: &mut HashMap::new(),
 			columns: &[],
 			depth,
+
+			path: &[],
 		})?;
 
 		Ok(value)
@@ -164,7 +166,8 @@ fn read_scalar_reference(
 	context: ReaderContext,
 ) -> Result<Value> {
 	// TODO: are references _always_ i32? like, always always?
-	let target_value = convert_reference_value(field)?;
+	let target_value = convert_reference_value(field)
+		.map_err(|error| Error::SchemaGameMismatch(context.mismatch_error(error.to_string())))?;
 
 	let mut reference = Reference::Scalar(target_value);
 
@@ -278,7 +281,7 @@ fn convert_reference_value(field: excel::Field) -> Result<i32> {
 		F::U32(value) => value.try_into()?,
 		F::U64(value) => value.try_into()?,
 
-		other => Err(anyhow!("invalid index type {other:?}"))?,
+		_other => Err(anyhow!("invalid reference key type"))?,
 	};
 	Ok(result)
 }
@@ -300,7 +303,7 @@ fn read_scalar_u32(field: excel::Field) -> Result<u32> {
 		F::U32(value) => value,
 		F::U64(value) => u32::try_from(value)?,
 
-		other => Err(anyhow!("invalid u32 type {other:?}"))?,
+		_other => Err(anyhow!("invalid u32 type"))?,
 	};
 	Ok(result)
 }
@@ -379,6 +382,13 @@ fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) 
 			None => either::Right(std::iter::once((context.language, &Filter::All))),
 		};
 
+		let path = context
+			.path
+			.iter()
+			.chain(&[name.as_ref()])
+			.map(|&x| x)
+			.collect::<Vec<_>>();
+
 		for (language, filter) in language_filters {
 			let value = read_node(
 				node,
@@ -387,6 +397,7 @@ fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) 
 					language,
 					columns,
 					rows: &mut context.rows,
+					path: &path,
 					..context
 				},
 			)?;
@@ -506,6 +517,8 @@ struct ReaderContext<'a> {
 	columns: &'a [exh::ColumnDefinition],
 	rows: &'a mut HashMap<excel::Language, excel::Row>,
 	depth: u8,
+
+	path: &'a [&'a str],
 }
 
 impl ReaderContext<'_> {
@@ -545,7 +558,7 @@ impl ReaderContext<'_> {
 
 	fn mismatch_error(&self, reason: impl ToString) -> MismatchError {
 		MismatchError {
-			field: "TODO: contextual filter path".into(),
+			field: self.path.join("."),
 			reason: reason.to_string(),
 		}
 	}
