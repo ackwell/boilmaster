@@ -1,6 +1,6 @@
 use std::{
 	borrow::Cow,
-	collections::{hash_map, HashMap},
+	collections::{hash_map, HashMap, HashSet},
 	iter,
 	ops::Range,
 };
@@ -9,50 +9,101 @@ use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 use nohash_hasher::IntMap;
+use serde::Deserialize;
 
 use crate::read::Language;
 
 use super::{
 	error::{Error, MismatchError, Result},
 	filter::Filter,
+	language::LanguageString,
 	value::{Reference, StructKey, Value},
 };
 
-pub fn read(
-	excel: &excel::Excel,
-	schema: &dyn schema::Schema,
+#[derive(Debug, Deserialize)]
+pub struct Config {
+	language: LanguageConfig,
+}
 
-	sheet_name: &str,
-	row_id: u32,
-	subrow_id: u16,
+#[derive(Debug, Deserialize)]
+struct LanguageConfig {
+	default: LanguageString,
+	exclude: Vec<LanguageString>,
+}
 
+pub struct Read {
 	default_language: excel::Language,
+	excluded_languages: HashSet<excel::Language>,
+}
 
-	filter: &Filter,
-	depth: u8,
-) -> Result<Value> {
-	let value = read_sheet(ReaderContext {
-		excel,
-		schema,
+impl Read {
+	pub fn new(config: Config) -> Self {
+		Self {
+			default_language: config.language.default.into(),
+			excluded_languages: config
+				.language
+				.exclude
+				.into_iter()
+				.map(|language| language.into())
+				.collect(),
+		}
+	}
 
-		sheet: sheet_name,
-		language: default_language,
-		row_id,
-		subrow_id,
+	pub fn default_language(&self) -> excel::Language {
+		self.default_language
+	}
 
-		filter,
-		rows: &mut HashMap::new(),
-		columns: &[],
-		depth,
-	})?;
+	pub fn read(
+		&self,
+		excel: &excel::Excel,
+		schema: &dyn schema::Schema,
 
-	Ok(value)
+		sheet_name: &str,
+		row_id: u32,
+		subrow_id: u16,
+
+		default_language: excel::Language,
+
+		filter: &Filter,
+		depth: u8,
+	) -> Result<Value> {
+		let value = read_sheet(ReaderContext {
+			read: self,
+
+			excel,
+			schema,
+
+			sheet: sheet_name,
+			language: default_language,
+			row_id,
+			subrow_id,
+
+			filter,
+			rows: &mut HashMap::new(),
+			columns: &[],
+			depth,
+
+			path: &[],
+		})?;
+
+		Ok(value)
+	}
 }
 
 fn read_sheet(context: ReaderContext) -> Result<Value> {
 	let sheet_name = context.sheet;
-	let sheet_schema = context.schema.sheet(sheet_name)?;
 	let sheet_data = context.excel.sheet(sheet_name)?;
+
+	// Fabricate an empty schema for missing sheet schemas so we're able to read _something_.
+	let sheet_schema = match context.schema.sheet(sheet_name) {
+		Err(schema::Error::NotFound(schema::ErrorValue::Sheet(sheet_name))) => Ok(schema::Sheet {
+			name: sheet_name,
+			order: schema::Order::Offset,
+			node: schema::Node::Struct(vec![]),
+		}),
+		other => other,
+	}?;
+
 	let columns = get_sorted_columns(&sheet_schema, &sheet_data)?;
 
 	let value = read_node(
@@ -115,7 +166,8 @@ fn read_scalar_reference(
 	context: ReaderContext,
 ) -> Result<Value> {
 	// TODO: are references _always_ i32? like, always always?
-	let target_value = convert_reference_value(field)?;
+	let target_value = convert_reference_value(field)
+		.map_err(|error| Error::SchemaGameMismatch(context.mismatch_error(error.to_string())))?;
 
 	let mut reference = Reference::Scalar(target_value);
 
@@ -185,7 +237,7 @@ fn read_scalar_reference(
 		// TODO: handle target selectors
 		let row_data = match sheet_data
 			.with()
-			.language(context.language)
+			.language(context.validated_language()?)
 			.row(target_value)
 		{
 			Err(ironworks::Error::NotFound(ironworks::ErrorValue::Row { .. })) => continue,
@@ -229,7 +281,7 @@ fn convert_reference_value(field: excel::Field) -> Result<i32> {
 		F::U32(value) => value.try_into()?,
 		F::U64(value) => value.try_into()?,
 
-		other => Err(anyhow!("invalid index type {other:?}"))?,
+		_other => Err(anyhow!("invalid reference key type"))?,
 	};
 	Ok(result)
 }
@@ -251,7 +303,7 @@ fn read_scalar_u32(field: excel::Field) -> Result<u32> {
 		F::U32(value) => value,
 		F::U64(value) => u32::try_from(value)?,
 
-		other => Err(anyhow!("invalid u32 type {other:?}"))?,
+		_other => Err(anyhow!("invalid u32 type"))?,
 	};
 	Ok(result)
 }
@@ -330,6 +382,13 @@ fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) 
 			None => either::Right(std::iter::once((context.language, &Filter::All))),
 		};
 
+		let path = context
+			.path
+			.iter()
+			.chain(&[name.as_ref()])
+			.map(|&x| x)
+			.collect::<Vec<_>>();
+
 		for (language, filter) in language_filters {
 			let value = read_node(
 				node,
@@ -338,6 +397,7 @@ fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) 
 					language,
 					columns,
 					rows: &mut context.rows,
+					path: &path,
 					..context
 				},
 			)?;
@@ -368,9 +428,12 @@ fn iterate_struct_fields<'s, 'c>(
 	columns: &'c [exh::ColumnDefinition],
 ) -> Result<impl Iterator<Item = (Cow<'s, str>, &'s schema::Node, &'c [exh::ColumnDefinition])>> {
 	// Eagerly ensure that we have enough columns available to satisfy the struct field definitions.
-	let last_field = &fields[fields.len() - 1];
-	let fields_length = usize::try_from(last_field.offset + last_field.node.size())
-		.expect("schema field size too large");
+	let fields_length = match fields.last() {
+		Some(field) => {
+			usize::try_from(field.offset + field.node.size()).expect("schema field size too large")
+		}
+		None => 0,
+	};
 
 	if fields_length > columns.len() {
 		// TODO: use context for the mismatch error?
@@ -383,8 +446,13 @@ fn iterate_struct_fields<'s, 'c>(
 	// Utility to generate items for columns not covered by a field.
 	let generate_unknowns = |range: Range<usize>| {
 		range.map(|offset| {
+			let column = &columns[offset];
 			(
-				Cow::<str>::Owned(format!("unknown{offset}")),
+				Cow::<str>::Owned(format!(
+					"unknown{}{}",
+					column.offset(),
+					unknown_suffix(column.kind())
+				)),
 				&schema::Node::Scalar(schema::Scalar::Default),
 				&columns[offset..offset + 1],
 			)
@@ -419,7 +487,24 @@ fn iterate_struct_fields<'s, 'c>(
 	Ok(items)
 }
 
+fn unknown_suffix(kind: exh::ColumnKind) -> &'static str {
+	use exh::ColumnKind as CK;
+	match kind {
+		CK::PackedBool0 => "_0",
+		CK::PackedBool1 => "_1",
+		CK::PackedBool2 => "_2",
+		CK::PackedBool3 => "_3",
+		CK::PackedBool4 => "_4",
+		CK::PackedBool5 => "_5",
+		CK::PackedBool6 => "_6",
+		CK::PackedBool7 => "_7",
+		_ => "",
+	}
+}
+
 struct ReaderContext<'a> {
+	read: &'a Read,
+
 	excel: &'a excel::Excel<'a>,
 	schema: &'a dyn schema::Schema,
 
@@ -432,6 +517,8 @@ struct ReaderContext<'a> {
 	columns: &'a [exh::ColumnDefinition],
 	rows: &'a mut HashMap<excel::Language, excel::Row>,
 	depth: u8,
+
+	path: &'a [&'a str],
 }
 
 impl ReaderContext<'_> {
@@ -442,13 +529,15 @@ impl ReaderContext<'_> {
 			)
 		})?;
 
-		let row = match self.rows.entry(self.language) {
+		let language = self.validated_language()?;
+
+		let row = match self.rows.entry(language) {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => entry.insert(
 				self.excel
 					.sheet(self.sheet)?
 					.with()
-					.language(self.language)
+					.language(language)
 					.subrow(self.row_id, self.subrow_id)?,
 			),
 		};
@@ -456,9 +545,20 @@ impl ReaderContext<'_> {
 		Ok(row.field(column)?)
 	}
 
+	fn validated_language(&self) -> Result<excel::Language> {
+		if self.read.excluded_languages.contains(&self.language) {
+			return Err(Error::InvalidLanguage(format!(
+				"{}",
+				LanguageString::from(self.language)
+			)));
+		}
+
+		Ok(self.language)
+	}
+
 	fn mismatch_error(&self, reason: impl ToString) -> MismatchError {
 		MismatchError {
-			field: "TODO: contextual filter path".into(),
+			field: self.path.join("."),
 			reason: reason.to_string(),
 		}
 	}

@@ -100,16 +100,17 @@ fn read_texture_a8(texture: tex::Texture) -> Result<DynamicImage> {
 	Ok(DynamicImage::ImageLuma8(buffer))
 }
 
+// NOTE: This is actually BGRA4. Need to update names in ironworks. Reference https://github.com/NotAdam/Lumina/blob/master/src/Lumina/Data/Files/TexFile.cs#L53.
 fn read_texture_rgba4(texture: tex::Texture) -> Result<DynamicImage> {
 	let data = texture
 		.data()
 		.iter()
 		.tuples()
-		.flat_map(|(gr, ab)| {
-			let r = (gr & 0x0F) * 0x11;
-			let g = (gr >> 4) * 0x11;
-			let b = (ab & 0x0F) * 0x11;
-			let a = (ab >> 4) * 0x11;
+		.flat_map(|(gb, ar)| {
+			let b = (gb & 0x0F) * 0x11;
+			let g = (gb >> 4) * 0x11;
+			let r = (ar & 0x0F) * 0x11;
+			let a = (ar >> 4) * 0x11;
 			[r, g, b, a]
 		})
 		.collect::<Vec<_>>();

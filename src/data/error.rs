@@ -5,9 +5,6 @@ pub enum Error {
 	#[error("unknown version {0}")]
 	UnknownVersion(VersionKey),
 
-	#[error("unknown language \"{0}\"")]
-	UnknownLanguage(String),
-
 	#[error(transparent)]
 	Failure(#[from] anyhow::Error),
 }

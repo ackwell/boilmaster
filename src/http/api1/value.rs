@@ -7,7 +7,7 @@ use schemars::{
 };
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
-use crate::{data, read, utility::jsonschema::impl_jsonschema};
+use crate::{read, utility::jsonschema::impl_jsonschema};
 
 #[derive(Debug)]
 pub struct ValueString(pub read::Value, pub excel::Language);
@@ -155,7 +155,7 @@ impl ValueReference<'_> {
 			.map(|(read::StructKey { name, language }, value)| {
 				let key = match *language == self.language {
 					true => name.to_owned(),
-					false => format!("{name}@{}", data::LanguageString::from(*language)),
+					false => format!("{name}@{}", read::LanguageString::from(*language)),
 				};
 
 				(key, value)

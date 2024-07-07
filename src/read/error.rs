@@ -4,6 +4,9 @@ pub enum Error {
 	#[error("{0}")]
 	NotFound(String),
 
+	#[error("invalid or unsupported language \"{0}\"")]
+	InvalidLanguage(String),
+
 	/// The provided filter does not map cleanly onto the sheet schema.
 	#[error("filter <-> schema mismatch on {}: {}", .0.field, .0.reason)]
 	FilterSchemaMismatch(MismatchError),
@@ -37,9 +40,9 @@ impl From<ironworks::Error> for Error {
 impl From<ironworks_schema::Error> for Error {
 	fn from(error: ironworks_schema::Error) -> Self {
 		use ironworks_schema::Error as ISE;
+		use ironworks_schema::ErrorValue as ISEV;
 		match error {
-			// TODO: Specialise this down to just sheet-related failures once the option is available in schema's error.
-			ISE::NotFound(_) => Error::NotFound(error.to_string()),
+			ISE::NotFound(ISEV::Sheet(_)) => Error::NotFound(error.to_string()),
 			other => Error::Failure(other.into()),
 		}
 	}

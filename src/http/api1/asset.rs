@@ -27,6 +27,9 @@ use super::{
 	extract::{Path, Query, VersionQuery},
 };
 
+// NOTE: Bump this if changing any behavior that impacts output binary data for assets, to ensure ETag is cache-broken.
+const ASSET_ETAG_VERSION: usize = 2;
+
 pub fn router() -> ApiRouter<service::State> {
 	ApiRouter::new().api_route("/*path", get_with(asset, asset_docs))
 }
@@ -121,7 +124,7 @@ fn etag(path: &str, format: Format, version: VersionKey) -> ETag {
 	format.extension().hash(&mut hasher);
 	let resource_hash = hasher.finish();
 
-	format!("\"{resource_hash:016x}.{version}\"")
+	format!("\"{resource_hash:016x}.{version}.{ASSET_ETAG_VERSION}\"")
 		.parse()
 		.expect("malformed etag")
 }

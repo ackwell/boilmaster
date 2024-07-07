@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use boilmaster::{asset, data, http, schema, search, tracing, version};
+use boilmaster::{asset, data, http, read, schema, search, tracing, version};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 struct Config {
 	// tracing: tracing::Config, - read individually.
 	http: http::Config,
-	data: data::Config,
+	read: read::Config,
 	version: version::Config,
 	schema: schema::Config,
 	search: search::Config,
@@ -46,8 +46,9 @@ async fn main() -> anyhow::Result<()> {
 	let version = Arc::new(
 		version::Manager::new(config.version).context("failed to create version manager")?,
 	);
-	let data = Arc::new(data::Data::new(config.data));
+	let data = Arc::new(data::Data::new());
 	let asset = Arc::new(asset::Service::new(data.clone()));
+	let read = Arc::new(read::Read::new(config.read));
 	let schema = Arc::new(
 		schema::Provider::new(config.schema, data.clone())
 			.context("failed to create schema provider")?,
@@ -70,8 +71,9 @@ async fn main() -> anyhow::Result<()> {
 		http::serve(
 			shutdown_token,
 			config.http,
-			data.clone(),
 			asset,
+			data.clone(),
+			read,
 			schema.clone(),
 			search.clone(),
 			version.clone(),

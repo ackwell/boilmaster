@@ -10,6 +10,7 @@ use git_version::git_version;
 use maud::{html, DOCTYPE};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tower_http::cors::CorsLayer;
 
 use crate::http::service;
 
@@ -43,6 +44,7 @@ pub fn router(config: Config) -> Router<service::State> {
 			version::router().with_path_items(|item| item.tag("versions")),
 		)
 		.finish_api_with(&mut openapi, api_docs)
+		.layer(CorsLayer::permissive())
 		.route(OPENAPI_JSON_ROUTE, get(openapi_json))
 		.route("/docs", get(scalar))
 		.layer(Extension(Arc::new(openapi)))

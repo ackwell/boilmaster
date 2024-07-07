@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-	data::LanguageString,
 	http::service,
+	read::LanguageString,
 	schema,
 	search::{query, SearchRequest as InnerSearchRequest, SearchRequestQuery},
 };
@@ -68,14 +68,14 @@ async fn search(
 	Query(search_query): Query<SearchQuery>,
 	Query(schema_query): Query<SchemaQuery>,
 	Query(language_query): Query<LanguageQuery>,
-	State(data): State<service::Data>,
+	State(read): State<service::Read>,
 	State(schema_provider): State<service::Schema>,
 	State(search): State<service::Search>,
 ) -> Result<impl IntoResponse> {
 	let language = language_query
 		.language
 		.map(Language::from)
-		.unwrap_or_else(|| data.default_language());
+		.unwrap_or_else(|| read.default_language());
 
 	// TODO: this should probably be in a seperate function
 	let request = match search_query.request {
