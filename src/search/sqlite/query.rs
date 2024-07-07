@@ -11,7 +11,7 @@ use sea_query::{
 };
 
 use crate::{
-	data::LanguageString,
+	read::LanguageString,
 	search::{error::Result, internal_query::post},
 };
 

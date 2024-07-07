@@ -14,7 +14,7 @@ use nom::{
 };
 use serde::{de, Deserialize};
 
-use crate::{data, search::Error};
+use crate::{read, search::Error};
 
 use super::pre;
 
@@ -94,7 +94,7 @@ fn field_specifier_struct(input: &str) -> IResult<&str, pre::FieldSpecifier> {
 	})(input)
 }
 
-fn language(input: &str) -> IResult<&str, data::LanguageString> {
+fn language(input: &str) -> IResult<&str, read::LanguageString> {
 	map_res(preceded(tag(LANGUAGE_SIGIL), alphanumeric), str::parse)(input)
 }
 
