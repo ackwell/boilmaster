@@ -4,30 +4,23 @@ use std::{
 };
 
 use anyhow::Context;
-use ironworks::{
-	excel::{Excel, Language},
-	sqpack::SqPack,
-	zipatch, Ironworks,
+use ironworks::{excel::Excel, sqpack::SqPack, zipatch, Ironworks};
+use tokio::{
+	select,
+	sync::{broadcast, watch},
 };
-use serde::Deserialize;
-use tokio::{select, sync::watch};
 use tokio_util::sync::CancellationToken;
 
-use crate::version::{self, VersionKey};
+use crate::version::{self, VersionKey, VersionMessage};
 
-use super::{
-	error::{Error, Result},
-	language::LanguageString,
-};
+use super::error::{Error, Result};
 
-#[derive(Debug, Deserialize)]
-pub struct Config {
-	language: LanguageString,
+enum OnKnown {
+	Skip,
+	Prepare,
 }
 
 pub struct Data {
-	default_language: Language,
-
 	channel: watch::Sender<Vec<VersionKey>>,
 
 	// Root ZiPatch instance, acts as a LUT cache
@@ -37,11 +30,10 @@ pub struct Data {
 }
 
 impl Data {
-	pub fn new(config: Config) -> Self {
+	pub fn new() -> Self {
 		let (sender, _receiver) = watch::channel(vec![]);
 
 		Data {
-			default_language: config.language.into(),
 			channel: sender,
 			zipatch: zipatch::ZiPatch::new().with_persisted_lookups(),
 			versions: Default::default(),
@@ -54,29 +46,28 @@ impl Data {
 		self.versions.read().expect("poisoned").len() > 0
 	}
 
-	pub fn default_language(&self) -> Language {
-		self.default_language
-	}
-
 	pub fn subscribe(&self) -> watch::Receiver<Vec<VersionKey>> {
 		self.channel.subscribe()
 	}
 
 	pub async fn start(&self, cancel: CancellationToken, version: &version::Manager) -> Result<()> {
-		let execute_prepare = |versions: Vec<VersionKey>| async {
-			select! {
-				result = self.prepare_new_versions(version, versions) => result,
-				_ = cancel.cancelled() => Ok(()),
-			}
-		};
-
+		// Grab a receiver for version info early, so any information while we prepare is not lost.
 		let mut receiver = version.subscribe();
 
-		execute_prepare(receiver.borrow().clone()).await?;
+		// Start preparing versions already known by the version system.
+		self.hydrate_versions(version, version.keys(), OnKnown::Prepare)?;
 
 		loop {
 			select! {
-				Ok(_) = receiver.changed() => execute_prepare(receiver.borrow().clone()).await?,
+				result = receiver.recv() => match result {
+					Ok(VersionMessage::Hydrate(keys)) => self.hydrate_versions(version, keys, OnKnown::Skip)?,
+					Ok(VersionMessage::Changed(key)) => self.prepare_version(version, key)?,
+					Err(broadcast::error::RecvError::Lagged(skipped)) => {
+						tracing::warn!(skipped, "re-hydrating due to channel lag");
+						self.hydrate_versions(version, version.keys(), OnKnown::Prepare)?;
+					},
+					Err(broadcast::error::RecvError::Closed) => break,
+				},
 				_ = cancel.cancelled() => break,
 			}
 		}
@@ -84,23 +75,33 @@ impl Data {
 		Ok(())
 	}
 
-	async fn prepare_new_versions(
+	fn hydrate_versions(
 		&self,
 		version: &version::Manager,
 		versions: Vec<VersionKey>,
+		on_known: OnKnown,
 	) -> Result<()> {
 		// Filter the incoming version list down to the ones we're not already aware of.
-		let known_keys = self
-			.versions
-			.read()
-			.expect("poisoned")
-			.keys()
-			.cloned()
-			.collect::<HashSet<_>>();
+		let known_keys = match on_known {
+			OnKnown::Prepare => None,
+			OnKnown::Skip => Some(
+				self.versions
+					.read()
+					.expect("poisoned")
+					.keys()
+					.cloned()
+					.collect::<HashSet<_>>(),
+			),
+		};
 
 		let results = versions
 			.into_iter()
-			.filter(|key| !known_keys.contains(key))
+			.filter(|key| {
+				known_keys
+					.as_ref()
+					.map(|keys| !keys.contains(key))
+					.unwrap_or(true)
+			})
 			.map(|key| {
 				self.prepare_version(version, key)
 					.map_err(|error| (key, error))

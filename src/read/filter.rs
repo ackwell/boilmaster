@@ -10,6 +10,7 @@ pub enum Filter {
 	All,
 }
 
+// TODO: Merge with LanguageString?
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Language(pub excel::Language);
 impl IsEnabled for Language {}

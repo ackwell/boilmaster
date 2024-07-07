@@ -1,9 +1,7 @@
 mod data;
 mod error;
-mod language;
 
 pub use {
-	data::{Config, Data, Version},
+	data::{Data, Version},
 	error::Error,
-	language::LanguageString,
 };

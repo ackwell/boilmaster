@@ -12,7 +12,7 @@ use fs4::FileExt;
 use futures::future::{join_all, try_join_all};
 use nonempty::NonEmpty;
 use serde::{Deserialize, Serialize};
-use tokio::{select, sync::watch, time};
+use tokio::{select, sync::broadcast, time};
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -33,6 +33,20 @@ pub struct Config {
 	repositories: Vec<String>,
 }
 
+/// Messgages that may be broadcast by the version system.
+#[derive(Debug, Clone)]
+pub enum VersionMessage {
+	/// Version data has been hydrated from disk. Version keys associated with
+	/// this event will exist. It can be assumed that no change since previous
+	/// messages has occured to these versions.
+	Hydrate(Vec<VersionKey>),
+
+	/// A version was added or updated. It should be assumed that some detail
+	/// about the associated version has changed, and any caches of data are
+	/// stale.
+	Changed(VersionKey),
+}
+
 pub struct Manager {
 	provider: thaliak::Provider,
 	patcher: patcher::Patcher,
@@ -44,7 +58,7 @@ pub struct Manager {
 	versions: RwLock<HashMap<VersionKey, Version>>,
 	names: RwLock<HashMap<String, VersionKey>>,
 
-	channel: watch::Sender<Vec<VersionKey>>,
+	channel: broadcast::Sender<VersionMessage>,
 }
 
 impl Manager {
@@ -52,7 +66,8 @@ impl Manager {
 		let directory = config.directory.relative();
 		fs::create_dir_all(&directory)?;
 
-		let (sender, _receiver) = watch::channel(vec![]);
+		// Realistically; we're only going to signal one version at a time - 10 should be more than enough for our use cases.
+		let (sender, _receiver) = broadcast::channel(10);
 
 		Ok(Self {
 			provider: thaliak::Provider::new(config.thaliak),
@@ -76,7 +91,7 @@ impl Manager {
 	}
 
 	/// Subscribe to changes to the version list.
-	pub fn subscribe(&self) -> watch::Receiver<Vec<VersionKey>> {
+	pub fn subscribe(&self) -> broadcast::Receiver<VersionMessage> {
 		self.channel.subscribe()
 	}
 
@@ -232,7 +247,8 @@ impl Manager {
 		)?;
 
 		// There's a change to versions, broadcast as such.
-		self.broadcast();
+		// We don't care if anyone is actually listening on the channel.
+		let _ = self.channel.send(VersionMessage::Changed(key));
 
 		Ok(())
 	}
@@ -309,7 +325,8 @@ impl Manager {
 		}
 
 		// Hydration is complete - broadcast the version list.
-		self.broadcast();
+		let keys = versions.keys().copied().collect::<Vec<_>>();
+		let _ = self.channel.send(VersionMessage::Hydrate(keys));
 
 		Ok(())
 	}
@@ -387,27 +404,6 @@ impl Manager {
 			Ok(())
 		});
 		join_handle.await?
-	}
-
-	fn broadcast(&self) {
-		let keys = self
-			.versions
-			.read()
-			.expect("poisoned")
-			.keys()
-			.copied()
-			.collect::<Vec<_>>();
-
-		// TODO: Currently, a change to the patch path of latest (or any other version, not that that would happen), won't be broadcast (no change to the key list), which means consumers won't pick up on the changed patch path until the system is restarted. That, in turn, means that deprecated patches in a patch path are difficult to invalidate and remove. This isn't a huge issue, but realistically a channel should be used for comms rather than a watched value.
-		self.channel.send_if_modified(|value| {
-			let modified = &keys != value;
-
-			if modified {
-				*value = keys;
-			}
-
-			modified
-		});
 	}
 }
 

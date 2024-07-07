@@ -25,10 +25,13 @@ struct RepositoryQuery;
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	endpoint: String,
+	// {repository: {version: next_version}}
+	overrides: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 pub struct Provider {
 	endpoint: String,
+	overrides: HashMap<String, HashMap<String, String>>,
 	client: reqwest::Client,
 }
 
@@ -36,6 +39,7 @@ impl Provider {
 	pub fn new(config: Config) -> Self {
 		Self {
 			endpoint: config.endpoint,
+			overrides: config.overrides.unwrap_or_default(),
 			client: reqwest::Client::new(),
 		}
 	}
@@ -62,7 +66,7 @@ impl Provider {
 		let data = response
 			.data
 			.and_then(|data| data.repository)
-			.ok_or_else(|| anyhow::anyhow!("TODO: received no data from thaliak"))?;
+			.ok_or_else(|| anyhow::anyhow!("received no data for repository \"{repository}\""))?;
 
 		// Build a lookup of versions by their name string.
 		let versions = data
@@ -71,7 +75,9 @@ impl Provider {
 			.map(|version| (&version.version_string, version))
 			.collect::<HashMap<_, _>>();
 
-		// TODO: this next_version handling effectively results in erroneous links causing empty or partial patch lists. consider if that's a problem.
+		let overrides = self.overrides.get(&repository);
+
+		// TODO: this next_version handling effectively results in erroneous links causing empty or partial patch lists. consider if that's a problem. (it is)
 		let mut patches = vec![];
 		let mut next_version = versions.get(&data.latest_version.version_string).copied();
 
@@ -92,6 +98,26 @@ impl Provider {
 				url: patch.url.clone(),
 				size: patch.size.try_into().unwrap(),
 			});
+
+			// If there's an override for this version, use that and skip checking the active patches.
+			if let Some(next_version_string) =
+				overrides.and_then(|x| x.get(&version.version_string))
+			{
+				match versions.get(&next_version_string) {
+					None => {
+						tracing::warn!(
+							current = version.version_string,
+							next = next_version_string,
+							"next version manual override not found, falling back to default behavior"
+						);
+					}
+
+					Some(version) => {
+						next_version = Some(version);
+						continue;
+					}
+				}
+			}
 
 			// Grab the prerequsite versions, ignoring any that we've seen (to avoid
 			// dependency cycles), or that are inactive (to avoid deprecated patches).
