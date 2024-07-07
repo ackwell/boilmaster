@@ -40,14 +40,15 @@ nom = "7.1.1"
 regex = "1.10.5"
 # regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
-rusqlite = { version = "0.31.0", features = ["bundled", "vtab"] }
+rusqlite = { version = "0.30.0", features = ["bundled", "vtab"] }
 schemars = { version = "0.8.21", features = ["preserve_order"] }
-sea-query = { version = "0.30.7", default-features = false, features = [
+sea-query = { version = "0.30.0", default-features = false, features = [
     "backend-sqlite",
     "derive",
     "thread-safe",
 ] }
 # sea-query-binder = { version = "0.5", features = ["sqlx-sqlite"] }
+sea-query-rusqlite = { version = "0.5.0" }
 seahash = "4.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.95"

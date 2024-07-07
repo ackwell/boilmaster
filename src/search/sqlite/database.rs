@@ -7,7 +7,9 @@ use std::{
 
 use bb8::Pool;
 use ironworks::excel::{Excel, Language, Sheet};
-use sea_query::{ColumnDef, Expr, Iden, Query, SqliteQueryBuilder, Table};
+use itertools::Itertools;
+use sea_query::{ColumnDef, Expr, Iden, Query, Quote, SqliteQueryBuilder, Table};
+use sea_query_rusqlite::RusqliteBinder;
 // use sea_query_binder::SqlxBinder;
 // use sqlx::{
 // 	sqlite::{SqliteConnectOptions, SqliteSynchronous},
@@ -15,11 +17,12 @@ use sea_query::{ColumnDef, Expr, Iden, Query, SqliteQueryBuilder, Table};
 // };
 
 use crate::{
+	read::LanguageString,
 	search::{error::Result, internal_query::post, search::SearchResult},
 	version::VersionKey,
 };
 
-use super::connection::SqliteConnectionManager;
+use super::{connection::SqliteConnectionManager, query::resolve_queries, schema::table_name};
 
 fn max_values() -> usize {
 	static MAX_VALUES: OnceLock<usize> = OnceLock::new();
@@ -69,18 +72,18 @@ impl Database {
 
 		// NOTE: There's little point in trying to parallelise this, as sqlite only supports one writer at a time.
 		// TODO: WAL mode may impact this - r&d required.
-		for sheet in &sheets {
-			// if completed_sheets.contains(&sheet.name()) {
-			// 	skipped += 1;
-			// 	continue;
-			// }
+		// for sheet in &sheets {
+		// 	if completed_sheets.contains(&sheet.name()) {
+		// 		skipped += 1;
+		// 		continue;
+		// 	}
 
-			for language in sheet.languages()? {
-				self.ingest_sheet(sheet, language).await?;
-			}
+		// 	for language in sheet.languages()? {
+		// 		self.ingest_sheet(sheet, language).await?;
+		// 	}
 
-			// self.mark_completed(sheet).await?;
-		}
+		// self.mark_completed(sheet).await?;
+		// }
 
 		// if sheets.len() - skipped > 0 {
 		// 	tracing::info!("ingestion complete");
@@ -90,10 +93,29 @@ impl Database {
 		// 	}
 		// }
 
+		let connection = self.pool.get().await?;
+
+		for sheet in sheets {
+			let name = sheet.name();
+			let languages = sheet.languages()?;
+			let tables = languages
+				.into_iter()
+				.map(|language| {
+					let table_name = table_name(&name, language).quoted(Quote::new(b'"'));
+					let language_string = LanguageString::from(language);
+					format!(
+						r#"CREATE VIRTUAL TABLE "{table_name}" USING ironworks(sheet={name}, language={language_string});"#
+					)
+				})
+				.join("\n");
+			connection.execute_batch(&format!("BEGIN;\n{tables}\nCOMMIT;"))?;
+		}
+
 		Ok(())
 	}
 
 	async fn ingest_sheet(&self, sheet: &Sheet<'static, String>, language: Language) -> Result<()> {
+		todo!("ingest sheet");
 		// tracing::debug!(sheet = sheet.name(), ?language, "ingesting");
 
 		// // Drop any existing table by this name. May occur if a prior instance was interrupted during ingestion.
@@ -133,17 +155,6 @@ impl Database {
 		// 	let (query, values) = statement.build_sqlx(SqliteQueryBuilder);
 		// 	sqlx::query_with(&query, values).execute(&self.pool).await?;
 		// }
-
-		// TODO: i can probably ditch the entire ingest_sheet function and do one huge batch of tables direclty
-		let connection = self.pool.get().await?;
-		connection.execute_batch(
-			"BEGIN;
-			CREATE VIRTUAL TABLE \"sheet-Item@en\" USING ironworks(sheet=Item, language=en);
-			COMMIT;",
-		)?;
-		todo!("handle ingest");
-
-		Ok(())
 	}
 
 	async fn completed_sheets(&self) -> Result<HashSet<String>> {
@@ -181,10 +192,23 @@ impl Database {
 	}
 
 	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Result<Vec<SearchResult>> {
-		todo!("search")
-		// let statement = resolve_queries(queries);
-		// let (db_query, values) = statement.build_sqlx(SqliteQueryBuilder);
-		// // TODO: not a fan of this implicit structure shared between query and here
+		let statement = resolve_queries(queries);
+		let (query, values) = statement.build_rusqlite(SqliteQueryBuilder);
+
+		let connection = self.pool.get().await?;
+		let mut statement = connection.prepare(&query)?;
+		// TODO: not a fan of this implicit structure shared between query and here
+		let search_results = statement
+			.query_map(&*values.as_params(), |row| {
+				Ok(SearchResult {
+					sheet: row.get(0)?,
+					row_id: row.get(1)?,
+					subrow_id: 0, // TODO
+					score: row.get(2)?,
+				})
+			})?
+			.collect::<Result<_, _>>()?;
+
 		// let results: Vec<(String, u32, f32)> = sqlx::query_as_with(&db_query, values)
 		// 	.fetch_all(&self.pool)
 		// 	.await?;
@@ -199,6 +223,6 @@ impl Database {
 		// 	})
 		// 	.collect();
 
-		// Ok(search_results)
+		Ok(search_results)
 	}
 }

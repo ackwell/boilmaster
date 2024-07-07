@@ -15,7 +15,7 @@ use crate::{
 	search::{error::Result, internal_query::post},
 };
 
-use super::schema::{column_name, column_type, KnownColumn};
+use super::schema::{column_name, column_type, table_name, KnownColumn};
 
 pub fn table_create(sheet: &Sheet<String>, language: Language) -> Result<TableCreateStatement> {
 	let kind = sheet.kind()?;
@@ -77,11 +77,6 @@ pub fn table_insert(sheet: &Sheet<String>, language: Language) -> Result<InsertS
 		.to_owned();
 
 	Ok(statement)
-}
-
-fn table_name(sheet_name: &str, language: Language) -> Alias {
-	let language_string = LanguageString::from(language);
-	Alias::new(format!("sheet-{sheet_name}@{language_string}"))
 }
 
 // TODO: update IW to return an iterator over col defs so this cols param isn't required for shared access
