@@ -53,7 +53,9 @@ macro_rules! impl_to_failure {
 
 // TODO: Consider if any of these need to split out some of the error types into not-failure.
 impl_to_failure!(anyhow::Error);
+impl_to_failure!(bb8::RunError<rusqlite::Error>);
 impl_to_failure!(ironworks::Error);
+impl_to_failure!(rusqlite::Error);
 impl_to_failure!(serde_json::Error);
 // impl_to_failure!(sqlx::Error);
 impl_to_failure!(std::io::Error);

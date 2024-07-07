@@ -7,8 +7,10 @@ publish = false
 [dependencies]
 aide = { version = "0.13.4", features = ["axum", "axum-headers", "macros"] }
 anyhow = "1.0.55"
+async-trait = "0.1.80"
 axum = { version = "0.7.5", features = ["macros"] }
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
+bb8 = "0.8.5"
 console-subscriber = "0.2.0"
 derivative = "2.2.0"
 either = "1.8.0"
@@ -38,6 +40,7 @@ nom = "7.1.1"
 regex = "1.10.5"
 # regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
+rusqlite = { version = "0.31.0", features = ["bundled", "vtab"] }
 schemars = { version = "0.8.21", features = ["preserve_order"] }
 sea-query = { version = "0.30.7", default-features = false, features = [
     "backend-sqlite",

@@ -107,7 +107,8 @@ impl Provider {
 			Entry::Vacant(entry) => {
 				// todo log?
 				let database = Database::new(
-					&self.directory.join(format!("version-{version}")),
+					// &self.directory.join(format!("version-{version}")),
+					version,
 					self.max_batch_size,
 				);
 				entry.insert(Arc::new(database))
