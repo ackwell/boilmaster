@@ -5,7 +5,7 @@ use rusqlite::{vtab, Connection};
 use sea_query::{Alias, ColumnDef, SqliteQueryBuilder, Table};
 
 use crate::{
-	data::LanguageString,
+	read::LanguageString,
 	search::sqlite::schema::{column_name, column_type},
 };
 
