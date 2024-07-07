@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::{
+	data::Data,
 	search::{error::Result, internal_query::post, search::SearchResult},
 	version::VersionKey,
 };
@@ -36,6 +37,8 @@ pub enum SearchRequest {
 }
 
 pub struct Provider {
+	data: Arc<Data>,
+
 	directory: PathBuf,
 	max_batch_size: usize,
 
@@ -43,11 +46,12 @@ pub struct Provider {
 }
 
 impl Provider {
-	pub fn new(config: Config) -> Result<Self> {
+	pub fn new(config: Config, data: Arc<Data>) -> Result<Self> {
 		let directory = config.directory.relative();
 		fs::create_dir_all(&directory)?;
 
 		Ok(Self {
+			data,
 			directory,
 			max_batch_size: config.max_batch_size,
 			databases: Default::default(),
@@ -85,7 +89,7 @@ impl Provider {
 		sheets: Vec<Sheet<'static, String>>,
 	) -> Result<()> {
 		let span = tracing::info_span!("ingest", %version);
-		let database = self.database(version);
+		let database = self.database(version)?;
 		tokio::task::spawn(async move { database.ingest(sheets).await }.instrument(span)).await?
 	}
 
@@ -95,26 +99,28 @@ impl Provider {
 			// TODO: presumably cursor will just have an offset we fetch? - try and find some sorting key that can be used in a where instead?
 		};
 
-		let database = self.database(version);
+		let database = self.database(version)?;
 
 		database.search(queries).await
 	}
 
-	fn database(&self, version: VersionKey) -> Arc<Database> {
+	fn database(&self, version: VersionKey) -> Result<Arc<Database>> {
 		let mut write_handle = self.databases.write().expect("poisoned");
 		let database = match write_handle.entry(version) {
 			Entry::Occupied(entry) => entry.into_mut(),
 			Entry::Vacant(entry) => {
 				// todo log?
+				let excel = self.data.version(version)?.excel();
 				let database = Database::new(
 					// &self.directory.join(format!("version-{version}")),
 					version,
 					self.max_batch_size,
+					excel,
 				);
 				entry.insert(Arc::new(database))
 			}
 		};
 
-		Arc::clone(database)
+		Ok(Arc::clone(database))
 	}
 }

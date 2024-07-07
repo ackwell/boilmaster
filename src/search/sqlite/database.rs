@@ -1,7 +1,12 @@
-use std::{cmp, collections::HashSet, path::Path, sync::OnceLock};
+use std::{
+	cmp,
+	collections::HashSet,
+	path::Path,
+	sync::{Arc, OnceLock},
+};
 
 use bb8::Pool;
-use ironworks::excel::{Language, Sheet};
+use ironworks::excel::{Excel, Language, Sheet};
 use sea_query::{ColumnDef, Expr, Iden, Query, SqliteQueryBuilder, Table};
 // use sea_query_binder::SqlxBinder;
 // use sqlx::{
@@ -37,7 +42,7 @@ pub struct Database {
 
 impl Database {
 	// pub fn new(path: &Path, max_batch_size: usize) -> Self {
-	pub fn new(version: VersionKey, max_batch_size: usize) -> Self {
+	pub fn new(version: VersionKey, max_batch_size: usize, excel: Arc<Excel<'static>>) -> Self {
 		// let options = SqliteConnectOptions::new()
 		// 	.filename(path)
 		// 	.create_if_missing(true)
@@ -45,7 +50,7 @@ impl Database {
 
 		// let pool = SqlitePool::connect_lazy_with(options);
 
-		let manager = SqliteConnectionManager::new(version);
+		let manager = SqliteConnectionManager::new(version, excel);
 
 		// TODO: should probably configure this a bit. stuff like a min idle of 1, etc. likely should be in config file
 		let pool = Pool::builder().build_unchecked(manager);

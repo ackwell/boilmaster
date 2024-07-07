@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use bb8::ManageConnection;
+use ironworks::excel::Excel;
 
 use crate::version::VersionKey;
 
@@ -7,11 +10,12 @@ use super::vtable;
 
 pub struct SqliteConnectionManager {
 	version: VersionKey,
+	excel: Arc<Excel<'static>>,
 }
 
 impl SqliteConnectionManager {
-	pub fn new(version: VersionKey) -> Self {
-		Self { version }
+	pub fn new(version: VersionKey, excel: Arc<Excel<'static>>) -> Self {
+		Self { version, excel }
 	}
 }
 
@@ -27,7 +31,7 @@ impl ManageConnection for SqliteConnectionManager {
 
 		connection.pragma_update(None, "synchronous", "OFF")?;
 
-		vtable::load_module(&connection)?;
+		vtable::load_module(&connection, self.excel.clone())?;
 
 		Ok(connection)
 	}

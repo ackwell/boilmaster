@@ -74,7 +74,7 @@ impl Search {
 		Ok(Self {
 			pagination_config: config.pagination,
 			// provider: Arc::new(tantivy::Provider::new(config.tantivy)?),
-			provider: Arc::new(sqlite::Provider::new(config.sqlite)?),
+			provider: Arc::new(sqlite::Provider::new(config.sqlite, data.clone())?),
 			data,
 		})
 	}
