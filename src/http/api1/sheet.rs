@@ -276,25 +276,26 @@ async fn sheet(
 
 	// Get a reference to the sheet we'll be reading from.
 	// TODO: should this be in super::error as a default extract? minus the sheet specialised case, that is
-	let sheet = excel.sheet(&path.sheet).map_err(|error| match error {
-		ironworks::Error::NotFound(ironworks::ErrorValue::Sheet(..)) => {
-			Error::NotFound(error.to_string())
-		}
-		other => Error::Other(other.into()),
-	})?;
+	let sheet = excel
+		.sheet(&path.sheet)
+		.map_err(|error| match error {
+			ironworks::Error::NotFound(ironworks::ErrorValue::Sheet(..)) => {
+				Error::NotFound(error.to_string())
+			}
+			other => Error::Other(other.into()),
+		})?
+		.with_default_language(language);
+
+	let sheet_kind = sheet.kind().anyhow()?;
 
 	// Iterate over the sheet, building row results.
-	// TODO: look into changing the row builder in iw so this assignment isn't required - moving to an owned value would also possibly allow me to move this builder into the None case below.
-	let mut builder = sheet.with();
-	builder.language(language);
-
 	let sheet_iterator = match query.rows {
 		// One or more row specifiers were provided, iterate over those specifically.
 		Some(specifiers) => Either::Left(specifiers.into_iter()),
 
 		// None were provided, iterate over the sheet itself.
 		// TODO: Currently, read:: does _all_ the row fetching itself, which means that we're effectively iterating the sheet here _just_ to get the row IDs, then re-fetching in the read:: code. This... probably isn't too problematic, but worth considering how to approach more betterer. If read:: can be modified to take a row, then the Some() case above can be specailised to the read-row logic and this case can be simplified.
-		None => Either::Right(builder.iter().map(|row| RowSpecifier {
+		None => Either::Right(sheet.into_iter().map(|row| RowSpecifier {
 			row_id: row.row_id(),
 			subrow_id: row.subrow_id(),
 		})),
@@ -311,7 +312,6 @@ async fn sheet(
 		.take(limit);
 
 	// Build Results for the targeted rows.
-	let sheet_kind = sheet.kind().anyhow()?;
 	let sheet_iterator = sheet_iterator.map(|specifier| {
 		let row_id = specifier.row_id;
 		let subrow_id = specifier.subrow_id;

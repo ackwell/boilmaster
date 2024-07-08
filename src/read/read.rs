@@ -120,7 +120,7 @@ fn read_sheet(context: ReaderContext) -> Result<Value> {
 
 fn get_sorted_columns(
 	schema: &schema::Sheet,
-	data: &excel::Sheet<'_, &str>,
+	data: &excel::Sheet<&str>,
 ) -> Result<Vec<exh::ColumnDefinition>> {
 	let mut columns = data.columns()?;
 
@@ -235,11 +235,8 @@ fn read_scalar_reference(
 
 		// Try to fetch the row data - if no matching row exists, continue to the next target.
 		// TODO: handle target selectors
-		let row_data = match sheet_data
-			.with()
-			.language(context.validated_language()?)
-			.row(target_value)
-		{
+		let validated_language = context.validated_language()?;
+		let row_data = match sheet_data.row_with_options(target_value, validated_language) {
 			Err(ironworks::Error::NotFound(ironworks::ErrorValue::Row { .. })) => continue,
 			other => other,
 		}?;
@@ -505,7 +502,7 @@ fn unknown_suffix(kind: exh::ColumnKind) -> &'static str {
 struct ReaderContext<'a> {
 	read: &'a Read,
 
-	excel: &'a excel::Excel<'a>,
+	excel: &'a excel::Excel,
 	schema: &'a dyn schema::Schema,
 
 	sheet: &'a str,
@@ -533,13 +530,13 @@ impl ReaderContext<'_> {
 
 		let row = match self.rows.entry(language) {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
-			hash_map::Entry::Vacant(entry) => entry.insert(
-				self.excel
-					.sheet(self.sheet)?
-					.with()
-					.language(language)
-					.subrow(self.row_id, self.subrow_id)?,
-			),
+			hash_map::Entry::Vacant(entry) => {
+				entry.insert(self.excel.sheet(self.sheet)?.subrow_with_options(
+					self.row_id,
+					self.subrow_id,
+					language,
+				)?)
+			}
 		};
 
 		Ok(row.field(column)?)
