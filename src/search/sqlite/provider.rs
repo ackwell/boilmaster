@@ -61,7 +61,7 @@ impl Provider {
 	pub async fn ingest(
 		self: Arc<Self>,
 		cancel: CancellationToken,
-		sheets: Vec<(VersionKey, Sheet<'static, String>)>,
+		sheets: Vec<(VersionKey, Sheet<String>)>,
 	) -> Result<()> {
 		// Group by database key and run per-DB ingestions concurrently. Realistically
 		// Sqlite doesn't support multiple writers on a single DB, but that's left as
@@ -83,11 +83,7 @@ impl Provider {
 		Ok(())
 	}
 
-	async fn ingest_version(
-		&self,
-		version: VersionKey,
-		sheets: Vec<Sheet<'static, String>>,
-	) -> Result<()> {
+	async fn ingest_version(&self, version: VersionKey, sheets: Vec<Sheet<String>>) -> Result<()> {
 		let span = tracing::info_span!("ingest", %version);
 		let database = self.database(version)?;
 		tokio::task::spawn(async move { database.ingest(sheets).await }.instrument(span)).await?

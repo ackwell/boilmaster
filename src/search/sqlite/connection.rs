@@ -10,11 +10,11 @@ use super::vtable;
 
 pub struct SqliteConnectionManager {
 	version: VersionKey,
-	excel: Arc<Excel<'static>>,
+	excel: Arc<Excel>,
 }
 
 impl SqliteConnectionManager {
-	pub fn new(version: VersionKey, excel: Arc<Excel<'static>>) -> Self {
+	pub fn new(version: VersionKey, excel: Arc<Excel>) -> Self {
 		Self { version, excel }
 	}
 }

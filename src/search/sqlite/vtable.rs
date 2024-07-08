@@ -11,10 +11,7 @@ use crate::{
 
 use super::schema::KnownColumn;
 
-pub fn load_module(
-	connection: &Connection,
-	excel: Arc<excel::Excel<'static>>,
-) -> rusqlite::Result<()> {
+pub fn load_module(connection: &Connection, excel: Arc<excel::Excel>) -> rusqlite::Result<()> {
 	let module = vtab::read_only_module::<'_, IronworksTable>();
 	connection.create_module("ironworks", module, Some(excel))
 }
@@ -24,13 +21,13 @@ pub fn load_module(
 struct IronworksTable {
 	base: vtab::sqlite3_vtab,
 
-	excel: Arc<excel::Excel<'static>>,
+	excel: Arc<excel::Excel>,
 	sheet: String,
 	language: excel::Language,
 }
 
 unsafe impl<'vtab> vtab::VTab<'vtab> for IronworksTable {
-	type Aux = Arc<excel::Excel<'static>>;
+	type Aux = Arc<excel::Excel>;
 
 	type Cursor = IronworksTableCursor<'vtab>;
 

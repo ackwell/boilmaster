@@ -45,7 +45,7 @@ pub struct Database {
 
 impl Database {
 	// pub fn new(path: &Path, max_batch_size: usize) -> Self {
-	pub fn new(version: VersionKey, max_batch_size: usize, excel: Arc<Excel<'static>>) -> Self {
+	pub fn new(version: VersionKey, max_batch_size: usize, excel: Arc<Excel>) -> Self {
 		// let options = SqliteConnectOptions::new()
 		// 	.filename(path)
 		// 	.create_if_missing(true)
@@ -64,7 +64,7 @@ impl Database {
 		}
 	}
 
-	pub async fn ingest(&self, sheets: Vec<Sheet<'static, String>>) -> Result<()> {
+	pub async fn ingest(&self, sheets: Vec<Sheet<String>>) -> Result<()> {
 		// TODO: I should store some form of atomic bool to mark this DB as """ingested""" - in that the vtable schemas have been initialised
 
 		// let completed_sheets = self.completed_sheets().await?;
@@ -114,7 +114,7 @@ impl Database {
 		Ok(())
 	}
 
-	async fn ingest_sheet(&self, sheet: &Sheet<'static, String>, language: Language) -> Result<()> {
+	async fn ingest_sheet(&self, sheet: &Sheet<String>, language: Language) -> Result<()> {
 		todo!("ingest sheet");
 		// tracing::debug!(sheet = sheet.name(), ?language, "ingesting");
 
@@ -179,7 +179,7 @@ impl Database {
 		// Ok(results.into_iter().map(|(name,)| name).collect())
 	}
 
-	async fn mark_completed(&self, sheet: &Sheet<'_, String>) -> Result<()> {
+	async fn mark_completed(&self, sheet: &Sheet<String>) -> Result<()> {
 		todo!("mark completed")
 		// let (query, values) = Query::insert()
 		// 	.into_table(Metadata::Table)

@@ -20,7 +20,7 @@ struct Context<'a> {
 }
 
 pub struct Normalizer<'a> {
-	excel: &'a excel::Excel<'a>,
+	excel: &'a excel::Excel,
 	schema: &'a dyn schema::Schema,
 }
 
