@@ -185,7 +185,7 @@ impl Data {
 
 pub struct Version {
 	ironworks: Arc<Ironworks>,
-	excel: Arc<Excel<'static>>,
+	excel: Arc<Excel>,
 }
 
 impl Version {
@@ -199,7 +199,7 @@ impl Version {
 		self.ironworks.clone()
 	}
 
-	pub fn excel(&self) -> Arc<Excel<'static>> {
+	pub fn excel(&self) -> Arc<Excel> {
 		self.excel.clone()
 	}
 }
