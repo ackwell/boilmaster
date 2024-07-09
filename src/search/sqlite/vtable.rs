@@ -106,8 +106,30 @@ unsafe impl<'vtab> vtab::VTab<'vtab> for IronworksTable {
 	}
 
 	fn best_index(&self, info: &mut vtab::IndexInfo) -> rusqlite::Result<()> {
-		// TODO: set up an index for row id relations.
-		info.set_estimated_cost(1000000_f64);
+		let mut use_row_id = false;
+		for (constraint, mut usage) in info.constraints_and_usages() {
+			// Optimisation: If any of the constraints include an EQ targeting a row_id, we can skip scanning the table.
+			// TODO: If i add ROWID support to this, it's also applicable for this lookup.
+			if constraint.is_usable()
+				&& constraint.column() == 0
+				&& constraint.operator() == vtab::IndexConstraintOp::SQLITE_INDEX_CONSTRAINT_EQ
+			{
+				use_row_id = true;
+				usage.set_argv_index(1);
+			}
+		}
+
+		match use_row_id {
+			true => {
+				info.set_idx_num(Index::ROW_ID);
+				info.set_estimated_cost(1_f64);
+			}
+			false => {
+				info.set_idx_num(Index::SCAN);
+				info.set_estimated_cost(1000000_f64);
+			}
+		}
+
 		Ok(())
 	}
 
@@ -125,6 +147,28 @@ impl<'vtab> vtab::CreateVTab<'vtab> for IronworksTable {
 }
 
 #[derive(Debug)]
+enum Index {
+	Scan(excel::SheetIterator<String>),
+	RowId(Option<excel::Row>),
+}
+
+impl Index {
+	const SCAN: c_int = 0;
+	const ROW_ID: c_int = 1;
+}
+
+impl Iterator for Index {
+	type Item = excel::Row;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Scan(sheet_iterator) => sheet_iterator.next(),
+			Self::RowId(maybe_row) => maybe_row.take(),
+		}
+	}
+}
+
+#[derive(Debug)]
 #[repr(C)]
 struct IronworksTableCursor<'vtab> {
 	base: vtab::sqlite3_vtab_cursor,
@@ -134,7 +178,7 @@ struct IronworksTableCursor<'vtab> {
 	language: excel::Language,
 
 	// TODO: this should probably be an enum so i can handle multiple index types
-	state: Option<(Vec<exh::ColumnDefinition>, excel::SheetIterator<String>)>,
+	state: Option<(Vec<exh::ColumnDefinition>, Index)>,
 	next: Option<excel::Row>,
 
 	phantom: PhantomData<&'vtab ()>,
@@ -157,9 +201,9 @@ impl IronworksTableCursor<'_> {
 unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 	fn filter(
 		&mut self,
-		_index_number: c_int,
+		index_number: c_int,
 		_index_string: Option<&str>,
-		_arguments: &vtab::Values<'_>,
+		arguments: &vtab::Values<'_>,
 	) -> rusqlite::Result<()> {
 		let sheet = self
 			.excel
@@ -169,7 +213,19 @@ unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 
 		let columns = sheet.columns().map_err(module_error)?;
 
-		self.state = Some((columns, sheet.into_iter()));
+		let iterator = match index_number {
+			Index::SCAN => Index::Scan(sheet.into_iter()),
+			Index::ROW_ID => {
+				let row_id = arguments.get::<u32>(0)?;
+				// TODO: should this silently ->option instead?
+				let row = sheet.row(row_id).map_err(module_error)?;
+				Index::RowId(Some(row))
+			}
+
+			other => return Err(module_error(format!("unknown index {other}"))),
+		};
+
+		self.state = Some((columns, iterator));
 
 		self.next()
 	}
