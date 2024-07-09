@@ -1,7 +1,7 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, os::raw::c_int, sync::Arc};
 
-use ironworks::excel;
-use rusqlite::{vtab, Connection};
+use ironworks::{excel, file::exh};
+use rusqlite::{types::ToSqlOutput, vtab, Connection, ToSql};
 use sea_query::{Alias, ColumnDef, SqliteQueryBuilder, Table};
 
 use crate::{
@@ -106,11 +106,17 @@ unsafe impl<'vtab> vtab::VTab<'vtab> for IronworksTable {
 	}
 
 	fn best_index(&self, info: &mut vtab::IndexInfo) -> rusqlite::Result<()> {
-		todo!("best index")
+		// TODO: set up an index for row id relations.
+		info.set_estimated_cost(1000000_f64);
+		Ok(())
 	}
 
 	fn open(&'vtab mut self) -> rusqlite::Result<Self::Cursor> {
-		todo!("open")
+		Ok(IronworksTableCursor::new(
+			self.excel.clone(),
+			self.sheet.clone(),
+			self.language,
+		))
 	}
 }
 
@@ -123,33 +129,115 @@ impl<'vtab> vtab::CreateVTab<'vtab> for IronworksTable {
 struct IronworksTableCursor<'vtab> {
 	base: vtab::sqlite3_vtab_cursor,
 
+	excel: Arc<excel::Excel>,
+	sheet: String,
+	language: excel::Language,
+
+	// TODO: this should probably be an enum so i can handle multiple index types
+	state: Option<(Vec<exh::ColumnDefinition>, excel::SheetIterator<String>)>,
+	next: Option<excel::Row>,
+
 	phantom: PhantomData<&'vtab ()>,
+}
+
+impl IronworksTableCursor<'_> {
+	fn new(excel: Arc<excel::Excel>, sheet: String, language: excel::Language) -> Self {
+		Self {
+			base: Default::default(),
+			excel,
+			sheet,
+			language,
+			state: None,
+			next: None,
+			phantom: PhantomData,
+		}
+	}
 }
 
 unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 	fn filter(
 		&mut self,
-		idx_num: std::os::raw::c_int,
-		idx_str: Option<&str>,
-		args: &vtab::Values<'_>,
+		_index_number: c_int,
+		_index_string: Option<&str>,
+		_arguments: &vtab::Values<'_>,
 	) -> rusqlite::Result<()> {
-		todo!("filter")
+		let sheet = self
+			.excel
+			.sheet(self.sheet.clone())
+			.map_err(module_error)?
+			.with_default_language(self.language);
+
+		let columns = sheet.columns().map_err(module_error)?;
+
+		self.state = Some((columns, sheet.into_iter()));
+
+		self.next()
 	}
 
 	fn next(&mut self) -> rusqlite::Result<()> {
-		todo!("next")
+		let Some((_columns, iterator)) = &mut self.state else {
+			return Err(module_error("iterator was not initialised before next"));
+		};
+
+		self.next = iterator.next();
+
+		Ok(())
 	}
 
 	fn eof(&self) -> bool {
-		todo!("eof")
+		// NOTE: this assumes that, given .filter will set up the iterator and call next, and next will only set None if it's EOF, that next being none _is_ eof.
+		self.next.is_none()
 	}
 
-	fn column(&self, ctx: &mut vtab::Context, i: std::os::raw::c_int) -> rusqlite::Result<()> {
-		todo!("column")
+	fn column(&self, context: &mut vtab::Context, index: c_int) -> rusqlite::Result<()> {
+		let (Some(row), Some((columns, _iterator))) = (&self.next, &self.state) else {
+			return Err(module_error("trying to access column at eof"));
+		};
+
+		match index {
+			// First two columns are reserved for row IDs.
+			0 => context.set_result(&row.row_id().to_sql()?)?,
+			1 => context.set_result(&row.subrow_id().to_sql()?)?,
+
+			// Remainder index into the sheet column list.
+			other => {
+				let column_index = usize::try_from(other - 2).map_err(module_error)?;
+				let field = row.field(&columns[column_index]).map_err(module_error)?;
+				context.set_result(&FieldToSql(field))?;
+			}
+		}
+
+		Ok(())
 	}
 
 	fn rowid(&self) -> rusqlite::Result<i64> {
 		todo!("rowid")
+	}
+}
+
+struct FieldToSql(excel::Field);
+impl ToSql for FieldToSql {
+	fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+		Ok(match &self.0 {
+			// Strings need to be converted from SeString to plain strings.
+			excel::Field::String(value) => ToSqlOutput::Owned(value.to_string().into()),
+
+			// SQLite doesn't support u64, it only goes up to i64. Try mapping down.
+			excel::Field::U64(value) => {
+				ToSqlOutput::Owned(i64::try_from(*value).map_err(module_error)?.into())
+			}
+
+			// Trivial.
+			excel::Field::Bool(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::I8(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::I16(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::I32(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::I64(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::U8(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::U16(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::U32(value) => ToSqlOutput::Owned((*value).into()),
+			excel::Field::F32(value) => ToSqlOutput::Owned((*value).into()),
+		})
 	}
 }
 

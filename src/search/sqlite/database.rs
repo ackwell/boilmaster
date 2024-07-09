@@ -192,8 +192,8 @@ impl Database {
 	}
 
 	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Result<Vec<SearchResult>> {
-		let statement = resolve_queries(queries);
-		let (query, values) = statement.build_rusqlite(SqliteQueryBuilder);
+		let statement_builder = resolve_queries(queries);
+		let (query, values) = statement_builder.build_rusqlite(SqliteQueryBuilder);
 
 		let connection = self.pool.get().await?;
 		let mut statement = connection.prepare(&query)?;
