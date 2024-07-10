@@ -249,8 +249,8 @@ impl Database {
 				Ok(SearchResult {
 					sheet: row.get(0)?,
 					row_id: row.get(1)?,
-					subrow_id: 0, // TODO
-					score: row.get(2)?,
+					subrow_id: row.get(2)?,
+					score: row.get(3)?,
 				})
 			})?
 			.collect::<Result<_, _>>()?;

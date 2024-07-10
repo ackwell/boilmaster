@@ -188,7 +188,8 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 
 	// Select fields.
 	query.expr(Expr::val(&sheet_name));
-	query.column((base_alias, KnownColumn::RowId));
+	query.column((base_alias.clone(), KnownColumn::RowId));
+	query.column((base_alias, KnownColumn::SubrowId));
 	query.expr_as(score.cast_as(Alias::new("REAL")), KnownResolveColumn::Score);
 
 	query.cond_where(condition);
