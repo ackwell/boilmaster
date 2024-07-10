@@ -6,11 +6,12 @@ use std::{
 };
 
 use anyhow::anyhow;
-use bb8::Pool;
+use bb8::{Pool, PooledConnection};
 use ironworks::excel::{Excel, Language, Sheet};
 use itertools::Itertools;
 use sea_query::{ColumnDef, Expr, Iden, Query, Quote, SqliteQueryBuilder, Table};
 use sea_query_rusqlite::RusqliteBinder;
+use tokio::task;
 use tokio_util::sync::CancellationToken;
 // use sea_query_binder::SqlxBinder;
 // use sqlx::{
@@ -71,6 +72,10 @@ impl Database {
 		cancel: CancellationToken,
 		sheets: Vec<Sheet<String>>,
 	) -> Result<()> {
+		let connection = self.pool.get_owned().await?;
+		let task = task::spawn_blocking(move || Self::prepare(cancel, connection, sheets));
+		task.await??;
+		Ok(())
 		// TODO: I should store some form of atomic bool to mark this DB as """ingested""" - in that the vtable schemas have been initialised
 
 		// let completed_sheets = self.completed_sheets().await?;
@@ -98,9 +103,14 @@ impl Database {
 		// 		tracing::debug!("skipped {skipped} already-ingested sheets");
 		// 	}
 		// }
-		tracing::debug!("preparing search database");
+	}
 
-		let connection = self.pool.get().await?;
+	fn prepare(
+		cancel: CancellationToken,
+		connection: PooledConnection<SqliteConnectionManager>,
+		sheets: Vec<Sheet<String>>,
+	) -> Result<()> {
+		tracing::debug!("preparing search database");
 
 		for sheet in sheets {
 			// If we've been asked to cancel, do so.
@@ -123,7 +133,7 @@ impl Database {
 			connection.execute_batch(&format!("BEGIN;\n{tables}\nCOMMIT;"))?;
 		}
 
-		tracing::info!("search database ready");
+		tracing::debug!("search database ready");
 
 		Ok(())
 	}

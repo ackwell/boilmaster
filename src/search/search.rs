@@ -140,6 +140,8 @@ impl Search {
 		// At least one ingestion has occured, the service can be considered ready.
 		self.ready.store(true, Ordering::Relaxed);
 
+		tracing::info!("search ingestion complete");
+
 		Ok(())
 	}
 
