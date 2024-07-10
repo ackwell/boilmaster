@@ -2,7 +2,10 @@ use std::{
 	cmp,
 	collections::HashSet,
 	path::{Path, PathBuf},
-	sync::{Arc, OnceLock},
+	sync::{
+		atomic::{AtomicBool, Ordering},
+		Arc, OnceLock,
+	},
 };
 
 use anyhow::anyhow;
@@ -21,7 +24,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
 	read::LanguageString,
-	search::{error::Result, internal_query::post, search::SearchResult},
+	search::{
+		error::{Error, Result},
+		internal_query::post,
+		search::SearchResult,
+	},
 	version::VersionKey,
 };
 
@@ -44,6 +51,8 @@ pub struct Database {
 
 	// pool: SqlitePool,
 	pool: Pool<SqliteConnectionManager>,
+
+	ready: AtomicBool,
 }
 
 impl Database {
@@ -64,6 +73,7 @@ impl Database {
 		Self {
 			max_batch_size,
 			pool,
+			ready: false.into(),
 		}
 	}
 
@@ -72,11 +82,18 @@ impl Database {
 		cancel: CancellationToken,
 		sheets: Vec<Sheet<String>>,
 	) -> Result<()> {
+		// No need to re-ingest after initial stand-up.
+		if self.ready.load(Ordering::Relaxed) {
+			return Ok(());
+		}
+
 		let connection = self.pool.get_owned().await?;
 		let task = task::spawn_blocking(move || Self::prepare(cancel, connection, sheets));
 		task.await??;
+
+		self.ready.store(true, Ordering::Relaxed);
+
 		Ok(())
-		// TODO: I should store some form of atomic bool to mark this DB as """ingested""" - in that the vtable schemas have been initialised
 
 		// let completed_sheets = self.completed_sheets().await?;
 		// let mut skipped = 0;
@@ -216,6 +233,11 @@ impl Database {
 	}
 
 	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Result<Vec<SearchResult>> {
+		// Shoo off search requests when we're not ready yet.
+		if !self.ready.load(Ordering::Relaxed) {
+			return Err(Error::NotReady);
+		}
+
 		let statement_builder = resolve_queries(queries);
 		let (query, values) = statement_builder.build_rusqlite(SqliteQueryBuilder);
 

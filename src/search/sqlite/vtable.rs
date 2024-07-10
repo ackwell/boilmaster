@@ -203,7 +203,6 @@ struct IronworksTableCursor<'vtab> {
 	sheet: String,
 	language: excel::Language,
 
-	// TODO: this should probably be an enum so i can handle multiple index types
 	state: Option<(Vec<exh::ColumnDefinition>, Index)>,
 	next: Option<excel::Row>,
 
@@ -295,7 +294,9 @@ unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 	}
 
 	fn rowid(&self) -> rusqlite::Result<i64> {
-		todo!("rowid")
+		Err(module_error(
+			"ironworks virtual tables do not contain sqlite ROWIDs",
+		))
 	}
 }
 

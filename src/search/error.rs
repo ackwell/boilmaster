@@ -2,6 +2,9 @@ use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+	#[error("search for this version is not ready")]
+	NotReady,
+
 	#[error("invalid field value on {}: could not coerce {} value to {}", .0.field, .0.got, .0.expected)]
 	FieldType(FieldTypeError),
 
