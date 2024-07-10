@@ -92,6 +92,7 @@ impl Database {
 		// 		tracing::debug!("skipped {skipped} already-ingested sheets");
 		// 	}
 		// }
+		tracing::debug!("preparing search database");
 
 		let connection = self.pool.get().await?;
 
@@ -110,6 +111,8 @@ impl Database {
 				.join("\n");
 			connection.execute_batch(&format!("BEGIN;\n{tables}\nCOMMIT;"))?;
 		}
+
+		tracing::info!("search database ready");
 
 		Ok(())
 	}

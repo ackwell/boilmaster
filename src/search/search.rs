@@ -1,4 +1,11 @@
-use std::{borrow::Cow, collections::HashSet, sync::Arc};
+use std::{
+	borrow::Cow,
+	collections::HashSet,
+	sync::{
+		atomic::{AtomicBool, Ordering},
+		Arc,
+	},
+};
 
 use anyhow::Context;
 use derivative::Derivative;
@@ -63,6 +70,8 @@ pub struct SearchResult {
 pub struct Search {
 	pagination_config: PaginationConfig,
 
+	ready: AtomicBool,
+
 	// provider: Arc<tantivy::Provider>,
 	provider: Arc<sqlite::Provider>,
 
@@ -73,10 +82,15 @@ impl Search {
 	pub fn new(config: Config, data: Arc<Data>) -> Result<Self> {
 		Ok(Self {
 			pagination_config: config.pagination,
+			ready: false.into(),
 			// provider: Arc::new(tantivy::Provider::new(config.tantivy)?),
 			provider: Arc::new(sqlite::Provider::new(config.sqlite, data.clone())?),
 			data,
 		})
+	}
+
+	pub fn ready(&self) -> bool {
+		self.ready.load(Ordering::Relaxed)
 	}
 
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
@@ -97,6 +111,11 @@ impl Search {
 	}
 
 	async fn ingest(&self, cancel: CancellationToken, versions: Vec<VersionKey>) -> Result<()> {
+		// If there's no versions at all, there's nothing to do, bail.
+		if versions.is_empty() {
+			return Ok(());
+		}
+
 		// Get a list of all sheets in the provided versions.
 		// TODO: This has more `.collect`s than i'd like, but given it's a fairly cold path, probably isn't a problem.
 		let sheets = versions
@@ -106,19 +125,7 @@ impl Search {
 					format!("version {version} announced for ingestion but not provided")
 				})?;
 				let excel = data_version.excel();
-				// let list = excel.list()?;
-				// TEMP
-				let list = vec![
-					"Item",
-					"BaseParam",
-					"ItemLevel",
-					"ClassJob",
-					"ClassJobCategory",
-					"EquipSlotCategory",
-					"Status",
-					"Action",
-					"ItemRepairResource",
-				];
+				let list = excel.list()?;
 
 				list.iter()
 					.map(|sheet_name| Ok((version, excel.sheet(sheet_name.to_string())?)))
@@ -129,6 +136,9 @@ impl Search {
 
 		// Fire off the ingestion in the provider.
 		Arc::clone(&self.provider).ingest(cancel, sheets).await?;
+
+		// At least one ingestion has occured, the service can be considered ready.
+		self.ready.store(true, Ordering::Relaxed);
 
 		Ok(())
 	}
