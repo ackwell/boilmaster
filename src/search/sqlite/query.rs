@@ -1,124 +1,14 @@
 use std::collections::HashSet;
 
-use ironworks::{
-	excel::{Field, Language, Row, Sheet},
-	file::exh,
-};
+use ironworks::excel::Language;
 use sea_query::{
-	Alias, ColumnDef, ColumnRef, ColumnType, Condition, DynIden, Expr, Func, Iden, Index,
-	InsertStatement, IntoColumnRef, IntoCondition, Order, Query, SelectStatement, SimpleExpr,
-	Table, TableCreateStatement, TableDropStatement, TableRef, UnionType,
+	Alias, ColumnRef, Condition, DynIden, Expr, Func, Iden, IntoColumnRef, IntoCondition, Order,
+	Query, SelectStatement, SimpleExpr, TableRef, UnionType,
 };
 
-use crate::{
-	read::LanguageString,
-	search::{error::Result, internal_query::post},
-};
+use crate::{read::LanguageString, search::internal_query::post};
 
-use super::schema::{column_name, column_type, table_name, KnownColumn};
-
-pub fn table_create(sheet: &Sheet<String>, language: Language) -> Result<TableCreateStatement> {
-	let kind = sheet.kind()?;
-
-	// NOTE: Opting against a WITHOUT ROWID table for these - the benefits they
-	// confer aren't particularly meaningful for our workload.
-	let mut table = Table::create();
-	table.table(table_name(&sheet.name(), language));
-
-	match kind {
-		exh::SheetKind::Subrows => {
-			table
-				.col(ColumnDef::new(KnownColumn::RowId).integer())
-				.col(ColumnDef::new(KnownColumn::SubrowId).integer())
-				.primary_key(
-					Index::create()
-						.col(KnownColumn::RowId)
-						.col(KnownColumn::SubrowId),
-				);
-		}
-		_other => {
-			table.col(ColumnDef::new(KnownColumn::RowId).integer().primary_key());
-		}
-	}
-
-	for column in sheet.columns()? {
-		table.col(&mut ColumnDef::new_with_type(
-			column_name(&column),
-			column_type(&column),
-		));
-	}
-
-	Ok(table.take())
-}
-
-pub fn table_drop(sheet: &Sheet<String>, language: Language) -> TableDropStatement {
-	Table::drop()
-		.table(table_name(&sheet.name(), language))
-		.if_exists()
-		.take()
-}
-
-pub fn table_insert(sheet: &Sheet<String>, language: Language) -> Result<InsertStatement> {
-	let kind = sheet.kind()?;
-
-	let mut columns = vec![DynIden::new(KnownColumn::RowId)];
-
-	if matches!(kind, exh::SheetKind::Subrows) {
-		columns.push(DynIden::new(KnownColumn::SubrowId));
-	}
-
-	for column in sheet.columns()? {
-		columns.push(DynIden::new(column_name(&column)));
-	}
-
-	let statement = Query::insert()
-		.into_table(table_name(&sheet.name(), language))
-		.columns(columns)
-		.to_owned();
-
-	Ok(statement)
-}
-
-// TODO: update IW to return an iterator over col defs so this cols param isn't required for shared access
-pub fn row_values<'a>(
-	sheet: &Sheet<String>,
-	row: &Row,
-	columns: impl Iterator<Item = &'a exh::ColumnDefinition>,
-) -> Result<impl IntoIterator<Item = SimpleExpr>> {
-	let kind = sheet.kind()?;
-
-	let mut values: Vec<SimpleExpr> = vec![row.row_id().into()];
-
-	if matches!(kind, exh::SheetKind::Subrows) {
-		values.push(row.subrow_id().into());
-	}
-
-	for column in columns {
-		let field = row.field(column)?;
-		values.push(field_value(field));
-	}
-
-	Ok(values)
-}
-
-fn field_value(field: Field) -> SimpleExpr {
-	use Field as F;
-	match field {
-		F::String(sestring) => sestring.to_string().into(),
-		F::Bool(value) => value.into(),
-		F::I8(value) => value.into(),
-		F::I16(value) => value.into(),
-		F::I32(value) => value.into(),
-		F::I64(value) => value.into(),
-		F::U8(value) => value.into(),
-		F::U16(value) => value.into(),
-		F::U32(value) => value.into(),
-		F::U64(value) => value.into(),
-		F::F32(value) => value.into(),
-	}
-}
-
-// ---
+use super::schema::{column_name, table_name, KnownColumn};
 
 #[derive(Iden)]
 enum KnownResolveColumn {

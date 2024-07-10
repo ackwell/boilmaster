@@ -24,7 +24,6 @@ use super::database::Database;
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	directory: RelativePathBuf,
-	max_batch_size: usize,
 }
 
 #[derive(Debug)]
@@ -40,7 +39,6 @@ pub struct Provider {
 	data: Arc<Data>,
 
 	directory: PathBuf,
-	max_batch_size: usize,
 
 	databases: RwLock<HashMap<VersionKey, Arc<Database>>>,
 }
@@ -53,7 +51,6 @@ impl Provider {
 		Ok(Self {
 			data,
 			directory,
-			max_batch_size: config.max_batch_size,
 			databases: Default::default(),
 		})
 	}
@@ -110,13 +107,10 @@ impl Provider {
 		let database = match write_handle.entry(version) {
 			Entry::Occupied(entry) => entry.into_mut(),
 			Entry::Vacant(entry) => {
-				// todo log?
+				// TODO: log?
 				let excel = self.data.version(version)?.excel();
-				let database = Database::new(
-					self.directory.join(format!("version-{version}")),
-					self.max_batch_size,
-					excel,
-				);
+				let database =
+					Database::new(self.directory.join(format!("version-{version}")), excel);
 				entry.insert(Arc::new(database))
 			}
 		};
