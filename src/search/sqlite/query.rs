@@ -6,7 +6,13 @@ use sea_query::{
 	Query, SelectStatement, SimpleExpr, TableRef, UnionType,
 };
 
-use crate::{read::LanguageString, search::internal_query::post};
+use crate::{
+	read::LanguageString,
+	search::{
+		error::{Error, Result},
+		internal_query::post,
+	},
+};
 
 use super::schema::{column_name, table_name, KnownColumn};
 
@@ -15,23 +21,25 @@ enum KnownResolveColumn {
 	Score,
 }
 
-pub fn resolve_queries(queries: Vec<(String, post::Node)>) -> SelectStatement {
+pub fn resolve_queries(queries: Vec<(String, post::Node)>) -> Result<SelectStatement> {
 	let mut selects = queries
 		.into_iter()
 		.map(|(sheet_name, node)| resolve_query(sheet_name, node));
 
-	let mut query = selects.next().expect("TODO: what if there's no queries?");
+	let mut query = selects
+		.next()
+		.ok_or_else(|| Error::MalformedQuery("no queries could be resolved".to_string()))??;
 	for select in selects {
-		query.union(UnionType::All, select);
+		query.union(UnionType::All, select?);
 	}
 
 	query.order_by(KnownResolveColumn::Score, Order::Desc);
 	// TODO: limit goes here
 
-	query.take()
+	Ok(query.take())
 }
 
-fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
+fn resolve_query(sheet_name: String, node: post::Node) -> Result<SelectStatement> {
 	let alias = "alias-base";
 
 	let ResolveResult {
@@ -45,15 +53,16 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 			alias,
 			next_alias: "alias-0",
 		},
-	);
+	)?;
 
 	let mut query = Query::select();
 
 	// Base sheet and language joins.
 	let mut table_references = iter_language_references(languages, alias, &sheet_name);
 
-	// TODO: is it possible for there to be no languages and hence no joins? is that a failure? what about on relation boundaries
-	let (base_alias, base_reference) = table_references.next().expect("TODO: handle no languages");
+	let (base_alias, base_reference) = table_references
+		.next()
+		.ok_or_else(|| Error::MalformedQuery("target sheet not referenced".to_string()))?;
 	query.from(base_reference);
 
 	inner_join_references(&mut query, table_references, &base_alias);
@@ -64,9 +73,9 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 			iter_language_references(relation.languages, &relation.alias, &relation.sheet);
 
 		// Use the first language to join the primary FK relation.
-		let (base_alias, base_reference) = relation_references
-			.next()
-			.expect("TODO: handle no languages");
+		let (base_alias, base_reference) = relation_references.next().ok_or_else(|| {
+			Error::MalformedQuery(format!("joined sheet {} not referenced", relation.sheet))
+		})?;
 		query.left_join(
 			base_reference,
 			Expr::col(relation.foreign_key).equals((base_alias.clone(), KnownColumn::RowId)),
@@ -84,7 +93,7 @@ fn resolve_query(sheet_name: String, node: post::Node) -> SelectStatement {
 
 	query.cond_where(condition);
 
-	query.take()
+	Ok(query.take())
 }
 
 fn iter_language_references<'a>(
@@ -145,14 +154,14 @@ struct ResolveRelation {
 	languages: HashSet<Language>,
 }
 
-fn resolve_node(node: post::Node, context: &ResolveContext) -> ResolveResult {
+fn resolve_node(node: post::Node, context: &ResolveContext) -> Result<ResolveResult> {
 	match node {
 		post::Node::Group(group) => resolve_group(group, context),
 		post::Node::Leaf(leaf) => resolve_leaf(leaf, context),
 	}
 }
 
-fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult {
+fn resolve_group(group: post::Group, context: &ResolveContext) -> Result<ResolveResult> {
 	let mut must = Condition::all();
 	let mut should = Condition::any();
 	let mut must_not = Condition::any().not();
@@ -173,7 +182,7 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 				alias: context.alias,
 				next_alias: &format!("{}-{}", context.next_alias, index),
 			},
-		);
+		)?;
 
 		match occur {
 			// MUST: Score is gated by the entire group, add inner score directly.
@@ -214,15 +223,15 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> ResolveResult 
 		must = must.add(must_not)
 	}
 
-	ResolveResult {
+	Ok(ResolveResult {
 		condition: must,
 		score,
 		languages,
 		relations,
-	}
+	})
 }
 
-fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
+fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveResult> {
 	let mut relations = vec![];
 
 	let (column_definition, language) = leaf.field;
@@ -249,7 +258,7 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 					alias: &target_alias,
 					next_alias: &format!("{}-0", target_alias),
 				},
-			);
+			)?;
 
 			// TODO: Need to include target.condition (unscored) - possibly an Option<Condition> on the reference?
 			relations.push(ResolveRelation {
@@ -268,7 +277,10 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 		// TODO: this is case insensitive due to LIKE semantics - if opting into case sensitive (is this something we want), will need to use GLOB or something with pragmas/collates, idk
 		post::Operation::Match(string) => (
 			expression.like(format!("%{string}%")).into_condition(),
-			Expr::value(u32::try_from(string.len()).expect("TODO: handle but i mean really?")).div(
+			Expr::value(u32::try_from(string.len()).map_err(|error| {
+				Error::MalformedQuery(format!("excessively large string expression: {error}"))
+			})?)
+			.div(
 				SimpleExpr::from(Func::char_length(Expr::col(column_ref)))
 					.cast_as(Alias::new("REAL")),
 			),
@@ -277,12 +289,12 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> ResolveResult {
 		post::Operation::Equal(value) => (expression.eq(value).into_condition(), Expr::value(1)),
 	};
 
-	ResolveResult {
+	Ok(ResolveResult {
 		condition: resolved_expression.into_condition(),
 		score,
 		languages: HashSet::from([language]),
 		relations,
-	}
+	})
 }
 
 fn table_alias(alias_base: &str, language: Language) -> Alias {

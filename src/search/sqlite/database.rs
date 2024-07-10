@@ -103,7 +103,7 @@ impl Database {
 			return Err(Error::NotReady);
 		}
 
-		let statement_builder = resolve_queries(queries);
+		let statement_builder = resolve_queries(queries)?;
 		let (query, values) = statement_builder.build_rusqlite(SqliteQueryBuilder);
 
 		let connection = self.pool.get().await?;
