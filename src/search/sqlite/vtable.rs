@@ -126,6 +126,7 @@ unsafe impl<'vtab> vtab::VTab<'vtab> for IronworksTable {
 			}
 			false => {
 				info.set_idx_num(Index::SCAN);
+				// TODO: This would probably benefit from some variability, such that the schema optimiser can try to prioritise scans on smaller tables. Row count is difficult due to subrow tables; but maybe page count? that's entirely in the header.
 				info.set_estimated_cost(1000000_f64);
 			}
 		}
@@ -149,7 +150,7 @@ impl<'vtab> vtab::CreateVTab<'vtab> for IronworksTable {
 #[derive(Debug)]
 enum Index {
 	Scan(excel::SheetIterator<String>),
-	RowId(Option<excel::Row>),
+	RowId(RowIdIndex),
 }
 
 impl Index {
@@ -163,8 +164,33 @@ impl Iterator for Index {
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::Scan(sheet_iterator) => sheet_iterator.next(),
-			Self::RowId(maybe_row) => maybe_row.take(),
+			Self::RowId(row_id_index) => row_id_index.next(),
 		}
+	}
+}
+
+#[derive(Debug)]
+struct RowIdIndex {
+	sheet: excel::Sheet<String>,
+	row_id: u32,
+	subrow_id: u16,
+}
+
+impl Iterator for RowIdIndex {
+	type Item = excel::Row;
+
+	// This is effectively a really simplified sheet iterator so we can move through any subrows.
+	fn next(&mut self) -> Option<Self::Item> {
+		// We can skip the row miss if the subrow id is past 0 for non-subrow sheets.
+		if self.sheet.kind().ok()? != exh::SheetKind::Subrows && self.subrow_id > 0 {
+			return None;
+		}
+
+		let row = self.sheet.subrow(self.row_id, self.subrow_id).ok()?;
+
+		self.subrow_id += 1;
+
+		Some(row)
 	}
 }
 
@@ -217,9 +243,11 @@ unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 			Index::SCAN => Index::Scan(sheet.into_iter()),
 			Index::ROW_ID => {
 				let row_id = arguments.get::<u32>(0)?;
-				// TODO: should this silently ->option instead?
-				let row = sheet.row(row_id).map_err(module_error)?;
-				Index::RowId(Some(row))
+				Index::RowId(RowIdIndex {
+					sheet,
+					row_id,
+					subrow_id: 0,
+				})
 			}
 
 			other => return Err(module_error(format!("unknown index {other}"))),
