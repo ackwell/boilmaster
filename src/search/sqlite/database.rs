@@ -5,11 +5,13 @@ use std::{
 	sync::{Arc, OnceLock},
 };
 
+use anyhow::anyhow;
 use bb8::Pool;
 use ironworks::excel::{Excel, Language, Sheet};
 use itertools::Itertools;
 use sea_query::{ColumnDef, Expr, Iden, Query, Quote, SqliteQueryBuilder, Table};
 use sea_query_rusqlite::RusqliteBinder;
+use tokio_util::sync::CancellationToken;
 // use sea_query_binder::SqlxBinder;
 // use sqlx::{
 // 	sqlite::{SqliteConnectOptions, SqliteSynchronous},
@@ -64,7 +66,11 @@ impl Database {
 		}
 	}
 
-	pub async fn ingest(&self, sheets: Vec<Sheet<String>>) -> Result<()> {
+	pub async fn ingest(
+		&self,
+		cancel: CancellationToken,
+		sheets: Vec<Sheet<String>>,
+	) -> Result<()> {
 		// TODO: I should store some form of atomic bool to mark this DB as """ingested""" - in that the vtable schemas have been initialised
 
 		// let completed_sheets = self.completed_sheets().await?;
@@ -97,6 +103,11 @@ impl Database {
 		let connection = self.pool.get().await?;
 
 		for sheet in sheets {
+			// If we've been asked to cancel, do so.
+			if cancel.is_cancelled() {
+				return Err(anyhow!("cancelling out of search database preparation").into());
+			}
+
 			let name = sheet.name();
 			let languages = sheet.languages()?;
 			let tables = languages

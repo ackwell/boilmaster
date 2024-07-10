@@ -9,7 +9,7 @@ use figment::value::magic::RelativePathBuf;
 use futures::future::try_join_all;
 use ironworks::excel::Sheet;
 use serde::Deserialize;
-use tokio::select;
+use tokio::{select, task};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
@@ -73,7 +73,7 @@ impl Provider {
 
 		let pending_ingestions = grouped
 			.into_iter()
-			.map(|(version, sheets)| self.ingest_version(version, sheets));
+			.map(|(version, sheets)| self.ingest_version(cancel.clone(), version, sheets));
 
 		select! {
 			_ = cancel.cancelled() => { }
@@ -83,10 +83,15 @@ impl Provider {
 		Ok(())
 	}
 
-	async fn ingest_version(&self, version: VersionKey, sheets: Vec<Sheet<String>>) -> Result<()> {
+	async fn ingest_version(
+		&self,
+		cancel: CancellationToken,
+		version: VersionKey,
+		sheets: Vec<Sheet<String>>,
+	) -> Result<()> {
 		let span = tracing::info_span!("ingest", %version);
 		let database = self.database(version)?;
-		tokio::task::spawn(async move { database.ingest(sheets).await }.instrument(span)).await?
+		task::spawn(async move { database.ingest(cancel, sheets).await }.instrument(span)).await?
 	}
 
 	pub async fn search(&self, request: SearchRequest) -> Result<Vec<SearchResult>> {
