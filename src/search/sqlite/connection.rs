@@ -1,21 +1,19 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use bb8::ManageConnection;
 use ironworks::excel::Excel;
 
-use crate::version::VersionKey;
-
 use super::vtable;
 
 pub struct SqliteConnectionManager {
-	version: VersionKey,
+	path: PathBuf,
 	excel: Arc<Excel>,
 }
 
 impl SqliteConnectionManager {
-	pub fn new(version: VersionKey, excel: Arc<Excel>) -> Self {
-		Self { version, excel }
+	pub fn new(path: PathBuf, excel: Arc<Excel>) -> Self {
+		Self { path, excel }
 	}
 }
 
@@ -25,9 +23,7 @@ impl ManageConnection for SqliteConnectionManager {
 	type Error = rusqlite::Error;
 
 	async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-		// TODO: should i have a configurable prefix? or just uuid it?
-		let connection =
-			rusqlite::Connection::open(format!("file:{}?mode=memory&cache=shared", self.version))?;
+		let connection = rusqlite::Connection::open(&self.path)?;
 
 		connection.pragma_update(None, "synchronous", "OFF")?;
 

@@ -113,8 +113,7 @@ impl Provider {
 				// todo log?
 				let excel = self.data.version(version)?.excel();
 				let database = Database::new(
-					// &self.directory.join(format!("version-{version}")),
-					version,
+					self.directory.join(format!("version-{version}")),
 					self.max_batch_size,
 					excel,
 				);

@@ -1,7 +1,7 @@
 use std::{
 	cmp,
 	collections::HashSet,
-	path::Path,
+	path::{Path, PathBuf},
 	sync::{Arc, OnceLock},
 };
 
@@ -48,7 +48,7 @@ pub struct Database {
 
 impl Database {
 	// pub fn new(path: &Path, max_batch_size: usize) -> Self {
-	pub fn new(version: VersionKey, max_batch_size: usize, excel: Arc<Excel>) -> Self {
+	pub fn new(path: PathBuf, max_batch_size: usize, excel: Arc<Excel>) -> Self {
 		// let options = SqliteConnectOptions::new()
 		// 	.filename(path)
 		// 	.create_if_missing(true)
@@ -56,7 +56,7 @@ impl Database {
 
 		// let pool = SqlitePool::connect_lazy_with(options);
 
-		let manager = SqliteConnectionManager::new(version, excel);
+		let manager = SqliteConnectionManager::new(path, excel);
 
 		// TODO: should probably configure this a bit. stuff like a min idle of 1, etc. likely should be in config file
 		let pool = Pool::builder().build_unchecked(manager);
@@ -126,7 +126,7 @@ impl Database {
 					let table_name = table_name(&name, language).quoted(Quote::new(b'"'));
 					let language_string = LanguageString::from(language);
 					format!(
-						r#"CREATE VIRTUAL TABLE "{table_name}" USING ironworks(sheet={name}, language={language_string});"#
+						r#"CREATE VIRTUAL TABLE IF NOT EXISTS "{table_name}" USING ironworks(sheet={name}, language={language_string});"#
 					)
 				})
 				.join("\n");
