@@ -158,8 +158,7 @@ impl Search {
 		// Translate the request into the format used by providers.
 		let provider_request = match request {
 			SearchRequest::Query(query) => self.normalize_request_query(query)?,
-			// SearchRequest::Cursor(uuid) => ProviderSearchRequest::Cursor(uuid),
-			SearchRequest::Cursor(uuid) => todo!("cursor {uuid}"),
+			SearchRequest::Cursor(uuid) => sqlite::SearchRequest::Cursor(uuid),
 		};
 
 		// Execute the search.
@@ -168,10 +167,7 @@ impl Search {
 		// };
 
 		// executor.search(provider_request, Some(result_limit))
-		let results = self.provider.search(provider_request).await?;
-
-		// TODO: cursor
-		Ok((results, None))
+		self.provider.search(provider_request, result_limit).await
 	}
 
 	fn normalize_request_query(&self, query: SearchRequestQuery) -> Result<sqlite::SearchRequest> {

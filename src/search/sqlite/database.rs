@@ -6,7 +6,7 @@ use std::{
 	},
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use bb8::{Pool, PooledConnection};
 use ironworks::excel::{Excel, Sheet};
 use itertools::Itertools;
@@ -24,7 +24,10 @@ use crate::{
 	},
 };
 
-use super::{connection::SqliteConnectionManager, query::resolve_queries, schema::table_name};
+use super::{
+	connection::SqliteConnectionManager, cursor::DatabaseCursor, query::resolve_queries,
+	schema::table_name,
+};
 
 pub struct Database {
 	pool: Pool<SqliteConnectionManager>,
@@ -97,19 +100,40 @@ impl Database {
 		Ok(())
 	}
 
-	pub async fn search(&self, queries: Vec<(String, post::Node)>) -> Result<Vec<SearchResult>> {
-		// Shoo off search requests when we're not ready yet.
+	pub fn build_cursor(&self, queries: Vec<(String, post::Node)>) -> Result<DatabaseCursor> {
+		Ok(DatabaseCursor {
+			statement: resolve_queries(queries)?,
+			offset: 0,
+		})
+	}
+
+	pub async fn search(
+		&self,
+		cursor: DatabaseCursor,
+		limit: u32,
+	) -> Result<(Vec<SearchResult>, Option<DatabaseCursor>)> {
+		// Shoo off search requests if we're not ready yet.
 		if !self.ready.load(Ordering::Relaxed) {
 			return Err(Error::NotReady);
 		}
 
-		let statement_builder = resolve_queries(queries)?;
-		let (query, values) = statement_builder.build_rusqlite(SqliteQueryBuilder);
+		let DatabaseCursor {
+			mut statement,
+			offset,
+		} = cursor;
+
+		// We're requesting one more item than we want to ensure we know if we've hit EOF.
+		statement.limit((limit + 1).into());
+		if offset > 0 {
+			statement.offset(offset.into());
+		}
+
+		let (query, values) = statement.build_rusqlite(SqliteQueryBuilder);
 
 		let connection = self.pool.get().await?;
-		let mut statement = connection.prepare(&query)?;
+		let mut prepared_statement = connection.prepare(&query)?;
 		// TODO: not a fan of this implicit structure shared between query and here
-		let search_results = statement
+		let mut search_results = prepared_statement
 			.query_map(&*values.as_params(), |row| {
 				Ok(SearchResult {
 					sheet: row.get(0)?,
@@ -118,8 +142,20 @@ impl Database {
 					score: row.get(3)?,
 				})
 			})?
-			.collect::<Result<_, _>>()?;
+			.collect::<Result<Vec<_>, _>>()?;
 
-		Ok(search_results)
+		// If we did indeed get more than the expected limit due to the +1, truncate
+		// down to the limit and prepare a cursor for the next query.
+		let mut next_cursor = None;
+		let limit_usize = usize::try_from(limit).context("invalid limit")?;
+		if search_results.len() > limit_usize {
+			search_results.truncate(limit_usize);
+			next_cursor = Some(DatabaseCursor {
+				statement,
+				offset: offset + limit,
+			})
+		}
+
+		Ok((search_results, next_cursor))
 	}
 }

@@ -35,7 +35,6 @@ pub fn resolve_queries(queries: Vec<(String, post::Node)>) -> Result<SelectState
 	}
 
 	query.order_by(KnownResolveColumn::Score, Order::Desc);
-	// TODO: limit goes here
 
 	Ok(query.take())
 }

@@ -12,18 +12,24 @@ use serde::Deserialize;
 use tokio::{select, task};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
+use uuid::Uuid;
 
 use crate::{
 	data::Data,
-	search::{error::Result, internal_query::post, search::SearchResult},
+	search::{
+		error::{Error, Result},
+		internal_query::post,
+		search::SearchResult,
+	},
 	version::VersionKey,
 };
 
-use super::database::Database;
+use super::{cursor, database::Database};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	directory: RelativePathBuf,
+	cursor: cursor::Config,
 }
 
 #[derive(Debug)]
@@ -32,7 +38,7 @@ pub enum SearchRequest {
 		version: VersionKey,
 		queries: Vec<(String, post::Node)>,
 	},
-	// TODO: cursor
+	Cursor(Uuid),
 }
 
 pub struct Provider {
@@ -41,6 +47,7 @@ pub struct Provider {
 	directory: PathBuf,
 
 	databases: RwLock<HashMap<VersionKey, Arc<Database>>>,
+	cursors: cursor::Cache,
 }
 
 impl Provider {
@@ -52,6 +59,7 @@ impl Provider {
 			data,
 			directory,
 			databases: Default::default(),
+			cursors: cursor::Cache::new(config.cursor),
 		})
 	}
 
@@ -91,15 +99,36 @@ impl Provider {
 		task::spawn(async move { database.ingest(cancel, sheets).await }.instrument(span)).await?
 	}
 
-	pub async fn search(&self, request: SearchRequest) -> Result<Vec<SearchResult>> {
-		let (version, queries) = match request {
-			SearchRequest::Query { version, queries } => (version, queries),
-			// TODO: presumably cursor will just have an offset we fetch? - try and find some sorting key that can be used in a where instead?
+	pub async fn search(
+		&self,
+		request: SearchRequest,
+		limit: u32,
+	) -> Result<(Vec<SearchResult>, Option<Uuid>)> {
+		let (version, database, cursor) = match request {
+			SearchRequest::Query { version, queries } => {
+				let database = self.database(version)?;
+				let cursor = database.build_cursor(queries)?;
+
+				(version, database, cursor)
+			}
+
+			SearchRequest::Cursor(uuid) => {
+				let cursor = self
+					.cursors
+					.get(uuid)
+					.ok_or_else(|| Error::UnknownCursor(uuid))?;
+
+				let database = self.database(cursor.version)?;
+				(cursor.version, database, cursor.inner)
+			}
 		};
 
-		let database = self.database(version)?;
+		let (results, next_cursor) = database.search(cursor, limit).await?;
 
-		database.search(queries).await
+		let cursor_key =
+			next_cursor.map(|inner| self.cursors.insert(cursor::Cursor { version, inner }));
+
+		Ok((results, cursor_key))
 	}
 
 	fn database(&self, version: VersionKey) -> Result<Arc<Database>> {
