@@ -369,6 +369,7 @@ dependencies = [
 name = "boilmaster"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "aide",
  "anyhow",
  "async-trait",

@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::OnceLock};
 
+use aho_corasick::AhoCorasick;
 use ironworks::excel::Language;
 use sea_query::{
-	Alias, ColumnRef, Condition, DynIden, Expr, Func, Iden, IntoColumnRef, IntoCondition, Order,
-	Query, SelectStatement, SimpleExpr, TableRef, UnionType,
+	Alias, ColumnRef, Condition, DynIden, Expr, Func, Iden, IntoColumnRef, IntoCondition, LikeExpr,
+	Order, Query, SelectStatement, SimpleExpr, TableRef, UnionType,
 };
 
 use crate::{
@@ -273,10 +274,9 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveRes
 			(inner_condition, score)
 		}
 
-		// TODO: need to handle escaping
 		// TODO: this is case insensitive due to LIKE semantics - if opting into case sensitive (is this something we want), will need to use GLOB or something with pragmas/collates, idk
 		post::Operation::Match(string) => (
-			expression.like(format!("%{string}%")).into_condition(),
+			expression.like(build_like(&string)).into_condition(),
 			Expr::value(u32::try_from(string.len()).map_err(|error| {
 				Error::MalformedQuery(format!("excessively large string expression: {error}"))
 			})?)
@@ -295,6 +295,17 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveRes
 		languages: HashSet::from([language]),
 		relations,
 	})
+}
+
+fn build_like(string: &str) -> LikeExpr {
+	static PATTERN: OnceLock<AhoCorasick> = OnceLock::new();
+	let pattern = PATTERN.get_or_init(|| {
+		AhoCorasick::new(["%", "_", "\\"]).expect("pattern construction should not fail")
+	});
+
+	let escaped = pattern.replace_all(string, &["\\%", "\\_", "\\\\"]);
+
+	LikeExpr::new(format!("%{escaped}%")).escape('\\')
 }
 
 fn table_alias(alias_base: &str, language: Language) -> Alias {
