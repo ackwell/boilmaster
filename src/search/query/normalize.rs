@@ -216,8 +216,22 @@ impl<'a> Normalizer<'a> {
 				Ok(post::Node::Group(post::Group { clauses }))
 			}
 
-			//
-			(sp, sc) => todo!("{sp:?} {sc:?}"),
+			// Anything other than a like-for-like match is, well, a mismatch.
+			(specifier, node) => Err(Error::QuerySchemaMismatch(MismatchError {
+				field: "TODO query".into(),
+				reason: format!(
+					"cannot use {} query specifier for {} schema structures",
+					match specifier {
+						pre::FieldSpecifier::Struct(..) => "struct",
+						pre::FieldSpecifier::Array => "array",
+					},
+					match node {
+						schema::Node::Array { .. } => "array",
+						schema::Node::Scalar(..) => "scalar",
+						schema::Node::Struct(..) => "struct",
+					}
+				),
+			})),
 		}
 	}
 
