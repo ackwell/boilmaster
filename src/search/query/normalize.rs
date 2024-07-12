@@ -162,7 +162,7 @@ impl<'a> Normalizer<'a> {
 				let end = start + usize::try_from(field.node.size()).unwrap();
 				let narrowed_columns = context.columns.get(start..end).ok_or_else(|| {
 					Error::SchemaGameMismatch(MismatchError {
-						field: field_name.into(),
+						field: field_name.into(), // TODO: path
 						reason: "game data does not contain enough columns".into(),
 					})
 				})?;
@@ -184,8 +184,37 @@ impl<'a> Normalizer<'a> {
 			// a (struct, reference) pair means... what
 			// references are equivalent in data to a scalar, i.e. it's a leaf of an individual schema (though points to another)
 			// i'm tempted to say that this should never occur. normalising the relation operation should handle references at that point, which would leave the inner leaf bound to already be pointing at something else. leaf bounds are inherently a structural detail, and scalars (and references) are not structural. think on that a bit more
+			(pre::FieldSpecifier::Array, schema::Node::Array { count, node }) => {
+				let size = usize::try_from(node.size()).unwrap();
+				let clauses = (0..usize::try_from(*count).unwrap())
+					.map(|index| -> Result<_> {
+						let start = index * size;
+						let end = start + size;
 
-			// TODO: array
+						// TODO: This is duped, helper?
+						let narrowed_columns =
+							context.columns.get(start..end).ok_or_else(|| {
+								Error::SchemaGameMismatch(MismatchError {
+									field: "TODO: query path".into(),
+									reason: "game data does not contain enough columns".into(),
+								})
+							})?;
+
+						let query = self.normalize_operation(
+							operation,
+							Context {
+								schema: node,
+								columns: narrowed_columns,
+								..context
+							},
+						)?;
+
+						Ok((post::Occur::Should, query))
+					})
+					.collect::<Result<Vec<_>>>()?;
+
+				Ok(post::Node::Group(post::Group { clauses }))
+			}
 
 			//
 			(sp, sc) => todo!("{sp:?} {sc:?}"),
@@ -199,7 +228,9 @@ impl<'a> Normalizer<'a> {
 	) -> Result<post::Node> {
 		// TODO: notes; an unbound leaf only makes semantic sense on a structural schema node; were it pointing to a scalar node, it would be equivalent semantically to a bound leaf on that node. following from that; an unbound leaf should "fan out" to all of the current structural node's children as an or-group, in doing so effectively "consuming" the current node at the leaf point, which maintains consistency with bound leaf handling.
 
-		todo!("normalize leaf unbound")
+		Err(Error::MalformedQuery(
+			"unbound query nodes are not currently supported".into(),
+		))
 	}
 
 	fn normalize_operation(
@@ -215,9 +246,10 @@ impl<'a> Normalizer<'a> {
 			// for relations, if the schema is a reference, resolve the reference. if it's a struct, call down. if it's anything else, throw?
 			pre::Operation::Relation(relation) => {
 				let node = match context.schema {
-					schema::Node::Struct(_fields) => todo!(
-						"i think this is passing the entire schema node down to the subquery?"
-					),
+					// Relations digging into schema structural features can be forwarded through to node normalisation.
+					schema::Node::Struct(..) | schema::Node::Array { .. } => {
+						self.normalize_node(&relation.query, context)?
+					}
 
 					schema::Node::Scalar(schema::Scalar::Reference(targets)) => {
 						let field = match context.columns {
@@ -283,7 +315,10 @@ impl<'a> Normalizer<'a> {
 						})?
 					}
 
-					other => todo!("i think this is a schema mismatch {other:?}"),
+					_other => Err(Error::QuerySchemaMismatch(MismatchError {
+						field: "TODO: query path".into(),
+						reason: "cannot perform relation operations on this schema node".into(),
+					}))?,
 				};
 
 				Ok(node)
@@ -294,7 +329,7 @@ impl<'a> Normalizer<'a> {
 					.ok_or_else(|| {
 						Error::SchemaGameMismatch(MismatchError {
 							// TODO: i'll need to wire down the current query path for this field to be meaningful
-							field: "query".into(),
+							field: "TODO: query path".into(),
 							reason: "insufficient game data to satisfy schema".into(),
 						})
 					})?;
@@ -313,7 +348,7 @@ impl<'a> Normalizer<'a> {
 				.ok_or_else(|| {
 					Error::QuerySchemaMismatch(MismatchError {
 						// TODO: i'll need to wire down the current query path for this field to be meaningful
-						field: "query".into(),
+						field: "TODO: query path".into(),
 						reason: "no string columns with this name exist.".into(),
 					})
 				})?;
@@ -328,7 +363,7 @@ impl<'a> Normalizer<'a> {
 					.ok_or_else(|| {
 						Error::SchemaGameMismatch(MismatchError {
 							// TODO: i'll need to wire down the current query path for this field to be meaningful
-							field: "query".into(),
+							field: "TODO: query path".into(),
 							reason: "insufficient game data to satisfy schema".into(),
 						})
 					})?;
@@ -342,7 +377,7 @@ impl<'a> Normalizer<'a> {
 				.ok_or_else(|| {
 					Error::QueryGameMismatch(MismatchError {
 						// TODO: i'll need to wire down the current query path for this field to be meaningful
-						field: "query".into(),
+						field: "TODO: query path".into(),
 						reason: "no scalar columns with this name exist".into(),
 					})
 				})?;
