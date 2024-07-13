@@ -306,9 +306,9 @@ impl<'a> Normalizer<'a> {
 						let target_queries = targets
 							.iter()
 							.map(|target| {
-								// this seems to be used for _one_ use case across all of stc - look into if it's worth supporting
+								// TODO: This seems to be used for _one_ use case across all of stc, and is not used by EXDSchema at all. I don't think it's worth supporting, honestly.
 								if target.selector.is_some() {
-									todo!("todo: normalise reference target selectors")
+									return Err(Error::MalformedQuery("search system does not currently support relationships with target selectors".into()))
 								}
 
 								// Normalise the relationship query.
