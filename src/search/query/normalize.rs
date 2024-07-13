@@ -17,6 +17,17 @@ struct Context<'a> {
 	language: excel::Language,
 
 	ambient_language: excel::Language,
+
+	path: &'a [&'a str],
+}
+
+impl Context<'_> {
+	fn mismatch(&self, reason: impl ToString) -> MismatchError {
+		MismatchError {
+			field: self.path.join("."),
+			reason: reason.to_string(),
+		}
+	}
 }
 
 pub struct Normalizer<'a> {
@@ -29,11 +40,22 @@ impl<'a> Normalizer<'a> {
 		Self { excel, schema }
 	}
 
+	#[inline]
 	pub fn normalize(
 		&self,
 		query: &pre::Node,
 		sheet_name: &str,
 		ambient_language: excel::Language,
+	) -> Result<post::Node> {
+		self.normalize_query(query, sheet_name, ambient_language, &[])
+	}
+
+	fn normalize_query(
+		&self,
+		query: &pre::Node,
+		sheet_name: &str,
+		ambient_language: excel::Language,
+		path: &[&str],
 	) -> Result<post::Node> {
 		// Fetch the schema and columns for the requested sheet.
 		let sheet_schema = self.schema.sheet(sheet_name).map_err(|error| match error {
@@ -87,6 +109,7 @@ impl<'a> Normalizer<'a> {
 				columns: &columns,
 				language,
 				ambient_language,
+				path,
 			},
 		)
 	}
@@ -129,6 +152,12 @@ impl<'a> Normalizer<'a> {
 				pre::FieldSpecifier::Struct(field_name, requested_language),
 				schema::Node::Struct(fields),
 			) => {
+				// TODO: should i encode the language at all? it's pretty irrelevant to most failures, but...
+				let context = Context {
+					path: &([context.path, &[field_name]].concat()),
+					..context
+				};
+
 				// Get the requested field from the struct, mismatch if no such field exists.
 				// Mismatch here implies the query and schema do not match.
 				let field = fields
@@ -136,10 +165,7 @@ impl<'a> Normalizer<'a> {
 					// TODO: this is _really_ wasteful. see TODO in the utility file w/r/t sanitizing schema preemptively
 					.find(|field| &field::sanitize_name(&field.name) == field_name)
 					.ok_or_else(|| {
-						Error::QuerySchemaMismatch(MismatchError {
-							field: field_name.into(),
-							reason: "field does not exist".into(),
-						})
+						Error::QuerySchemaMismatch(context.mismatch("field does not exist"))
 					})?;
 
 				// Get the requested language, falling back to the contextual language.
@@ -150,10 +176,9 @@ impl<'a> Normalizer<'a> {
 				// language is requested explicitly.
 				let language = requested_language.unwrap_or(context.language);
 				if !context.languages.contains(&language) {
-					return Err(Error::QueryGameMismatch(MismatchError {
-						field: field_name.into(),
-						reason: format!("{language:?} is not supported by this sheet"),
-					}));
+					return Err(Error::QueryGameMismatch(
+						context.mismatch(format!("{language:?} is not supported by this sheet")),
+					));
 				}
 
 				// Narrow the column array to the columns relevant to the field, mismatch if those columns do not exist.
@@ -161,10 +186,9 @@ impl<'a> Normalizer<'a> {
 				let start = usize::try_from(field.offset).unwrap();
 				let end = start + usize::try_from(field.node.size()).unwrap();
 				let narrowed_columns = context.columns.get(start..end).ok_or_else(|| {
-					Error::SchemaGameMismatch(MismatchError {
-						field: field_name.into(), // TODO: path
-						reason: "game data does not contain enough columns".into(),
-					})
+					Error::SchemaGameMismatch(
+						context.mismatch("game data does not contain enough columns"),
+					)
 				})?;
 
 				// TODO: by leaving ambient_language as-is here, a query of `A@ja.B(Relation)` will fall back to the default language of the query for B.
@@ -185,6 +209,11 @@ impl<'a> Normalizer<'a> {
 			// references are equivalent in data to a scalar, i.e. it's a leaf of an individual schema (though points to another)
 			// i'm tempted to say that this should never occur. normalising the relation operation should handle references at that point, which would leave the inner leaf bound to already be pointing at something else. leaf bounds are inherently a structural detail, and scalars (and references) are not structural. think on that a bit more
 			(pre::FieldSpecifier::Array, schema::Node::Array { count, node }) => {
+				let context = Context {
+					path: &([context.path, &["[]"]].concat()),
+					..context
+				};
+
 				let size = usize::try_from(node.size()).unwrap();
 				let clauses = (0..usize::try_from(*count).unwrap())
 					.map(|index| -> Result<_> {
@@ -194,10 +223,9 @@ impl<'a> Normalizer<'a> {
 						// TODO: This is duped, helper?
 						let narrowed_columns =
 							context.columns.get(start..end).ok_or_else(|| {
-								Error::SchemaGameMismatch(MismatchError {
-									field: "TODO: query path".into(),
-									reason: "game data does not contain enough columns".into(),
-								})
+								Error::SchemaGameMismatch(
+									context.mismatch("game data does not contain enough columns"),
+								)
 							})?;
 
 						let query = self.normalize_operation(
@@ -217,21 +245,18 @@ impl<'a> Normalizer<'a> {
 			}
 
 			// Anything other than a like-for-like match is, well, a mismatch.
-			(specifier, node) => Err(Error::QuerySchemaMismatch(MismatchError {
-				field: "TODO query".into(),
-				reason: format!(
-					"cannot use {} query specifier for {} schema structures",
-					match specifier {
-						pre::FieldSpecifier::Struct(..) => "struct",
-						pre::FieldSpecifier::Array => "array",
-					},
-					match node {
-						schema::Node::Array { .. } => "array",
-						schema::Node::Scalar(..) => "scalar",
-						schema::Node::Struct(..) => "struct",
-					}
-				),
-			})),
+			(specifier, node) => Err(Error::QuerySchemaMismatch(context.mismatch(format!(
+				"cannot use {} query specifier for {} schema structures",
+				match specifier {
+					pre::FieldSpecifier::Struct(..) => "struct",
+					pre::FieldSpecifier::Array => "array",
+				},
+				match node {
+					schema::Node::Array { .. } => "array",
+					schema::Node::Scalar(..) => "scalar",
+					schema::Node::Struct(..) => "struct",
+				}
+			)))),
 		}
 	}
 
@@ -269,13 +294,10 @@ impl<'a> Normalizer<'a> {
 						let field = match context.columns {
 							[column] => column,
 							other => {
-								return Err(Error::SchemaGameMismatch(MismatchError {
-									field: "TODO: query path".into(),
-									reason: format!(
-										"cross-sheet references must have a single source (found {})",
-										other.len()
-									),
-								}))
+								return Err(Error::SchemaGameMismatch(context.mismatch(format!(
+									"cross-sheet references must have a single source (found {})",
+									other.len()
+								))))
 							}
 						};
 
@@ -292,10 +314,11 @@ impl<'a> Normalizer<'a> {
 									todo!("TODO: normalise reference target conditions")
 								}
 
-								let query = self.normalize(
+								let query = self.normalize_query(
 									&relation.query,
 									&target.sheet,
 									context.ambient_language,
+									context.path, // TODO: Should this have an entry for the schema?
 								)?;
 
 								let operation = post::Operation::Relation(post::Relation {
@@ -321,18 +344,17 @@ impl<'a> Normalizer<'a> {
 
 						// There might be multiple viable relation paths, group them together.
 						create_or_group(target_queries.into_iter()).ok_or_else(|| {
-							Error::QuerySchemaMismatch(MismatchError {
-								field: "TODO: query path".into(),
-								reason: "no target queries can be resolved against this schema"
-									.into(),
-							})
+							Error::QuerySchemaMismatch(
+								context.mismatch(
+									"no target queries can be resolved against this schema",
+								),
+							)
 						})?
 					}
 
-					_other => Err(Error::QuerySchemaMismatch(MismatchError {
-						field: "TODO: query path".into(),
-						reason: "cannot perform relation operations on this schema node".into(),
-					}))?,
+					_other => Err(Error::QuerySchemaMismatch(
+						context.mismatch("cannot perform relation operations on this schema node"),
+					))?,
 				};
 
 				Ok(node)
@@ -341,11 +363,9 @@ impl<'a> Normalizer<'a> {
 			pre::Operation::Match(string) => {
 				let scalar_columns = collect_scalars(context.schema, context.columns, vec![])
 					.ok_or_else(|| {
-						Error::SchemaGameMismatch(MismatchError {
-							// TODO: i'll need to wire down the current query path for this field to be meaningful
-							field: "TODO: query path".into(),
-							reason: "insufficient game data to satisfy schema".into(),
-						})
+						Error::SchemaGameMismatch(
+							context.mismatch("insufficient game data to satisfy schema"),
+						)
 					})?;
 
 				let string_columns = scalar_columns
@@ -360,11 +380,9 @@ impl<'a> Normalizer<'a> {
 					})
 				}))
 				.ok_or_else(|| {
-					Error::QuerySchemaMismatch(MismatchError {
-						// TODO: i'll need to wire down the current query path for this field to be meaningful
-						field: "TODO: query path".into(),
-						reason: "no string columns with this name exist.".into(),
-					})
+					Error::QuerySchemaMismatch(
+						context.mismatch("no string columns with this name exist."),
+					)
 				})?;
 
 				Ok(group)
@@ -375,11 +393,9 @@ impl<'a> Normalizer<'a> {
 			pre::Operation::Equal(value) => {
 				let scalar_columns = collect_scalars(context.schema, context.columns, vec![])
 					.ok_or_else(|| {
-						Error::SchemaGameMismatch(MismatchError {
-							// TODO: i'll need to wire down the current query path for this field to be meaningful
-							field: "TODO: query path".into(),
-							reason: "insufficient game data to satisfy schema".into(),
-						})
+						Error::SchemaGameMismatch(
+							context.mismatch("insufficient game data to satisfy schema"),
+						)
 					})?;
 
 				let group = create_or_group(scalar_columns.into_iter().map(|column| {
@@ -389,11 +405,9 @@ impl<'a> Normalizer<'a> {
 					})
 				}))
 				.ok_or_else(|| {
-					Error::QueryGameMismatch(MismatchError {
-						// TODO: i'll need to wire down the current query path for this field to be meaningful
-						field: "TODO: query path".into(),
-						reason: "no scalar columns with this name exist".into(),
-					})
+					Error::QueryGameMismatch(
+						context.mismatch("no scalar columns with this name exist"),
+					)
 				})?;
 
 				Ok(group)
