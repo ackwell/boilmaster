@@ -39,7 +39,6 @@ nohash-hasher = "0.2.0"
 nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
 regex = "1.10.5"
-# regex-syntax = "0.8.3"
 reqwest = { version = "0.12.3", features = ["json"] }
 rusqlite = { version = "0.30.0", features = ["bundled", "vtab"] }
 schemars = { version = "0.8.21", features = ["preserve_order"] }
@@ -53,7 +52,6 @@ seahash = "4.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.95"
 strum = { version = "0.26.2", features = ["derive"] }
-# tantivy = "0.22.0"
 texpresso = "2.0.1"
 thiserror = "1.0.30"
 tokio = { version = "1.32.0", features = ["full", "tracing"] }

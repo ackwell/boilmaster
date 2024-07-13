@@ -3,7 +3,6 @@ mod error;
 mod internal_query;
 mod search;
 mod sqlite;
-// mod tantivy;
 
 pub use {
 	error::{Error, FieldTypeError, MismatchError},

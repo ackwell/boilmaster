@@ -60,11 +60,7 @@ impl_to_failure!(bb8::RunError<rusqlite::Error>);
 impl_to_failure!(ironworks::Error);
 impl_to_failure!(rusqlite::Error);
 impl_to_failure!(serde_json::Error);
-// impl_to_failure!(sqlx::Error);
 impl_to_failure!(std::io::Error);
-// impl_to_failure!(tantivy::TantivyError);
-// impl_to_failure!(tantivy::directory::error::OpenDirectoryError);
-// impl_to_failure!(tantivy::directory::error::OpenReadError);
 impl_to_failure!(tokio::task::JoinError);
 impl_to_failure!(crate::data::Error);
 

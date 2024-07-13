@@ -24,14 +24,12 @@ use super::{
 	error::{Error, Result},
 	internal_query::{pre, Normalizer},
 	sqlite,
-	// tantivy::{self, SearchRequest as ProviderSearchRequest},
 };
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
 	pagination: PaginationConfig,
 	sqlite: sqlite::Config,
-	// tantivy: tantivy::Config,
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,7 +70,6 @@ pub struct Search {
 
 	ready: AtomicBool,
 
-	// provider: Arc<tantivy::Provider>,
 	provider: Arc<sqlite::Provider>,
 
 	data: Arc<Data>,
@@ -83,7 +80,6 @@ impl Search {
 		Ok(Self {
 			pagination_config: config.pagination,
 			ready: false.into(),
-			// provider: Arc::new(tantivy::Provider::new(config.tantivy)?),
 			provider: Arc::new(sqlite::Provider::new(config.sqlite, data.clone())?),
 			data,
 		})
@@ -162,11 +158,6 @@ impl Search {
 		};
 
 		// Execute the search.
-		// let executor = Executor {
-		// 	provider: &self.provider,
-		// };
-
-		// executor.search(provider_request, Some(result_limit))
 		self.provider.search(provider_request, result_limit).await
 	}
 
@@ -206,19 +197,3 @@ impl Search {
 		})
 	}
 }
-
-// // TODO: can probably store the number of search executions on this to feed into rate limiting
-// pub struct Executor<'a> {
-// 	provider: &'a tantivy::Provider,
-// }
-
-// impl Executor<'_> {
-// 	// TODO: The Option on limit is to represent the "no limit" case required for inner queries in relationships, where outer filtering may lead to any theoretical bounded inner query to be insufficient. For obvious reasons this is... _not_ a particulary efficient approach, though I'm not sure what better approaches exist. If nothing else, would be good to cache common queries in memory to avoid constant repetition of unbounded limits.
-// 	pub fn search(
-// 		&self,
-// 		request: ProviderSearchRequest,
-// 		limit: Option<u32>,
-// 	) -> Result<(Vec<SearchResult>, Option<Uuid>)> {
-// 		self.provider.search(request, limit, self)
-// 	}
-// }
