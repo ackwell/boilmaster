@@ -151,6 +151,7 @@ impl<'vtab> vtab::CreateVTab<'vtab> for IronworksTable {
 enum Index {
 	Scan(excel::SheetIterator<String>),
 	RowId(RowIdIndex),
+	Never,
 }
 
 impl Index {
@@ -165,6 +166,7 @@ impl Iterator for Index {
 		match self {
 			Self::Scan(sheet_iterator) => sheet_iterator.next(),
 			Self::RowId(row_id_index) => row_id_index.next(),
+			Self::Never => None,
 		}
 	}
 }
@@ -240,14 +242,14 @@ unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 
 		let iterator = match index_number {
 			Index::SCAN => Index::Scan(sheet.into_iter()),
-			Index::ROW_ID => {
-				let row_id = arguments.get::<u32>(0)?;
-				Index::RowId(RowIdIndex {
+			Index::ROW_ID => match arguments.get::<Option<u32>>(0)? {
+				None => Index::Never,
+				Some(row_id) => Index::RowId(RowIdIndex {
 					sheet,
 					row_id,
 					subrow_id: 0,
-				})
-			}
+				}),
+			},
 
 			other => return Err(module_error(format!("unknown index {other}"))),
 		};

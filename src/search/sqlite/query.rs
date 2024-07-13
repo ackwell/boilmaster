@@ -76,10 +76,16 @@ fn resolve_query(sheet_name: String, node: post::Node) -> Result<SelectStatement
 		let (base_alias, base_reference) = relation_references.next().ok_or_else(|| {
 			Error::MalformedQuery(format!("joined sheet {} not referenced", relation.sheet))
 		})?;
-		query.left_join(
-			base_reference,
-			Expr::col(relation.foreign_key).equals((base_alias.clone(), KnownColumn::RowId)),
-		);
+
+		let mut condition = Expr::col(relation.foreign_key)
+			.equals((base_alias.clone(), KnownColumn::RowId))
+			.into_condition();
+
+		if let Some(relation_condition) = relation.condition {
+			condition = Condition::all().add(condition).add(relation_condition);
+		}
+
+		query.left_join(base_reference, condition);
 
 		// Remaining languages can be joined on the row ID.
 		inner_join_references(&mut query, relation_references, &base_alias);
@@ -131,6 +137,7 @@ struct ResolveContext<'a> {
 	next_alias: &'a str,
 }
 
+#[derive(Debug)]
 struct ResolveResult {
 	/// Condition for the result tree.
 	condition: Condition,
@@ -150,6 +157,8 @@ struct ResolveRelation {
 	alias: String,
 	/// Foreign key reference for the relationship join.
 	foreign_key: ColumnRef,
+	/// Additional constraints for the join.
+	condition: Option<Condition>,
 	/// Languages that will be required by the query for this relationship.
 	languages: HashSet<Language>,
 }
@@ -241,6 +250,7 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveRes
 	)
 		.into_column_ref();
 	let expression = Expr::col(column_ref.clone());
+	let mut outer_languages = HashSet::from([language]);
 
 	let (resolved_expression, score) = match leaf.operation {
 		// TODO: break this into seperate function?
@@ -250,8 +260,8 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveRes
 			let ResolveResult {
 				condition: inner_condition,
 				score,
-				languages,
-				relations: inner_relations,
+				languages: inner_languages,
+				relations: mut inner_relations,
 			} = resolve_node(
 				*query,
 				&ResolveContext {
@@ -260,13 +270,32 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveRes
 				},
 			)?;
 
-			// TODO: Need to include target.condition (unscored) - possibly an Option<Condition> on the reference?
+			let condition = match target.condition {
+				None => None,
+				Some(condition) => {
+					// We don't care about score for these conditionals.
+					let ResolveResult {
+						condition: condition_condition,
+						score: _,
+						languages: condition_languages,
+						relations: condition_relations,
+					} = resolve_node(*condition, context)?;
+
+					// NOTE: We need to merge the languages in with the outer set -
+					// languages used in the condition are those of the current sheet.
+					outer_languages.extend(condition_languages);
+					inner_relations.extend(condition_relations);
+
+					Some(condition_condition)
+				}
+			};
+
 			relations.push(ResolveRelation {
 				sheet: target.sheet,
 				alias: target_alias,
-				// condition,
+				condition,
 				foreign_key: column_ref,
-				languages,
+				languages: inner_languages,
 			});
 			relations.extend(inner_relations);
 

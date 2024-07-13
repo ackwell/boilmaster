@@ -10,6 +10,7 @@ use super::{post, pre};
 
 #[derive(Clone)]
 struct Context<'a> {
+	current_sheet: &'a str,
 	languages: &'a [excel::Language],
 
 	schema: &'a schema::Node,
@@ -104,6 +105,7 @@ impl<'a> Normalizer<'a> {
 		self.normalize_node(
 			query,
 			Context {
+				current_sheet: sheet_name,
 				languages: &languages,
 				schema: &sheet_schema.node,
 				columns: &columns,
@@ -309,11 +311,7 @@ impl<'a> Normalizer<'a> {
 									todo!("todo: normalise reference target selectors")
 								}
 
-								// this should be modelled as a boolean group (+condition +innerquery)
-								if target.condition.is_some() {
-									todo!("TODO: normalise reference target conditions")
-								}
-
+								// Normalise the relationship query.
 								let query = self.normalize_query(
 									&relation.query,
 									&target.sheet,
@@ -321,10 +319,38 @@ impl<'a> Normalizer<'a> {
 									context.path, // TODO: Should this have an entry for the schema?
 								)?;
 
+								// If there's a condition on this relationship, also resolve
+								// that as a seperate query - we're fabricating the pre:: query
+								// to create the necessary selector mapping. Note that this is
+								// performed _after_ the primary relationship query - this is to
+								// avoid needing to create these conditions for relationship
+								// branches that fail out.
+								let condition = match &target.condition {
+									None => None,
+									Some(condition) => {
+										let node = self.normalize_query(
+											&pre::Node::Leaf(pre::Leaf {
+												// NOTE: This is letting the language fall through to ambient - I think that's correct?
+												field: Some(pre::FieldSpecifier::Struct(
+													condition.selector.clone(),
+													None,
+												)),
+												operation: pre::Operation::Equal(pre::Value::U64(
+													condition.value.into(),
+												)),
+											}),
+											context.current_sheet,
+											context.ambient_language,
+											context.path,
+										)?;
+										Some(Box::new(node))
+									}
+								};
+
 								let operation = post::Operation::Relation(post::Relation {
 									target: post::RelationTarget {
 										sheet: target.sheet.clone(),
-										condition: None, // todo
+										condition,
 									},
 									query: Box::new(query),
 								});
@@ -339,8 +365,6 @@ impl<'a> Normalizer<'a> {
 							// Filter out query mismatches to prune those branches - other errors will be raised.
 							.filter(|result| !matches!(result, Err(Error::QuerySchemaMismatch(_))))
 							.collect::<Result<Vec<_>, _>>()?;
-
-						// TODO: target_queries.len() == 0 here means none of the relations matched, which should be raised as a query mismatch
 
 						// There might be multiple viable relation paths, group them together.
 						create_or_group(target_queries.into_iter()).ok_or_else(|| {
