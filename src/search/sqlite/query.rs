@@ -122,7 +122,6 @@ fn inner_join_references(
 	references: impl Iterator<Item = (Alias, TableRef)>,
 	target_alias: &Alias,
 ) {
-	// TODO: this only functions on rowid - what about joining subrow sheets?
 	for (join_alias, join_reference) in references {
 		query.inner_join(
 			join_reference,

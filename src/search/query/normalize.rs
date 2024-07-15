@@ -301,57 +301,14 @@ impl<'a> Normalizer<'a> {
 				self.normalize_operation_relation(relation, context)
 			}
 
-			pre::Operation::Match(string) => {
-				let scalar_columns = collect_scalars(context.schema, context.columns, vec![])
-					.ok_or_else(|| {
-						Error::SchemaGameMismatch(
-							context.mismatch("insufficient game data to satisfy schema"),
-						)
-					})?;
+			pre::Operation::Match(string) => scalar_operation(
+				|column| column.kind() == exh::ColumnKind::String,
+				|| post::Operation::Match(string.clone()),
+				context,
+			),
 
-				let string_columns = scalar_columns
-					.into_iter()
-					.filter(|column| column.kind() == exh::ColumnKind::String)
-					.collect::<Vec<_>>();
-
-				let group = create_or_group(string_columns.into_iter().map(|column| {
-					post::Node::Leaf(post::Leaf {
-						field: (column, context.language),
-						operation: post::Operation::Match(string.clone()),
-					})
-				}))
-				.ok_or_else(|| {
-					Error::QuerySchemaMismatch(
-						context.mismatch("no string columns with this name exist."),
-					)
-				})?;
-
-				Ok(group)
-			}
-
-			// TODO: this should collect all scalars i think?
-			// TODO: this pattern will be pretty repetetive, make a utility that does this or something
 			pre::Operation::Equal(value) => {
-				let scalar_columns = collect_scalars(context.schema, context.columns, vec![])
-					.ok_or_else(|| {
-						Error::SchemaGameMismatch(
-							context.mismatch("insufficient game data to satisfy schema"),
-						)
-					})?;
-
-				let group = create_or_group(scalar_columns.into_iter().map(|column| {
-					post::Node::Leaf(post::Leaf {
-						field: (column, context.language),
-						operation: post::Operation::Equal(value.clone()),
-					})
-				}))
-				.ok_or_else(|| {
-					Error::QueryGameMismatch(
-						context.mismatch("no scalar columns with this name exist"),
-					)
-				})?;
-
-				Ok(group)
+				scalar_operation(|_| true, || post::Operation::Equal(value.clone()), context)
 			}
 		}
 	}
@@ -469,14 +426,49 @@ impl<'a> Normalizer<'a> {
 	}
 }
 
-fn create_or_group(mut nodes: impl ExactSizeIterator<Item = post::Node>) -> Option<post::Node> {
-	let node = match nodes.len() {
-		0 => return None,
-		1 => nodes.next().unwrap(),
-		_ => post::Node::Group(post::Group {
-			clauses: nodes.map(|node| (post::Occur::Should, node)).collect(),
-		}),
+fn scalar_operation(
+	filter: impl FnMut(&exh::ColumnDefinition) -> bool,
+	operation: impl Fn() -> post::Operation,
+	context: Context,
+) -> Result<post::Node> {
+	let scalar_columns =
+		collect_scalars(context.schema, context.columns, vec![]).ok_or_else(|| {
+			Error::SchemaGameMismatch(context.mismatch("insufficient game data to satisfy schema"))
+		})?;
+
+	let filtered_columns = scalar_columns.into_iter().filter(filter);
+
+	let group = create_or_group(filtered_columns.map(|column| {
+		post::Node::Leaf(post::Leaf {
+			field: (column, context.language),
+			operation: operation(),
+		})
+	}))
+	.ok_or_else(|| {
+		Error::QueryGameMismatch(context.mismatch("no scalar columns with this name exist"))
+	})?;
+
+	Ok(group)
+}
+
+fn create_or_group(mut nodes: impl Iterator<Item = post::Node>) -> Option<post::Node> {
+	// Get first, if there is none, we can short circuit.
+	let one = nodes.next()?;
+
+	// If there was only one node, we can flatten by returning it directly.
+	let two = match nodes.next() {
+		None => return Some(one),
+		Some(node) => node,
 	};
+
+	// Otherwise there's two or more nodes, create a group.
+	let node = post::Node::Group(post::Group {
+		clauses: [one, two]
+			.into_iter()
+			.chain(nodes)
+			.map(|node| (post::Occur::Should, node))
+			.collect(),
+	});
 
 	Some(node)
 }
