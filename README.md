@@ -7,7 +7,8 @@ Web service for Final Fantasy XIV game data and asset discovery.
 ### Building From Source
 
 **Requirements**
- - [Rust](https://www.rust-lang.org/tools/install) >= 1.77.2
+
+- [Rust](https://www.rust-lang.org/tools/install) >= 1.77.2
 
 ```bash
 git clone https://github.com/ackwell/boilmaster
@@ -27,15 +28,15 @@ services:
     image: ghcr.io/ackwell/boilmaster:latest
     container_name: boilmaster
     environment:
-     - BM_HTTP_ADMIN_AUTH_USERNAME="CHANGE-ME"
-     - BM_HTTP_ADMIN_AUTH_PASSWORD="CHANGE-ME"
+      - BM_HTTP_ADMIN_AUTH_USERNAME="CHANGE-ME"
+      - BM_HTTP_ADMIN_AUTH_PASSWORD="CHANGE-ME"
       # Other configuration here, see the Configuration section below for more information.
     volumes:
       - ${PWD}/versions:/app/versions
       - ${PWD}/exdschema:/app/exdschema
       # Need roughly 100gb of free space for patches
       - ${PWD}/patches:/app/patches
-      - ${PWD}/seach:/app/search
+      - ${PWD}/search:/app/search
     ports:
       - 8080:8080
     restart: unless-stopped
