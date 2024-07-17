@@ -10,12 +10,13 @@ use crate::{
 	http::service,
 	read::LanguageString,
 	schema,
-	search::{query, SearchRequest as InnerSearchRequest, SearchRequestQuery},
+	search::{SearchRequest as InnerSearchRequest, SearchRequestQuery},
 };
 
 use super::{
 	error::Result,
 	extract::{Query, VersionQuery},
+	query::QueryString,
 };
 
 pub fn router() -> ApiRouter<service::State> {
@@ -34,7 +35,8 @@ struct SearchQuery {
 #[serde(untagged)]
 enum SearchRequest {
 	Query {
-		query: query::Node,
+		query: QueryString,
+		// TODO: make this required?
 		sheets: Option<String>,
 	},
 	Cursor {
@@ -95,7 +97,7 @@ async fn search(
 
 			InnerSearchRequest::Query(SearchRequestQuery {
 				version: version_key,
-				query,
+				query: query.into(),
 				language,
 				sheets,
 				schema,

@@ -15,7 +15,7 @@ pub use query::{Occur, Value};
 pub type LeafField = Option<FieldSpecifier>;
 pub type RelationTarget = ();
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FieldSpecifier {
 	Struct(String, Option<excel::Language>),
 	Array,
