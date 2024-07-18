@@ -477,28 +477,30 @@ fn is_column_numeric(column: &exh::ColumnDefinition) -> bool {
 }
 
 fn scalar_operation(
-	filter: impl FnMut(&exh::ColumnDefinition) -> bool,
+	filter: impl Fn(&exh::ColumnDefinition) -> bool,
 	operation: impl Fn() -> post::Operation,
 	context: Context,
 ) -> Result<post::Node> {
-	let scalar_columns =
-		collect_scalars(context.schema, context.columns, vec![]).ok_or_else(|| {
-			Error::SchemaGameMismatch(context.mismatch("insufficient game data to satisfy schema"))
-		})?;
+	let column = match context.columns {
+		[column] => column,
+		[] | [..] => {
+			return Err(Error::QueryGameMismatch(
+				context.mismatch("operations must target a single field"),
+			))
+		}
+	};
 
-	let filtered_columns = scalar_columns.into_iter().filter(filter);
+	if !filter(column) {
+		return Err(Error::QuerySchemaMismatch(context.mismatch(format!(
+			"{:?} columns are invalid for this operation",
+			column.kind()
+		))));
+	}
 
-	let group = create_or_group(filtered_columns.map(|column| {
-		post::Node::Leaf(post::Leaf {
-			field: (column, context.language),
-			operation: operation(),
-		})
+	Ok(post::Node::Leaf(post::Leaf {
+		field: (column.clone(), context.language),
+		operation: operation(),
 	}))
-	.ok_or_else(|| {
-		Error::QueryGameMismatch(context.mismatch("no scalar columns with this name exist"))
-	})?;
-
-	Ok(group)
 }
 
 fn create_or_group(mut nodes: impl Iterator<Item = post::Node>) -> Option<post::Node> {
@@ -521,47 +523,4 @@ fn create_or_group(mut nodes: impl Iterator<Item = post::Node>) -> Option<post::
 	});
 
 	Some(node)
-}
-
-// The whole premise of this is that we want to _exclude_ references. If that premise does not hold, then the `columns` slice itself is basically exactly what we want.
-// TODO: On discussing, people(singular) seemed okay with a field being simultaneously scalar and a reference. I can't say I'm convinced, but it might be fine.
-// TODO: this is probably more pertienent than i thought - the `ItemLevel` sheet, for example, uses its ID as the item level. given item links to it, this means that querying item level is currently impossible without either a) querying the foreign key, or b) adding some way to query the id
-fn collect_scalars(
-	schema: &schema::Node,
-	columns: &[exh::ColumnDefinition],
-	mut output: Vec<exh::ColumnDefinition>,
-) -> Option<Vec<exh::ColumnDefinition>> {
-	match schema {
-		schema::Node::Array { count, node } => {
-			// TODO: this is pretty silly, can technically derive the range from 1 call down.
-			let size = usize::try_from(node.size()).unwrap();
-			let count = usize::try_from(*count).unwrap();
-			(0..count).try_fold(output, |output, index| {
-				let start = index * size;
-				let end = start + size;
-				let slice = columns.get(start..end)?;
-				collect_scalars(node, slice, output)
-			})
-		}
-
-		schema::Node::Scalar(scalar) => {
-			match scalar {
-				schema::Scalar::Reference(_references) => {
-					// ignore references
-				}
-
-				_other => {
-					output.push(columns.get(0)?.clone());
-				}
-			}
-			Some(output)
-		}
-
-		schema::Node::Struct(fields) => fields.iter().try_fold(output, |output, field| {
-			let start = usize::try_from(field.offset).unwrap();
-			let end = start + usize::try_from(field.node.size()).unwrap();
-			let slice = columns.get(start..end)?;
-			collect_scalars(&field.node, slice, output)
-		}),
-	}
 }
