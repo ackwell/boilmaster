@@ -9,7 +9,7 @@ pub type Leaf = query::Leaf<LeafField, RelationTarget>;
 pub type Operation = query::Operation<LeafField, RelationTarget>;
 pub type Relation = query::Relation<LeafField, RelationTarget>;
 
-pub use query::{Occur, Value};
+pub use query::{Number, Occur, Value};
 
 // Types specific to pre-normalised queries
 pub type LeafField = Option<FieldSpecifier>;

@@ -29,8 +29,12 @@ pub enum Operation<F, T> {
 
 	Match(String),
 
-	Equal(Value),
-	// TODO: all the other relevant leaf operations. will need both further math operations, as well as ranges and string ops (given i'm using this instead of generic string param)
+	Eq(Value),
+
+	Gt(Number),
+	Gte(Number),
+	Lt(Number),
+	Lte(Number),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,12 +46,16 @@ pub struct Relation<F, T> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+	Number(Number),
+	String(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Number {
 	/// A positive integer.
 	U64(u64),
 	/// A negative integer.
 	I64(i64),
 	/// A floating point number.
 	F64(f64),
-	/// A string.
-	String(String),
 }

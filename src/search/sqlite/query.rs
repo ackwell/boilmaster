@@ -313,7 +313,12 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveRes
 			),
 		),
 
-		post::Operation::Equal(value) => (expression.eq(value).into_condition(), Expr::value(1)),
+		post::Operation::Eq(value) => (expression.eq(value).into_condition(), Expr::value(1)),
+
+		post::Operation::Gt(number) => (expression.gt(number).into_condition(), Expr::value(1)),
+		post::Operation::Gte(number) => (expression.gte(number).into_condition(), Expr::value(1)),
+		post::Operation::Lt(number) => (expression.lt(number).into_condition(), Expr::value(1)),
+		post::Operation::Lte(number) => (expression.lte(number).into_condition(), Expr::value(1)),
 	};
 
 	Ok(ResolveResult {
@@ -342,10 +347,18 @@ fn table_alias(alias_base: &str, language: Language) -> Alias {
 impl From<post::Value> for sea_query::Value {
 	fn from(value: post::Value) -> Self {
 		match value {
-			post::Value::U64(value) => sea_query::Value::BigUnsigned(Some(value)),
-			post::Value::I64(value) => sea_query::Value::BigInt(Some(value)),
-			post::Value::F64(value) => sea_query::Value::Double(Some(value)),
+			post::Value::Number(value) => sea_query::Value::from(value),
 			post::Value::String(value) => sea_query::Value::String(Some(value.into())),
+		}
+	}
+}
+
+impl From<post::Number> for sea_query::Value {
+	fn from(value: post::Number) -> Self {
+		match value {
+			post::Number::U64(value) => sea_query::Value::BigUnsigned(Some(value)),
+			post::Number::I64(value) => sea_query::Value::BigInt(Some(value)),
+			post::Number::F64(value) => sea_query::Value::Double(Some(value)),
 		}
 	}
 }

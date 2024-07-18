@@ -118,24 +118,34 @@ fn array_specifier(input: &str) -> ParseResult<query::FieldSpecifier> {
 
 fn operation(input: &str) -> ParseResult<query::Operation> {
 	alt((
-		preceded(char('.'), map(node, operation_relation)),
-		preceded(char('~'), map(string, query::Operation::Match)),
-		preceded(char('='), map(value, query::Operation::Equal)),
+		preceded(char('.'), cut(map(node, operation_relation))),
+		preceded(char('~'), cut(map(string, query::Operation::Match))),
+		preceded(char('='), cut(map(value, query::Operation::Eq))),
+		preceded(tag(">="), cut(map(number, query::Operation::Gte))),
+		preceded(char('>'), cut(map(number, query::Operation::Gt))),
+		preceded(tag("<="), cut(map(number, query::Operation::Lte))),
+		preceded(char('<'), cut(map(number, query::Operation::Lt))),
 	))(input)
 }
 
 fn value(input: &str) -> ParseResult<query::Value> {
 	alt((
+		map(number, query::Value::Number),
+		map(string, query::Value::String),
+	))(input)
+}
+
+fn number(input: &str) -> ParseResult<query::Number> {
+	alt((
 		// Try to parse the number as a potentially-signed integer. If it's followed by `.`, it'll fall through to the float check.
 		terminated(
 			alt((
-				map(i64, query::Value::I64),
-				map(map_res(digit1, str::parse), query::Value::U64),
+				map(i64, query::Number::I64),
+				map(map_res(digit1, str::parse), query::Number::U64),
 			)),
 			not(one_of(".eE")),
 		),
-		map(double, query::Value::F64),
-		map(string, query::Value::String),
+		map(double, query::Number::F64),
 	))(input)
 }
 
@@ -207,14 +217,15 @@ mod test {
 		})
 	}
 
+	fn u64(value: u64) -> query::Value {
+		query::Value::Number(query::Number::U64(value))
+	}
+
 	#[test]
 	fn parse_simple() {
 		let expected = group(vec![(
 			query::Occur::Should,
-			leaf(
-				field_struct("A"),
-				query::Operation::Equal(query::Value::U64(1)),
-			),
+			leaf(field_struct("A"), query::Operation::Eq(u64(1))),
 		)]);
 
 		let got = test_parse("A=1");
@@ -227,10 +238,7 @@ mod test {
 			query::Occur::Should,
 			leaf(
 				field_struct("A"),
-				operation_relation(leaf(
-					field_struct("B"),
-					query::Operation::Equal(query::Value::U64(1)),
-				)),
+				operation_relation(leaf(field_struct("B"), query::Operation::Eq(u64(1)))),
 			),
 		)]);
 
@@ -244,7 +252,7 @@ mod test {
 			query::Occur::Should,
 			leaf(
 				query::FieldSpecifier::Struct("A".into(), Some(excel::Language::Japanese)),
-				query::Operation::Equal(query::Value::U64(1)),
+				query::Operation::Eq(u64(1)),
 			),
 		)]);
 
@@ -260,7 +268,7 @@ mod test {
 				field_struct("A"),
 				operation_relation(leaf(
 					query::FieldSpecifier::Array,
-					query::Operation::Equal(query::Value::U64(1)),
+					query::Operation::Eq(u64(1)),
 				)),
 			),
 		)]);
@@ -274,17 +282,11 @@ mod test {
 		let expected = group(vec![
 			(
 				query::Occur::Should,
-				leaf(
-					field_struct("A"),
-					query::Operation::Equal(query::Value::U64(1)),
-				),
+				leaf(field_struct("A"), query::Operation::Eq(u64(1))),
 			),
 			(
 				query::Occur::Should,
-				leaf(
-					field_struct("B"),
-					query::Operation::Equal(query::Value::U64(2)),
-				),
+				leaf(field_struct("B"), query::Operation::Eq(u64(2))),
 			),
 		]);
 
@@ -297,24 +299,15 @@ mod test {
 		let expected = group(vec![
 			(
 				query::Occur::Should,
-				leaf(
-					field_struct("A"),
-					query::Operation::Equal(query::Value::U64(1)),
-				),
+				leaf(field_struct("A"), query::Operation::Eq(u64(1))),
 			),
 			(
 				query::Occur::Must,
-				leaf(
-					field_struct("B"),
-					query::Operation::Equal(query::Value::U64(2)),
-				),
+				leaf(field_struct("B"), query::Operation::Eq(u64(2))),
 			),
 			(
 				query::Occur::MustNot,
-				leaf(
-					field_struct("C"),
-					query::Operation::Equal(query::Value::U64(3)),
-				),
+				leaf(field_struct("C"), query::Operation::Eq(u64(3))),
 			),
 		]);
 
@@ -331,17 +324,11 @@ mod test {
 				operation_relation(group(vec![
 					(
 						query::Occur::Should,
-						leaf(
-							field_struct("B"),
-							query::Operation::Equal(query::Value::U64(1)),
-						),
+						leaf(field_struct("B"), query::Operation::Eq(u64(1))),
 					),
 					(
 						query::Occur::Should,
-						leaf(
-							field_struct("C"),
-							query::Operation::Equal(query::Value::U64(2)),
-						),
+						leaf(field_struct("C"), query::Operation::Eq(u64(2))),
 					),
 				])),
 			),
@@ -365,26 +352,46 @@ mod test {
 			harness(query::Operation::Match("hello".into()))
 		);
 
+		assert_eq!(test_parse("A=1"), harness(query::Operation::Eq(u64(1))));
+
 		assert_eq!(
-			test_parse("A=1"),
-			harness(query::Operation::Equal(query::Value::U64(1)))
+			test_parse("A>=1"),
+			harness(query::Operation::Gte(query::Number::U64(1)))
+		);
+
+		assert_eq!(
+			test_parse("A>1"),
+			harness(query::Operation::Gt(query::Number::U64(1)))
+		);
+
+		assert_eq!(
+			test_parse("A<=1"),
+			harness(query::Operation::Lte(query::Number::U64(1)))
+		);
+
+		assert_eq!(
+			test_parse("A<1"),
+			harness(query::Operation::Lt(query::Number::U64(1)))
 		);
 	}
 
 	#[test]
 	fn number_types() {
-		fn harness(value: query::Value) -> query::Node {
+		fn harness(number: query::Number) -> query::Node {
 			group(vec![(
 				query::Occur::Should,
-				leaf(field_struct("A"), query::Operation::Equal(value)),
+				leaf(
+					field_struct("A"),
+					query::Operation::Eq(query::Value::Number(number)),
+				),
 			)])
 		}
 
-		assert_eq!(test_parse("A=1"), harness(query::Value::U64(1)));
-		assert_eq!(test_parse("A=-1"), harness(query::Value::I64(-1)));
-		assert_eq!(test_parse("A=1.0"), harness(query::Value::F64(1.0)));
-		assert_eq!(test_parse("A=1e0"), harness(query::Value::F64(1.0)));
-		assert_eq!(test_parse("A=1E0"), harness(query::Value::F64(1.0)));
+		assert_eq!(test_parse("A=1"), harness(query::Number::U64(1)));
+		assert_eq!(test_parse("A=-1"), harness(query::Number::I64(-1)));
+		assert_eq!(test_parse("A=1.0"), harness(query::Number::F64(1.0)));
+		assert_eq!(test_parse("A=1e0"), harness(query::Number::F64(1.0)));
+		assert_eq!(test_parse("A=1E0"), harness(query::Number::F64(1.0)));
 	}
 
 	#[test]

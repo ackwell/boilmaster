@@ -307,9 +307,30 @@ impl<'a> Normalizer<'a> {
 				context,
 			),
 
-			pre::Operation::Equal(value) => {
-				scalar_operation(|_| true, || post::Operation::Equal(value.clone()), context)
+			pre::Operation::Eq(value) => {
+				scalar_operation(|_| true, || post::Operation::Eq(value.clone()), context)
 			}
+
+			pre::Operation::Gt(number) => scalar_operation(
+				is_column_numeric,
+				|| post::Operation::Gt(number.clone()),
+				context,
+			),
+			pre::Operation::Gte(number) => scalar_operation(
+				is_column_numeric,
+				|| post::Operation::Gte(number.clone()),
+				context,
+			),
+			pre::Operation::Lt(number) => scalar_operation(
+				is_column_numeric,
+				|| post::Operation::Lt(number.clone()),
+				context,
+			),
+			pre::Operation::Lte(number) => scalar_operation(
+				is_column_numeric,
+				|| post::Operation::Lte(number.clone()),
+				context,
+			),
 		}
 	}
 
@@ -395,7 +416,9 @@ impl<'a> Normalizer<'a> {
 						condition.selector.clone(),
 						None,
 					)),
-					operation: pre::Operation::Equal(pre::Value::U64(condition.value.into())),
+					operation: pre::Operation::Eq(pre::Value::Number(pre::Number::U64(
+						condition.value.into(),
+					))),
 				});
 
 				let node = self.normalize_query(
@@ -423,6 +446,33 @@ impl<'a> Normalizer<'a> {
 		});
 
 		Ok(node)
+	}
+}
+
+fn is_column_numeric(column: &exh::ColumnDefinition) -> bool {
+	// NOTE: This is written to be comprehensive to ensure it does not drift if column kinds are updated.
+	use exh::ColumnKind as CK;
+	match column.kind() {
+		CK::Int8
+		| CK::UInt8
+		| CK::Int16
+		| CK::UInt16
+		| CK::Int32
+		| CK::UInt32
+		| CK::Float32
+		| CK::Int64
+		| CK::UInt64 => true,
+
+		CK::String
+		| CK::Bool
+		| CK::PackedBool0
+		| CK::PackedBool1
+		| CK::PackedBool2
+		| CK::PackedBool3
+		| CK::PackedBool4
+		| CK::PackedBool5
+		| CK::PackedBool6
+		| CK::PackedBool7 => false,
 	}
 }
 
@@ -475,6 +525,7 @@ fn create_or_group(mut nodes: impl Iterator<Item = post::Node>) -> Option<post::
 
 // The whole premise of this is that we want to _exclude_ references. If that premise does not hold, then the `columns` slice itself is basically exactly what we want.
 // TODO: On discussing, people(singular) seemed okay with a field being simultaneously scalar and a reference. I can't say I'm convinced, but it might be fine.
+// TODO: this is probably more pertienent than i thought - the `ItemLevel` sheet, for example, uses its ID as the item level. given item links to it, this means that querying item level is currently impossible without either a) querying the foreign key, or b) adding some way to query the id
 fn collect_scalars(
 	schema: &schema::Node,
 	columns: &[exh::ColumnDefinition],
