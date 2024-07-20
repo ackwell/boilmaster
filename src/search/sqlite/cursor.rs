@@ -16,7 +16,7 @@ pub struct Cursor {
 #[derive(Debug, Clone)]
 pub struct DatabaseCursor {
 	pub statement: SelectStatement,
-	pub offset: u32,
+	pub offset: usize,
 }
 
 #[derive(Debug, Deserialize)]

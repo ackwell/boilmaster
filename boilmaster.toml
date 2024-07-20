@@ -10,6 +10,13 @@ port = 8080
 username = "username"
 password = "password"
 
+[http.api1.search]
+limit.default = 100
+limit.max = 500
+limit.depth = 2
+# TODO: should this be shared with sheet eventually, or nah?
+filter.exdschema = "Name,Singular,Icon"
+
 [http.api1.sheet]
 limit.default = 100
 limit.max = 500
@@ -59,10 +66,6 @@ interval = 3600       # 1 hour
 default = "HEAD"
 remote = "https://github.com/xivdev/EXDSchema.git"
 directory = "exdschema"
-
-[search.pagination]
-limit_default = 100
-limit_max = 500
 
 [search.sqlite]
 directory = "search"

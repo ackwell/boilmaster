@@ -110,7 +110,7 @@ impl Database {
 	pub async fn search(
 		&self,
 		cursor: DatabaseCursor,
-		limit: u32,
+		limit: usize,
 	) -> Result<(Vec<SearchResult>, Option<DatabaseCursor>)> {
 		// Shoo off search requests if we're not ready yet.
 		if !self.ready.load(Ordering::Relaxed) {
@@ -123,9 +123,9 @@ impl Database {
 		} = cursor;
 
 		// We're requesting one more item than we want to ensure we know if we've hit EOF.
-		statement.limit((limit + 1).into());
+		statement.limit(u64::try_from(limit + 1).context("invalid limit")?);
 		if offset > 0 {
-			statement.offset(offset.into());
+			statement.offset(u64::try_from(offset).context("invalid offset")?);
 		}
 
 		let (query, values) = statement.build_rusqlite(SqliteQueryBuilder);
@@ -147,9 +147,8 @@ impl Database {
 		// If we did indeed get more than the expected limit due to the +1, truncate
 		// down to the limit and prepare a cursor for the next query.
 		let mut next_cursor = None;
-		let limit_usize = usize::try_from(limit).context("invalid limit")?;
-		if search_results.len() > limit_usize {
-			search_results.truncate(limit_usize);
+		if search_results.len() > limit {
+			search_results.truncate(limit);
 			next_cursor = Some(DatabaseCursor {
 				statement,
 				offset: offset + limit,

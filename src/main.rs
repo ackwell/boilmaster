@@ -53,7 +53,10 @@ async fn main() -> anyhow::Result<()> {
 		schema::Provider::new(config.schema, data.clone())
 			.context("failed to create schema provider")?,
 	);
-	let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
+	let search = Arc::new(
+		search::Search::new(config.search, data.clone(), schema.clone())
+			.context("failed to create search service")?,
+	);
 
 	// Set up a cancellation token that will fire when a shutdown signal is recieved.
 	let shutdown_token = shutdown_token();

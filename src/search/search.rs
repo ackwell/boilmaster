@@ -8,17 +8,15 @@ use std::{
 };
 
 use anyhow::Context;
-use derivative::Derivative;
 use either::Either;
 use ironworks::excel;
-use ironworks_schema::Schema;
 use itertools::Itertools;
 use serde::Deserialize;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::{data::Data, version::VersionKey};
+use crate::{data::Data, schema, version::VersionKey};
 
 use super::{
 	error::{Error, Result},
@@ -28,14 +26,7 @@ use super::{
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-	pagination: PaginationConfig,
 	sqlite: sqlite::Config,
-}
-
-#[derive(Debug, Deserialize)]
-struct PaginationConfig {
-	limit_default: u32,
-	limit_max: u32,
 }
 
 #[derive(Debug)]
@@ -44,16 +35,13 @@ pub enum SearchRequest {
 	Cursor(Uuid),
 }
 
-#[derive(Derivative)]
-#[derivative(Debug)]
+#[derive(Debug)]
 pub struct SearchRequestQuery {
 	pub version: VersionKey,
 	pub query: pre::Node,
 	pub language: excel::Language,
 	pub sheets: Option<HashSet<String>>,
-
-	#[derivative(Debug = "ignore")]
-	pub schema: Box<dyn Schema + Send>,
+	pub schema: schema::CanonicalSpecifier,
 }
 
 #[derive(Debug)]
@@ -66,22 +54,21 @@ pub struct SearchResult {
 }
 
 pub struct Search {
-	pagination_config: PaginationConfig,
-
 	ready: AtomicBool,
 
 	provider: Arc<sqlite::Provider>,
 
 	data: Arc<Data>,
+	schema: Arc<schema::Provider>,
 }
 
 impl Search {
-	pub fn new(config: Config, data: Arc<Data>) -> Result<Self> {
+	pub fn new(config: Config, data: Arc<Data>, schema: Arc<schema::Provider>) -> Result<Self> {
 		Ok(Self {
-			pagination_config: config.pagination,
 			ready: false.into(),
 			provider: Arc::new(sqlite::Provider::new(config.sqlite, data.clone())?),
 			data,
+			schema,
 		})
 	}
 
@@ -144,13 +131,8 @@ impl Search {
 	pub async fn search(
 		&self,
 		request: SearchRequest,
-		limit: Option<u32>,
+		limit: usize,
 	) -> Result<(Vec<SearchResult>, Option<Uuid>)> {
-		// Work out the actual result limit we'll use for this query.
-		let result_limit = limit
-			.unwrap_or(self.pagination_config.limit_default)
-			.min(self.pagination_config.limit_max);
-
 		// Translate the request into the format used by providers.
 		let provider_request = match request {
 			SearchRequest::Query(query) => self.normalize_request_query(query)?,
@@ -158,7 +140,7 @@ impl Search {
 		};
 
 		// Execute the search.
-		self.provider.search(provider_request, result_limit).await
+		self.provider.search(provider_request, limit).await
 	}
 
 	fn normalize_request_query(&self, query: SearchRequestQuery) -> Result<sqlite::SearchRequest> {
@@ -171,7 +153,8 @@ impl Search {
 		let list = excel.list()?;
 
 		// Build the helpers for this search call.
-		let normalizer = Normalizer::new(&excel, query.schema.as_ref());
+		let schema = self.schema.schema(query.schema)?;
+		let normalizer = Normalizer::new(&excel, schema.as_ref());
 
 		// Get an iterator over the provided sheet filter, falling back to the full list of sheets.
 		let sheet_names = query

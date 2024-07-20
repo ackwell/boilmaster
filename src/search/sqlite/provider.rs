@@ -102,7 +102,7 @@ impl Provider {
 	pub async fn search(
 		&self,
 		request: SearchRequest,
-		limit: u32,
+		limit: usize,
 	) -> Result<(Vec<SearchResult>, Option<Uuid>)> {
 		let (version, database, cursor) = match request {
 			SearchRequest::Query { version, queries } => {

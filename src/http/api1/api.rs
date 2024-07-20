@@ -20,6 +20,7 @@ const OPENAPI_JSON_ROUTE: &str = "/openapi.json";
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+	search: search::Config,
 	sheet: sheet::Config,
 }
 
@@ -33,7 +34,7 @@ pub fn router(config: Config) -> Router<service::State> {
 		)
 		.nest(
 			"/search",
-			search::router().with_path_items(|item| item.tag("search")),
+			search::router(config.search).with_path_items(|item| item.tag("search")),
 		)
 		.nest(
 			"/sheet",
@@ -61,7 +62,7 @@ fn api_docs(api: TransformOpenApi) -> TransformOpenApi {
 		})
 		.tag(Tag {
 			name: "search".into(),
-			description: Some("Endpoints for seaching and filtering the game's relational data store.".into()),
+			description: Some("Endpoints for seaching and filtering the game's static relational data store.".into()),
 			..Default::default()
 		})
 		.tag(Tag {
