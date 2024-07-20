@@ -11,15 +11,43 @@ use nom::{
 	sequence::{delimited, preceded, terminated, tuple},
 	Finish, IResult,
 };
+use schemars::JsonSchema;
 use serde::{de, Deserialize};
 
 use crate::{read, search::query};
 
 use super::error;
 
-// TODO: docs
-#[derive(Debug)]
-pub struct QueryString(query::Node);
+// NOTE: The silly extra newlines in the operation list is due to openapi
+// generation not handling lists properly, seemingly.
+/// A query string for searching excel data.
+///
+/// Queries are formed of clauses, which take the basic form of
+/// `[specifier][operation][value]`, i.e. `Name="Example"`. Multiple clauses may
+/// be specified by seperating them with whitespace, i.e. `Foo=1 Bar=2`.
+///
+/// Like field filters, clause specifiers may use dot notation to specify fields
+/// inside structs and relations (i.e. `Foo.Bar=1)`, as well as language tags to
+/// target fields in particular languages (i.e. `Foo@ja=1`).
+///
+/// By default, results will match at least one clause, with higher relevance
+/// scores for those that match more. To modify this behavior, clauses can
+/// decorated. `+clause` specifies that the clause _must_ be matched for any
+/// result returned, and `-clause` specifies that it _must not_ be matched.
+///
+/// To represent more involved boolean matching, clauses may be grouped with
+/// parentheses. `+(a b) +c` will require that either clauses a _or_ b must
+/// match, in addition to c matching.
+///
+/// Supported operations:
+///
+///   - partial string match: `key~"value"`
+///
+///   - exact equality: `key=value`
+///
+///   - numeric comparison: `key>=value`, `key>value`, `key<=value`, `key<value`
+#[derive(Debug, JsonSchema)]
+pub struct QueryString(#[schemars(with = "String")] query::Node);
 
 impl From<QueryString> for query::Node {
 	fn from(value: QueryString) -> Self {
