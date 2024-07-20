@@ -30,19 +30,20 @@ RUN cargo build --release --bin boilmaster
 # Create runtime image
 FROM debian:buster-slim AS runtime
 
-WORKDIR /app
-
-RUN apt-get update && apt-get install git -y
-
-COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.so.1
-COPY --from=builder /app/boilmaster.toml /app
-COPY --from=builder /app/target/release/boilmaster /app
-
 # Redirect persistent data into one shared volume
 ENV BM_VERSION_PATCH_DIRECTORY="/app/persist/patches"
 ENV BM_SCHEMA_EXDSCHEMA_DIRECTORY="/app/persist/exdschema"
 ENV BM_VERSION_DIRECTORY="/app/persist/versions"
 ENV BM_SEARCH_SQLITE_DIRECTORY="/app/persist/search"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y git curl
+
+COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.so.1
+COPY --from=builder /app/boilmaster.toml /app
+COPY --from=builder /app/target/release/boilmaster /app
+
 VOLUME /app/persist
 
 HEALTHCHECK --start-period=45s --interval=15s --retries=3 --timeout=5s CMD curl -sf http://localhost:8080/health/live || exit 1
