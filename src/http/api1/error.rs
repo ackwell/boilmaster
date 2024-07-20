@@ -8,13 +8,7 @@ use axum::{
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{
-	asset,
-	data,
-	read,
-	schema,
-	// search
-};
+use crate::{asset, data, read, schema, search};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -24,9 +18,9 @@ pub enum Error {
 	#[error("invalid request: {0}")]
 	Invalid(String),
 
-	// #[error("unavailable: {0}")]
-	// Unavailable(String),
-	//
+	#[error("unavailable: {0}")]
+	Unavailable(String),
+
 	#[error("internal server error")]
 	Other(#[from] anyhow::Error),
 }
@@ -77,20 +71,21 @@ impl From<schema::Error> for Error {
 	}
 }
 
-// impl From<search::Error> for Error {
-// 	fn from(error: search::Error) -> Self {
-// 		use search::Error as SE;
-// 		match error {
-// 			SE::FieldType(..)
-// 			| SE::MalformedQuery(..)
-// 			| SE::QuerySchemaMismatch(..)
-// 			| SE::QueryGameMismatch(..)
-// 			| SE::SchemaGameMismatch(..)
-// 			| SE::UnknownCursor(..) => Self::Invalid(error.to_string()),
-// 			SE::Failure(inner) => Self::Other(inner),
-// 		}
-// 	}
-// }
+impl From<search::Error> for Error {
+	fn from(error: search::Error) -> Self {
+		use search::Error as SE;
+		match error {
+			SE::NotReady => Self::Unavailable(error.to_string()),
+			SE::FieldType(..)
+			| SE::MalformedQuery(..)
+			| SE::QuerySchemaMismatch(..)
+			| SE::QueryGameMismatch(..)
+			| SE::SchemaGameMismatch(..)
+			| SE::UnknownCursor(..) => Self::Invalid(error.to_string()),
+			SE::Failure(inner) => Self::Other(inner),
+		}
+	}
+}
 
 impl From<PathRejection> for Error {
 	fn from(value: PathRejection) -> Self {
@@ -133,7 +128,7 @@ impl From<Error> for ErrorResponse {
 		let status_code = match value {
 			Error::NotFound(..) => StatusCode::NOT_FOUND,
 			Error::Invalid(..) => StatusCode::BAD_REQUEST,
-			// Error::Unavailable(..) => StatusCode::SERVICE_UNAVAILABLE,
+			Error::Unavailable(..) => StatusCode::SERVICE_UNAVAILABLE,
 			Error::Other(..) => StatusCode::INTERNAL_SERVER_ERROR,
 		};
 

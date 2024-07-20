@@ -1,34 +1,32 @@
-use std::{borrow::Cow, collections::HashSet, sync::Arc};
+use std::{
+	borrow::Cow,
+	collections::HashSet,
+	sync::{
+		atomic::{AtomicBool, Ordering},
+		Arc,
+	},
+};
 
 use anyhow::Context;
-use derivative::Derivative;
 use either::Either;
 use ironworks::excel;
-use ironworks_schema::Schema;
 use itertools::Itertools;
 use serde::Deserialize;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::{data::Data, version::VersionKey};
+use crate::{data::Data, schema, version::VersionKey};
 
 use super::{
 	error::{Error, Result},
 	internal_query::{pre, Normalizer},
-	tantivy::{self, SearchRequest as ProviderSearchRequest},
+	sqlite,
 };
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-	pagination: PaginationConfig,
-	tantivy: tantivy::Config,
-}
-
-#[derive(Debug, Deserialize)]
-struct PaginationConfig {
-	limit_default: u32,
-	limit_max: u32,
+	sqlite: sqlite::Config,
 }
 
 #[derive(Debug)]
@@ -37,16 +35,13 @@ pub enum SearchRequest {
 	Cursor(Uuid),
 }
 
-#[derive(Derivative)]
-#[derivative(Debug)]
+#[derive(Debug)]
 pub struct SearchRequestQuery {
 	pub version: VersionKey,
 	pub query: pre::Node,
 	pub language: excel::Language,
 	pub sheets: Option<HashSet<String>>,
-
-	#[derivative(Debug = "ignore")]
-	pub schema: Box<dyn Schema>,
+	pub schema: schema::CanonicalSpecifier,
 }
 
 #[derive(Debug)]
@@ -59,20 +54,26 @@ pub struct SearchResult {
 }
 
 pub struct Search {
-	pagination_config: PaginationConfig,
+	ready: AtomicBool,
 
-	provider: Arc<tantivy::Provider>,
+	provider: Arc<sqlite::Provider>,
 
 	data: Arc<Data>,
+	schema: Arc<schema::Provider>,
 }
 
 impl Search {
-	pub fn new(config: Config, data: Arc<Data>) -> Result<Self> {
+	pub fn new(config: Config, data: Arc<Data>, schema: Arc<schema::Provider>) -> Result<Self> {
 		Ok(Self {
-			pagination_config: config.pagination,
-			provider: Arc::new(tantivy::Provider::new(config.tantivy)?),
+			ready: false.into(),
+			provider: Arc::new(sqlite::Provider::new(config.sqlite, data.clone())?),
 			data,
+			schema,
 		})
+	}
+
+	pub fn ready(&self) -> bool {
+		self.ready.load(Ordering::Relaxed)
 	}
 
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
@@ -93,6 +94,11 @@ impl Search {
 	}
 
 	async fn ingest(&self, cancel: CancellationToken, versions: Vec<VersionKey>) -> Result<()> {
+		// If there's no versions at all, there's nothing to do, bail.
+		if versions.is_empty() {
+			return Ok(());
+		}
+
 		// Get a list of all sheets in the provided versions.
 		// TODO: This has more `.collect`s than i'd like, but given it's a fairly cold path, probably isn't a problem.
 		let sheets = versions
@@ -114,34 +120,30 @@ impl Search {
 		// Fire off the ingestion in the provider.
 		Arc::clone(&self.provider).ingest(cancel, sheets).await?;
 
+		// At least one ingestion has occured, the service can be considered ready.
+		self.ready.store(true, Ordering::Relaxed);
+
+		tracing::info!("search ingestion complete");
+
 		Ok(())
 	}
 
-	pub fn search(
+	pub async fn search(
 		&self,
 		request: SearchRequest,
-		limit: Option<u32>,
+		limit: usize,
 	) -> Result<(Vec<SearchResult>, Option<Uuid>)> {
-		// Work out the actual result limit we'll use for this query.
-		let result_limit = limit
-			.unwrap_or(self.pagination_config.limit_default)
-			.min(self.pagination_config.limit_max);
-
 		// Translate the request into the format used by providers.
 		let provider_request = match request {
 			SearchRequest::Query(query) => self.normalize_request_query(query)?,
-			SearchRequest::Cursor(uuid) => ProviderSearchRequest::Cursor(uuid),
+			SearchRequest::Cursor(uuid) => sqlite::SearchRequest::Cursor(uuid),
 		};
 
 		// Execute the search.
-		let executor = Executor {
-			provider: &self.provider,
-		};
-
-		executor.search(provider_request, Some(result_limit))
+		self.provider.search(provider_request, limit).await
 	}
 
-	fn normalize_request_query(&self, query: SearchRequestQuery) -> Result<ProviderSearchRequest> {
+	fn normalize_request_query(&self, query: SearchRequestQuery) -> Result<sqlite::SearchRequest> {
 		// Get references to the game data we'll need.
 		let excel = self
 			.data
@@ -151,7 +153,8 @@ impl Search {
 		let list = excel.list()?;
 
 		// Build the helpers for this search call.
-		let normalizer = Normalizer::new(&excel, query.schema.as_ref());
+		let schema = self.schema.schema(query.schema)?;
+		let normalizer = Normalizer::new(&excel, schema.as_ref());
 
 		// Get an iterator over the provided sheet filter, falling back to the full list of sheets.
 		let sheet_names = query
@@ -164,32 +167,16 @@ impl Search {
 				let normalized_query = normalizer.normalize(&query.query, &name, query.language)?;
 				Ok((name.to_string(), normalized_query))
 			})
-			// TODO: Much like the analogue in index, this is filtering out non-fatal errors. To raise as warnings, these will need to be split out at this point.
+			// TODO: This is filtering out non-fatal errors. To raise as warnings, these will need to be split out at this point.
 			.filter(|query| match query {
 				Err(Error::Failure(_)) | Ok(_) => true,
 				Err(_) => false,
 			})
 			.collect::<Result<Vec<_>>>()?;
 
-		Ok(ProviderSearchRequest::Query {
+		Ok(sqlite::SearchRequest::Query {
 			version: query.version,
 			queries: normalized_queries,
 		})
-	}
-}
-
-// TODO: can probably store the number of search executions on this to feed into rate limiting
-pub struct Executor<'a> {
-	provider: &'a tantivy::Provider,
-}
-
-impl Executor<'_> {
-	// TODO: The Option on limit is to represent the "no limit" case required for inner queries in relationships, where outer filtering may lead to any theoretical bounded inner query to be insufficient. For obvious reasons this is... _not_ a particulary efficient approach, though I'm not sure what better approaches exist. If nothing else, would be good to cache common queries in memory to avoid constant repetition of unbounded limits.
-	pub fn search(
-		&self,
-		request: ProviderSearchRequest,
-		limit: Option<u32>,
-	) -> Result<(Vec<SearchResult>, Option<Uuid>)> {
-		self.provider.search(request, limit, self)
 	}
 }

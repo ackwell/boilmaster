@@ -1,10 +1,9 @@
+mod connection;
 mod cursor;
-mod index;
-mod key;
-mod metadata;
+mod database;
 mod provider;
 mod query;
-mod resolve;
 mod schema;
+mod vtable;
 
 pub use provider::{Config, Provider, SearchRequest};

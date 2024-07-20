@@ -7,13 +7,7 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
-use super::{
-	admin,
-	api1,
-	health,
-	// search,
-	service,
-};
+use super::{admin, api1, health, service};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -31,7 +25,7 @@ pub async fn serve(
 	data: service::Data,
 	read: service::Read,
 	schema: service::Schema,
-	// search: service::Search,
+	search: service::Search,
 	version: service::Version,
 ) -> Result<()> {
 	let bind_address = SocketAddr::new(
@@ -45,14 +39,13 @@ pub async fn serve(
 		.nest("/admin", admin::router(config.admin))
 		.nest("/api/1", api1::router(config.api1))
 		.nest("/health", health::router())
-		// .nest("/search", search::router())
 		.layer(TraceLayer::new_for_http())
 		.with_state(service::State {
 			asset,
 			data,
 			read,
 			schema,
-			// search,
+			search,
 			version,
 		});
 

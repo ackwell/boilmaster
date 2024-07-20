@@ -1,8 +1,7 @@
 mod admin;
 mod api1;
-mod http;
-// mod search;
 mod health;
+mod http;
 mod service;
 
 pub use http::{serve, Config};

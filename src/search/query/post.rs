@@ -9,7 +9,7 @@ pub type Leaf = query::Leaf<LeafField, RelationTarget>;
 pub type Operation = query::Operation<LeafField, RelationTarget>;
 pub type Relation = query::Relation<LeafField, RelationTarget>;
 
-pub use query::{Occur, Value};
+pub use query::{Number, Occur, Value};
 
 // Types specific to post-normalised queries
 pub type LeafField = (exh::ColumnDefinition, excel::Language);

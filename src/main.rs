@@ -1,16 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use boilmaster::{
-	asset,
-	data,
-	http,
-	read,
-	schema,
-	// search,
-	tracing,
-	version,
-};
+use boilmaster::{asset, data, http, read, schema, search, tracing, version};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -27,7 +18,7 @@ struct Config {
 	read: read::Config,
 	version: version::Config,
 	schema: schema::Config,
-	// search: search::Config,
+	search: search::Config,
 }
 
 #[tokio::main]
@@ -62,7 +53,10 @@ async fn main() -> anyhow::Result<()> {
 		schema::Provider::new(config.schema, data.clone())
 			.context("failed to create schema provider")?,
 	);
-	// let search = Arc::new(search::Search::new(config.search, data.clone()).expect("TODO"));
+	let search = Arc::new(
+		search::Search::new(config.search, data.clone(), schema.clone())
+			.context("failed to create search service")?,
+	);
 
 	// Set up a cancellation token that will fire when a shutdown signal is recieved.
 	let shutdown_token = shutdown_token();
@@ -74,9 +68,9 @@ async fn main() -> anyhow::Result<()> {
 		schema
 			.start(shutdown_token.clone())
 			.map_err(anyhow::Error::from),
-		// search
-		// 	.start(shutdown_token.child_token())
-		// 	.map_err(anyhow::Error::from),
+		search
+			.start(shutdown_token.child_token())
+			.map_err(anyhow::Error::from),
 		http::serve(
 			shutdown_token,
 			config.http,
@@ -84,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
 			data.clone(),
 			read,
 			schema.clone(),
-			// search.clone(),
+			search.clone(),
 			version.clone(),
 		),
 	)

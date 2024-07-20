@@ -23,7 +23,7 @@ pub trait Source: Send + Sync {
 	fn canonicalize(&self, schema_version: Option<&str>, version_key: VersionKey)
 		-> Result<String>;
 
-	fn version(&self, version: &str) -> Result<Box<dyn Schema>>;
+	fn version(&self, version: &str) -> Result<Box<dyn Schema + Send>>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,7 +114,7 @@ impl Provider {
 		})
 	}
 
-	pub fn schema(&self, specifier: CanonicalSpecifier) -> Result<Box<dyn Schema>> {
+	pub fn schema(&self, specifier: CanonicalSpecifier) -> Result<Box<dyn Schema + Send>> {
 		let source = self
 			.sources
 			.get(specifier.source.as_str())

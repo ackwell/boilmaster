@@ -1,5 +1,4 @@
 mod normalize;
-mod parse;
 mod query;
 
 pub mod post;

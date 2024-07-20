@@ -1,28 +1,21 @@
-use std::{
-	collections::{hash_map::DefaultHasher, HashMap},
-	hash::BuildHasherDefault,
-	sync::Arc,
-	time::Duration,
-};
+use std::time::Duration;
 
 use mini_moka::sync as moka;
+use sea_query::SelectStatement;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{search::internal_query::post, version::VersionKey};
+use crate::version::VersionKey;
 
-use super::key::{IndexKey, SheetKey};
-
+#[derive(Debug, Clone)]
 pub struct Cursor {
 	pub version: VersionKey,
-	pub indices: StableHashMap<IndexKey, IndexCursor>,
+	pub inner: DatabaseCursor,
 }
 
-pub type StableHashMap<K, V> = HashMap<K, V, BuildHasherDefault<DefaultHasher>>;
-
-#[derive(Default)]
-pub struct IndexCursor {
-	pub queries: Vec<(SheetKey, post::Node)>,
+#[derive(Debug, Clone)]
+pub struct DatabaseCursor {
+	pub statement: SelectStatement,
 	pub offset: usize,
 }
 
@@ -33,7 +26,7 @@ pub struct Config {
 }
 
 pub struct Cache {
-	cache: moka::Cache<Uuid, Arc<Cursor>>,
+	cache: moka::Cache<Uuid, Cursor>,
 }
 
 impl Cache {
@@ -51,13 +44,13 @@ impl Cache {
 		}
 	}
 
-	pub fn get(&self, key: Uuid) -> Option<Arc<Cursor>> {
+	pub fn get(&self, key: Uuid) -> Option<Cursor> {
 		self.cache.get(&key)
 	}
 
 	pub fn insert(&self, cursor: Cursor) -> Uuid {
 		let key = Uuid::new_v4();
-		self.cache.insert(key, Arc::new(cursor));
+		self.cache.insert(key, cursor);
 		key
 	}
 }

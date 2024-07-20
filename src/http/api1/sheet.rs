@@ -221,7 +221,7 @@ struct RowResult {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	subrow_id: Option<u16>,
 
-	/// Field values for this row, according to the current schema.
+	/// Field values for this row, according to the current schema and field filter.
 	fields: ValueString,
 }
 
