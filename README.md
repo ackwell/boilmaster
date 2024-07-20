@@ -32,11 +32,8 @@ services:
       - BM_HTTP_ADMIN_AUTH_PASSWORD="CHANGE-ME"
       # Other configuration here, see the Configuration section below for more information.
     volumes:
-      - ${PWD}/versions:/app/versions
-      - ${PWD}/exdschema:/app/exdschema
       # Need roughly 100gb of free space for patches
-      - ${PWD}/patches:/app/patches
-      - ${PWD}/search:/app/search
+      - ${PWD}/persist:/app/persist
     ports:
       - 8080:8080
     restart: unless-stopped
