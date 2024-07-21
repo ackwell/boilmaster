@@ -7,6 +7,7 @@ use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	transform::TransformOperation,
 };
+use anyhow::anyhow;
 use axum::{debug_handler, extract::State, Extension, Json};
 use ironworks::{excel, file::exh};
 use schemars::JsonSchema;
@@ -32,7 +33,7 @@ use super::{
 pub struct Config {
 	limit: LimitConfig,
 
-	filter: HashMap<String, FilterString>,
+	fields: HashMap<String, FilterString>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -217,9 +218,14 @@ async fn search(
 	// Read and build result structures.
 	let filter = query
 		.fields
-		.or_else(|| config.filter.get(&schema_specifier.source).cloned())
+		.or_else(|| config.fields.get(&schema_specifier.source).cloned())
 		.map(|filter_string| filter_string.to_filter(language))
-		.unwrap_or(Ok(read::Filter::All))?;
+		.ok_or_else(|| {
+			Error::Other(anyhow!(
+				"missing default search fields for {}",
+				schema_specifier.source
+			))
+		})??;
 
 	let http_results = results
 		.into_iter()

@@ -33,7 +33,13 @@ use super::error;
 /// select _all_ `b` fields of structs within the array `a`, however `a.b` will
 /// select nothing.
 #[derive(Debug, Clone, JsonSchema)]
-pub struct FilterString(#[schemars(with = "String")] Vec<Path>);
+pub struct FilterString(#[schemars(with = "String")] FilterStringInner);
+
+#[derive(Debug, Clone)]
+enum FilterStringInner {
+	All,
+	Paths(Vec<Path>),
+}
 
 type Path = Vec<Entry>;
 
@@ -45,13 +51,18 @@ enum Entry {
 
 impl FilterString {
 	pub fn to_filter(self, default_language: excel::Language) -> error::Result<read::Filter> {
-		let mut filters = self
-			.0
+		let paths = match self.0 {
+			FilterStringInner::All => return Ok(read::Filter::All),
+			FilterStringInner::Paths(paths) => paths,
+		};
+
+		let mut filters = paths
 			.into_iter()
 			.map(|entries| build_filter(entries, default_language));
 
 		let Some(mut output) = filters.next() else {
-			return Ok(read::Filter::All);
+			// TODO: Should I introduce an explicit "None" concept?
+			return Ok(read::Filter::Struct(HashMap::new()));
 		};
 
 		for filter in filters {
@@ -143,12 +154,15 @@ impl FromStr for FilterString {
 			.finish()
 			.map_err(|error| error::Error::Invalid(error.to_string()))?;
 
-		Ok(filter)
+		Ok(FilterString(filter))
 	}
 }
 
-fn filter(input: &str) -> IResult<&str, FilterString> {
-	map(separated_list0(char(','), path), FilterString)(input)
+fn filter(input: &str) -> IResult<&str, FilterStringInner> {
+	alt((
+		value(FilterStringInner::All, char('*')),
+		map(separated_list0(char(','), path), FilterStringInner::Paths),
+	))(input)
 }
 
 fn path(input: &str) -> IResult<&str, Path> {
@@ -252,10 +266,18 @@ mod test {
 	}
 
 	#[test]
+	fn parse_blank() {
+		let expected = read::Filter::Struct(HashMap::new());
+
+		let got = test_parse("");
+		assert_eq!(got, expected);
+	}
+
+	#[test]
 	fn parse_all() {
 		let expected = read::Filter::All;
 
-		let got = test_parse("");
+		let got = test_parse("*");
 		assert_eq!(got, expected);
 	}
 
@@ -341,10 +363,11 @@ mod test {
 			("comma,example", read::Filter::All),
 			("period.example", read::Filter::All),
 			("backslash\\example", read::Filter::All),
+			("asterisk*example", read::Filter::All),
 		]);
 
 		let got = test_parse(
-			"curly{example},ltgt<example>,parens(example),square\\[example\\],at\\@example,comma\\,example,period\\.example,backslash\\\\example",
+			"curly{example},ltgt<example>,parens(example),square\\[example\\],at\\@example,comma\\,example,period\\.example,backslash\\\\example,asterisk*example",
 		);
 		assert_eq!(got, expected);
 	}

@@ -15,14 +15,15 @@ limit.default = 100
 limit.max = 500
 limit.depth = 2
 # TODO: should this be shared with sheet eventually, or nah?
-filter.exdschema = "Name,Singular,Icon"
+fields.exdschema = "Name,Singular,Icon"
 
 [http.api1.sheet]
 limit.default = 100
 limit.max = 500
 limit.depth = 2
 # TODO: should this be shared with search eventually, or nah?
-filter.exdschema.list = "Name,Singular,Icon"
+list.fields.exdschema = "Name,Singular,Icon"
+entry.fields.exdschema = "*"
 
 [read.language]
 default = "en"

@@ -4,6 +4,7 @@ use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	transform::TransformOperation,
 };
+use anyhow::anyhow;
 use axum::{debug_handler, extract::State, Extension, Json};
 use either::Either;
 use ironworks::{excel, file::exh};
@@ -31,7 +32,8 @@ use super::{
 pub struct Config {
 	limit: LimitConfig,
 
-	filter: HashMap<String, FilterConfig>,
+	list: FilterConfig,
+	entry: FilterConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -43,8 +45,7 @@ struct LimitConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 struct FilterConfig {
-	list: Option<FilterString>,
-	entry: Option<FilterString>,
+	fields: HashMap<String, FilterString>,
 }
 
 pub fn router(config: Config) -> ApiRouter<service::State> {
@@ -263,16 +264,17 @@ async fn sheet(
 	// TODO: Consider extractor for this.
 	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
 
+	// TODO: this should be a utility
 	let filter = query
 		.fields
-		.or_else(|| {
-			config
-				.filter
-				.get(&schema_specifier.source)
-				.and_then(|filter_config| filter_config.list.clone())
-		})
+		.or_else(|| config.list.fields.get(&schema_specifier.source).cloned())
 		.map(|filter_string| filter_string.to_filter(language))
-		.unwrap_or(Ok(read::Filter::All))?;
+		.ok_or_else(|| {
+			Error::Other(anyhow!(
+				"missing default list fields for {}",
+				schema_specifier.source
+			))
+		})??;
 
 	let schema = schema_provider.schema(schema_specifier.clone())?;
 
@@ -424,14 +426,14 @@ async fn row(
 
 	let filter = query
 		.fields
-		.or_else(|| {
-			config
-				.filter
-				.get(&schema_specifier.source)
-				.and_then(|filter_config| filter_config.entry.clone())
-		})
+		.or_else(|| config.entry.fields.get(&schema_specifier.source).cloned())
 		.map(|filter_string| filter_string.to_filter(language))
-		.unwrap_or(Ok(read::Filter::All))?;
+		.ok_or_else(|| {
+			Error::Other(anyhow!(
+				"missing default entry fields for {}",
+				schema_specifier.source
+			))
+		})??;
 
 	let schema = schema_provider.schema(schema_specifier.clone())?;
 
@@ -491,7 +493,7 @@ fn read_row_result(
 		&read::Filter::All,
 		depth,
 	) {
-		Ok(v) => Some(ValueString(v, language)),
+		Ok(value) => Some(ValueString(value, language)),
 		Err(read::Error::NotFound(_)) => None,
 		Err(error) => Err(error)?,
 	};
