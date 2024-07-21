@@ -223,6 +223,8 @@ struct RowResult {
 
 	/// Field values for this row, according to the current schema and field filter.
 	fields: ValueString,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	transient: Option<ValueString>,
 }
 
 fn sheet_docs(operation: TransformOperation) -> TransformOperation {
@@ -286,8 +288,6 @@ async fn sheet(
 		})?
 		.with_default_language(language);
 
-	let sheet_kind = sheet.kind().anyhow()?;
-
 	// Iterate over the sheet, building row results.
 	let sheet_iterator = match query.rows {
 		// One or more row specifiers were provided, iterate over those specifically.
@@ -313,30 +313,16 @@ async fn sheet(
 
 	// Build Results for the targeted rows.
 	let sheet_iterator = sheet_iterator.map(|specifier| {
-		let row_id = specifier.row_id;
-		let subrow_id = specifier.subrow_id;
-
-		// TODO: This is pretty wasteful to call inside a loop, revisit actual read logic.
-		// TODO: at the moment, an unknown row specifier will cause excel to error with a NotFound (which is fine), however read:: then squashes that with anyhow, meaning the error gets hidden in a 500 ISE. revisit error handling in read:: while i'm at it ref. the above.
-		let fields = read.read(
+		read_row_result(
+			&read,
 			&excel,
 			schema.as_ref(),
 			&path.sheet,
-			row_id,
-			subrow_id,
+			specifier,
 			language,
 			&filter,
 			config.limit.depth,
-		)?;
-
-		Ok(RowResult {
-			row_id,
-			subrow_id: match sheet_kind {
-				exh::SheetKind::Subrows => Some(subrow_id),
-				_ => None,
-			},
-			fields: ValueString(fields, language),
-		})
+		)
 	});
 
 	let rows = sheet_iterator.collect::<Result<Vec<_>>>()?;
@@ -413,6 +399,7 @@ fn row_result_example(row_id: u32) -> RowResult {
 			)])),
 			excel::Language::English,
 		),
+		transient: None,
 	}
 }
 
@@ -448,35 +435,78 @@ async fn row(
 
 	let schema = schema_provider.schema(schema_specifier.clone())?;
 
-	let row_id = path.row.row_id;
-	let subrow_id = path.row.subrow_id;
-
-	let fields = read.read(
+	let row_result = read_row_result(
+		&read,
 		&excel,
 		schema.as_ref(),
 		&path.sheet,
-		row_id,
-		subrow_id,
+		path.row,
 		language,
 		&filter,
 		config.limit.depth,
 	)?;
 
-	// Check the kind of the sheet to determine if we should report a subrow id.
-	// TODO: this is theoretically wasteful, though IW will have cached it anyway.
-	let result_subrow_id = match excel.sheet(&path.sheet).anyhow()?.kind().anyhow()? {
-		exh::SheetKind::Subrows => Some(subrow_id),
-		_ => None,
-	};
-
 	let response = RowResponse {
 		schema: schema_specifier,
-		row: RowResult {
-			row_id,
-			subrow_id: result_subrow_id,
-			fields: ValueString(fields, language),
-		},
+		row: row_result,
 	};
 
 	Ok(Json(response))
+}
+
+// TODO: This should probably be shared with search.
+fn read_row_result(
+	read: &service::Read,
+	excel: &excel::Excel,
+	schema: &dyn ironworks_schema::Schema,
+	sheet: &str,
+	row: RowSpecifier,
+	language: excel::Language,
+	filter: &read::Filter,
+	depth: u8,
+) -> Result<RowResult> {
+	let fields = ValueString(
+		read.read(
+			&excel,
+			schema,
+			sheet,
+			row.row_id,
+			row.subrow_id,
+			language,
+			&filter,
+			depth,
+		)?,
+		language,
+	);
+
+	// Try to read a transient
+	// TODO: filtering, opt in/out, etc
+	let transient = match read.read(
+		&excel,
+		schema,
+		&format!("{}Transient", sheet),
+		row.row_id,
+		row.subrow_id,
+		language,
+		&read::Filter::All,
+		depth,
+	) {
+		Ok(v) => Some(ValueString(v, language)),
+		Err(read::Error::NotFound(_)) => None,
+		Err(error) => Err(error)?,
+	};
+
+	// Check the kind of the sheet to determine if we should report a subrow id.
+	// TODO: this is theoretically wasteful, though IW will have cached it anyway.
+	let result_subrow_id = match excel.sheet(&sheet).anyhow()?.kind().anyhow()? {
+		exh::SheetKind::Subrows => Some(row.subrow_id),
+		_ => None,
+	};
+
+	Ok(RowResult {
+		row_id: row.row_id,
+		subrow_id: result_subrow_id,
+		fields,
+		transient,
+	})
 }
