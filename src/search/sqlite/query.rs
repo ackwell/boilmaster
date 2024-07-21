@@ -347,8 +347,9 @@ fn table_alias(alias_base: &str, language: Language) -> Alias {
 impl From<post::Value> for sea_query::Value {
 	fn from(value: post::Value) -> Self {
 		match value {
+			post::Value::Boolean(value) => sea_query::Value::from(value),
 			post::Value::Number(value) => sea_query::Value::from(value),
-			post::Value::String(value) => sea_query::Value::String(Some(value.into())),
+			post::Value::String(value) => sea_query::Value::from(value),
 		}
 	}
 }

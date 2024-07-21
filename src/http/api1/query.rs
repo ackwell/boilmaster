@@ -46,6 +46,14 @@ use super::error;
 ///   - exact equality: `key=value`
 ///
 ///   - numeric comparison: `key>=value`, `key>value`, `key<=value`, `key<value`
+///
+/// Supported value types:
+///
+///   - string: `"example"`
+///
+///   - number: `1`, `-1`, `1.0`
+///
+///   - boolean: `true`, `false`
 #[derive(Debug, JsonSchema)]
 pub struct QueryString(#[schemars(with = "String")] query::Node);
 
@@ -158,9 +166,14 @@ fn operation(input: &str) -> ParseResult<query::Operation> {
 
 fn value(input: &str) -> ParseResult<query::Value> {
 	alt((
+		map(boolean, query::Value::Boolean),
 		map(number, query::Value::Number),
 		map(string, query::Value::String),
 	))(input)
+}
+
+fn boolean(input: &str) -> ParseResult<bool> {
+	alt((nom_value(true, tag("true")), nom_value(false, tag("false"))))(input)
 }
 
 fn number(input: &str) -> ParseResult<query::Number> {
@@ -401,6 +414,22 @@ mod test {
 			test_parse("A<1"),
 			harness(query::Operation::Lt(query::Number::U64(1)))
 		);
+	}
+
+	#[test]
+	fn booleans() {
+		fn harness(value: bool) -> query::Node {
+			group(vec![(
+				query::Occur::Should,
+				leaf(
+					field_struct("A"),
+					query::Operation::Eq(query::Value::Boolean(value)),
+				),
+			)])
+		}
+
+		assert_eq!(test_parse("A=true"), harness(true));
+		assert_eq!(test_parse("A=false"), harness(false));
 	}
 
 	#[test]

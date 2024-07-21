@@ -46,6 +46,7 @@ pub struct Relation<F, T> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+	Boolean(bool),
 	Number(Number),
 	String(String),
 }
