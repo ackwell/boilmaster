@@ -1,39 +1,33 @@
-use std::{
-	collections::{HashMap, HashSet},
-	str::FromStr,
-};
+use std::{collections::HashSet, str::FromStr};
 
 use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	transform::TransformOperation,
 };
-use anyhow::anyhow;
 use axum::{debug_handler, extract::State, Extension, Json};
-use ironworks::{excel, file::exh};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
 	http::service,
-	read, schema,
+	schema,
 	search::{SearchRequest as InnerSearchRequest, SearchRequestQuery},
-	utility::anyhow::Anyhow,
 };
 
 use super::{
 	error::{Error, Result},
 	extract::{Query, VersionQuery},
-	filter::FilterString,
 	query::QueryString,
-	value::ValueString,
+	read::{RowReader, RowReaderConfig, RowResult},
 };
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
 	limit: LimitConfig,
 
-	fields: HashMap<String, FilterString>,
+	#[serde(flatten)]
+	reader: RowReaderConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -46,20 +40,13 @@ struct LimitConfig {
 pub fn router(config: Config) -> ApiRouter<service::State> {
 	ApiRouter::new()
 		.api_route("/", get_with(search, search_docs))
-		.layer(Extension(config))
+		.layer(Extension(config.reader))
+		.layer(Extension(config.limit))
 }
 
 /// Query paramters accepted by the search endpoint.
 #[derive(Debug, Deserialize, JsonSchema)]
 struct SearchQuery {
-	/// Language to use for search query and result fields when no language is
-	/// otherwise specified.
-	language: Option<read::LanguageString>,
-
-	/// Schema that the search query and result fields should be read in
-	/// accordance with.
-	schema: Option<schema::Specifier>,
-
 	/// Search query to execute in this request. Must be specified if not querying
 	/// a cursor. URL special characters, such as `+`, must be escaped to prevent
 	/// mis-parses of the query.
@@ -72,9 +59,6 @@ struct SearchQuery {
 	/// Continuation token to retrieve further results from a prior search
 	/// request. If specified, takes priority over `query`.
 	cursor: Option<Uuid>,
-
-	/// Data fields to read for results found by the search.
-	fields: Option<FilterString>,
 
 	/// Maximum number of rows to return. To paginate, provide the cursor token
 	/// provided in `next` to the `cursor` paramter.
@@ -96,7 +80,6 @@ struct SearchResponse {
 	results: Vec<SearchResult>,
 }
 
-// TODO: This is fairly duplicated with sheet::RowResult, which itself flags duplication with structures in read::. There's a degree of deduplication that potentially needs to happen, with note that over-indexing on that is problematic for api evolution.
 /// Result found by a search query, hydrated with data from the underlying excel
 /// row the result represents.
 #[derive(Debug, Serialize, JsonSchema)]
@@ -111,15 +94,8 @@ struct SearchResult {
 	/// Excel sheet this result was found in.
 	sheet: String,
 
-	/// Row ID of this result.
-	row_id: u32,
-
-	/// Subrow ID of this result, when relevant.
-	#[serde(skip_serializing_if = "Option::is_none")]
-	subrow_id: Option<u16>,
-
-	/// Field values for this row, according to the current schema and field filter.
-	fields: ValueString,
+	#[serde(flatten)]
+	row: RowResult,
 }
 
 fn search_docs(operation: TransformOperation) -> TransformOperation {
@@ -136,18 +112,7 @@ fn search_docs(operation: TransformOperation) -> TransformOperation {
 				results: vec![SearchResult {
 					score: 1.413,
 					sheet: "SheetName".into(),
-					row_id: 1,
-					subrow_id: None,
-					fields: ValueString(
-						read::Value::Struct(HashMap::from([(
-							read::StructKey {
-								name: "FieldName".into(),
-								language: excel::Language::English,
-							},
-							read::Value::Scalar(excel::Field::U32(14)),
-						)])),
-						excel::Language::English,
-					),
+					row: RowResult::example(1),
 				}],
 			})
 		})
@@ -155,24 +120,13 @@ fn search_docs(operation: TransformOperation) -> TransformOperation {
 
 #[debug_handler(state = service::State)]
 async fn search(
+	// TODO: this is a second versionquery extract for this, and it is being run twice. it's idempotent, but would be good to avoid
 	VersionQuery(version_key): VersionQuery,
 	Query(query): Query<SearchQuery>,
-	State(data): State<service::Data>,
-	State(read): State<service::Read>,
-	State(schema_provider): State<service::Schema>,
 	State(search): State<service::Search>,
-	Extension(config): Extension<Config>,
+	Extension(config): Extension<LimitConfig>,
+	reader: RowReader,
 ) -> Result<impl IntoApiResponse> {
-	let excel = data.version(version_key)?.excel();
-
-	let language = query
-		.language
-		.map(excel::Language::from)
-		.unwrap_or_else(|| read.default_language());
-
-	let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
-	let schema = schema_provider.schema(schema_specifier.clone())?;
-
 	// Resolve search request into something the search service understands.
 	// TODO: seperate fn?
 	let request = match query.cursor {
@@ -200,66 +154,35 @@ async fn search(
 			InnerSearchRequest::Query(SearchRequestQuery {
 				version: version_key,
 				query: search_query.into(),
-				language,
+				language: reader.language,
 				sheets: Some(sheets),
-				schema: schema_specifier.clone(),
+				schema: reader.schema_specifier.clone(),
 			})
 		}
 	};
 
-	let limit = query
-		.limit
-		.unwrap_or(config.limit.default)
-		.min(config.limit.max);
+	let limit = query.limit.unwrap_or(config.default).min(config.max);
 
 	// Run the actual search request.
 	let (results, next_cursor) = search.search(request, limit).await?;
 
-	// Read and build result structures.
-	let filter = query
-		.fields
-		.or_else(|| config.fields.get(&schema_specifier.source).cloned())
-		.map(|filter_string| filter_string.to_filter(language))
-		.ok_or_else(|| {
-			Error::Other(anyhow!(
-				"missing default search fields for {}",
-				schema_specifier.source
-			))
-		})??;
-
 	let http_results = results
 		.into_iter()
 		.map(|result| {
-			let fields = read.read(
-				&excel,
-				schema.as_ref(),
-				&result.sheet,
-				result.row_id,
-				result.subrow_id,
-				language,
-				&filter,
-				config.limit.depth,
-			)?;
-
-			// TODO: this is pretty wasteful. Return from read::? ehh...
-			let kind = excel.sheet(&result.sheet).anyhow()?.kind().anyhow()?;
+			let row =
+				reader.read_row(&result.sheet, result.row_id, result.subrow_id, config.depth)?;
 
 			Ok(SearchResult {
 				score: result.score,
 				sheet: result.sheet,
-				row_id: result.row_id,
-				subrow_id: match kind {
-					exh::SheetKind::Subrows => Some(result.subrow_id),
-					_ => None,
-				},
-				fields: ValueString(fields, language),
+				row,
 			})
 		})
 		.collect::<Result<Vec<_>>>()?;
 
 	Ok(Json(SearchResponse {
 		next: next_cursor,
-		schema: schema_specifier,
+		schema: reader.schema_specifier,
 		results: http_results,
 	}))
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::ParseIntError, str::FromStr};
+use std::{num::ParseIntError, str::FromStr};
 
 use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
@@ -6,7 +6,6 @@ use aide::{
 };
 use axum::{debug_handler, extract::State, Extension, Json};
 use either::Either;
-use ironworks::excel;
 use schemars::{
 	gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject, StringValidation},
@@ -16,7 +15,7 @@ use serde::{de, Deserialize, Deserializer, Serialize};
 
 use crate::{
 	http::service,
-	read, schema,
+	schema,
 	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
 };
 
@@ -24,7 +23,6 @@ use super::{
 	error::{Error, Result},
 	extract::{Path, Query, VersionQuery},
 	read::{RowReader, RowReaderConfig, RowResult},
-	value::ValueString,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -207,7 +205,7 @@ fn sheet_docs(operation: TransformOperation) -> TransformOperation {
 					source: "source".into(),
 					version: "version".into(),
 				},
-				rows: vec![row_result_example(1), row_result_example(2)],
+				rows: vec![RowResult::example(1), RowResult::example(2)],
 			})
 		})
 }
@@ -304,27 +302,9 @@ fn row_docs(operation: TransformOperation) -> TransformOperation {
 					source: "source".into(),
 					version: "version".into(),
 				},
-				row: row_result_example(1),
+				row: RowResult::example(1),
 			})
 		})
-}
-
-fn row_result_example(row_id: u32) -> RowResult {
-	RowResult {
-		row_id,
-		subrow_id: None,
-		fields: ValueString(
-			read::Value::Struct(HashMap::from([(
-				read::StructKey {
-					name: "FieldName".into(),
-					language: excel::Language::English,
-				},
-				read::Value::Scalar(excel::Field::U32(14)),
-			)])),
-			excel::Language::English,
-		),
-		transient: None,
-	}
 }
 
 #[debug_handler(state = service::State)]

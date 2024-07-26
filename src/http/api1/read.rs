@@ -41,7 +41,7 @@ struct RowReaderQuery {
 }
 
 // TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
-#[derive(Serialize, JsonSchema)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct RowResult {
 	/// ID of this row.
 	pub row_id: u32,
@@ -56,6 +56,27 @@ pub struct RowResult {
 	// fasdhjkfasdhfasdklh
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub transient: Option<ValueString>,
+}
+
+impl RowResult {
+	pub fn example(row_id: u32) -> RowResult {
+		RowResult {
+			row_id,
+			subrow_id: None,
+			fields: ValueString(
+				read::Value::Struct(HashMap::from([(
+					read::StructKey {
+						name: "FieldName".into(),
+						language: excel::Language::English,
+					},
+					read::Value::Scalar(excel::Field::U32(14)),
+				)])),
+				excel::Language::English,
+			),
+			// TODO: should this have an example?
+			transient: None,
+		}
+	}
 }
 
 #[derive(OperationIo)]
@@ -110,7 +131,7 @@ where
 			.or_else(|| config.fields.get(&schema_specifier.source).cloned())
 			.ok_or_else(|| {
 				Error::Other(anyhow!(
-					"missing default entry fields for {}",
+					"missing default fields for {}",
 					schema_specifier.source
 				))
 			})?
