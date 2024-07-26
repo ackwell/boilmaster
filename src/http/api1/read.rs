@@ -24,6 +24,7 @@ use super::{
 #[derive(Debug, Clone, Deserialize)]
 pub struct RowReaderConfig {
 	fields: HashMap<String, FilterString>,
+	transient: HashMap<String, FilterString>,
 }
 
 // todo: maybe it's readrequest? something? "rowreader" is perhaps overindexing, and i should be referring to it simply as "read"?
@@ -38,6 +39,9 @@ struct RowReaderQuery {
 
 	/// Data fields to read for selected rows.
 	fields: Option<FilterString>,
+
+	/// Data fields to read for selected rows' transient row, if any is present.
+	transient: Option<FilterString>,
 }
 
 // TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
@@ -53,7 +57,8 @@ pub struct RowResult {
 	/// Field values for this row, according to the current schema and field filter.
 	pub fields: ValueString,
 
-	// fasdhjkfasdhfasdklh
+	/// Field values for this row's transient row, if any is present, according to
+	/// the current schema and transient filter.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub transient: Option<ValueString>,
 }
@@ -88,6 +93,7 @@ pub struct RowReader {
 	schema: Box<dyn ironworks_schema::Schema + Send>,
 	pub language: excel::Language,
 	fields: read::Filter,
+	transient: Option<read::Filter>,
 }
 
 // todo maybe an extra bit of state requirements on this for the filters? that would allow the filters to be wired up per-handler i think. not sure how that aligns with existing state though
@@ -129,13 +135,18 @@ where
 		let fields = query
 			.fields
 			.or_else(|| config.fields.get(&schema_specifier.source).cloned())
-			.ok_or_else(|| {
-				Error::Other(anyhow!(
-					"missing default fields for {}",
-					schema_specifier.source
-				))
-			})?
+			.ok_or_else(|| anyhow!("missing default fields for {}", schema_specifier.source))?
 			.to_filter(language)?;
+
+		let transient_string = query
+			.transient
+			.or_else(|| config.transient.get(&schema_specifier.source).cloned())
+			.ok_or_else(|| anyhow!("missing default transient for {}", schema_specifier.source))?;
+
+		let transient = match transient_string.is_empty() {
+			true => None,
+			false => Some(transient_string.to_filter(language)?),
+		};
 
 		let schema = schema_provider.schema(schema_specifier.clone())?;
 
@@ -146,6 +157,7 @@ where
 			schema,
 			language,
 			fields,
+			transient,
 		})
 	}
 }
@@ -173,21 +185,23 @@ impl RowReader {
 			self.language,
 		);
 
-		// Try to read a transient
-		// TODO: filtering, opt in/out, etc
-		let transient = match self.read.read(
-			&self.excel,
-			self.schema.as_ref(),
-			&format!("{}Transient", sheet),
-			row_id,
-			subrow_id,
-			self.language,
-			&read::Filter::All, // TODO
-			depth,
-		) {
-			Ok(value) => Some(ValueString(value, self.language)),
-			Err(read::Error::NotFound(_)) => None,
-			Err(error) => Err(error)?,
+		// Try to read a transient row.
+		let transient = match self.transient.as_ref() {
+			None => None,
+			Some(filter) => match self.read.read(
+				&self.excel,
+				self.schema.as_ref(),
+				&format!("{}Transient", sheet),
+				row_id,
+				subrow_id,
+				self.language,
+				filter,
+				depth,
+			) {
+				Ok(value) => Some(ValueString(value, self.language)),
+				Err(read::Error::NotFound(_)) => None,
+				Err(error) => Err(error)?,
+			},
 		};
 
 		// Check the kind of the sheet to determine if we should report a subrow id.

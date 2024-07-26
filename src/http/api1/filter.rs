@@ -50,6 +50,13 @@ enum Entry {
 }
 
 impl FilterString {
+	pub fn is_empty(&self) -> bool {
+		match &self.0 {
+			FilterStringInner::All => false,
+			FilterStringInner::Paths(paths) => paths.is_empty(),
+		}
+	}
+
 	pub fn to_filter(self, default_language: excel::Language) -> error::Result<read::Filter> {
 		let paths = match self.0 {
 			FilterStringInner::All => return Ok(read::Filter::All),
