@@ -69,18 +69,28 @@ impl ValueReference<'_> {
 		sequence.end()
 	}
 
-	fn serialize_icon<S>(&self, serializer: S, id: u32) -> Result<S::Ok, S::Error>
+	fn serialize_icon<S>(&self, serializer: S, id: i32) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
-		let group = (id / 1000) * 1000;
-		let icon_path = format!("ui/icon/{group:0>6}/{id:0>6}");
+		match id >= 0 {
+			false => {
+				let mut state = serializer.serialize_struct("Icon", 1)?;
+				state.serialize_field("id", &id)?;
+				state.end()
+			}
 
-		let mut state = serializer.serialize_struct("Icon", 3)?;
-		state.serialize_field("id", &id)?;
-		state.serialize_field("path", &format!("{icon_path}.tex"))?;
-		state.serialize_field("path_hr1", &format!("{icon_path}_hr1.tex"))?;
-		state.end()
+			true => {
+				let group = (id / 1000) * 1000;
+				let icon_path = format!("ui/icon/{group:0>6}/{id:0>6}");
+
+				let mut state = serializer.serialize_struct("Icon", 3)?;
+				state.serialize_field("id", &id)?;
+				state.serialize_field("path", &format!("{icon_path}.tex"))?;
+				state.serialize_field("path_hr1", &format!("{icon_path}_hr1.tex"))?;
+				state.end()
+			}
+		}
 	}
 
 	fn serialize_reference<S>(

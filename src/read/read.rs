@@ -166,7 +166,7 @@ fn read_scalar_reference(
 	context: ReaderContext,
 ) -> Result<Value> {
 	// TODO: are references _always_ i32? like, always always?
-	let target_value = convert_reference_value(field)
+	let target_value = read_scalar_i32(field)
 		.map_err(|error| Error::SchemaGameMismatch(context.mismatch_error(error.to_string())))?;
 
 	let mut reference = Reference::Scalar(target_value);
@@ -266,25 +266,8 @@ fn read_scalar_reference(
 	Ok(Value::Reference(reference))
 }
 
-fn convert_reference_value(field: excel::Field) -> Result<i32> {
-	use excel::Field as F;
-	let result = match field {
-		F::I8(value) => i32::from(value),
-		F::I16(value) => i32::from(value),
-		F::I32(value) => value,
-		F::I64(value) => value.try_into()?,
-		F::U8(value) => i32::from(value),
-		F::U16(value) => i32::from(value),
-		F::U32(value) => value.try_into()?,
-		F::U64(value) => value.try_into()?,
-
-		_other => Err(anyhow!("invalid reference key type"))?,
-	};
-	Ok(result)
-}
-
 fn read_scalar_icon(field: excel::Field) -> Result<Value> {
-	Ok(Value::Icon(read_scalar_u32(field)?))
+	Ok(Value::Icon(read_scalar_i32(field)?))
 }
 
 fn read_scalar_u32(field: excel::Field) -> Result<u32> {
@@ -301,6 +284,23 @@ fn read_scalar_u32(field: excel::Field) -> Result<u32> {
 		F::U64(value) => u32::try_from(value)?,
 
 		_other => Err(anyhow!("invalid u32 type"))?,
+	};
+	Ok(result)
+}
+
+fn read_scalar_i32(field: excel::Field) -> Result<i32> {
+	use excel::Field as F;
+	let result = match field {
+		F::I8(value) => i32::from(value),
+		F::I16(value) => i32::from(value),
+		F::I32(value) => value,
+		F::I64(value) => i32::try_from(value)?,
+		F::U8(value) => i32::from(value),
+		F::U16(value) => i32::from(value),
+		F::U32(value) => i32::try_from(value)?,
+		F::U64(value) => i32::try_from(value)?,
+
+		_other => Err(anyhow!("invalid i32 type"))?,
 	};
 	Ok(result)
 }

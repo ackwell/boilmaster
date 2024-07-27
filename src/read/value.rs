@@ -5,7 +5,7 @@ use ironworks::excel;
 #[derive(Debug)]
 pub enum Value {
 	Array(Vec<Value>),
-	Icon(u32),
+	Icon(i32),
 	Reference(Reference),
 	Scalar(excel::Field),
 	Struct(HashMap<StructKey, Value>),
