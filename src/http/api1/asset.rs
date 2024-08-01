@@ -1,6 +1,7 @@
 use std::{
 	ffi::OsStr,
 	hash::{Hash, Hasher},
+	time::Duration,
 };
 
 use aide::{
@@ -9,9 +10,9 @@ use aide::{
 	transform::TransformOperation,
 	NoApi,
 };
-use axum::{debug_handler, extract::State, http::header, response::IntoResponse};
+use axum::{debug_handler, extract::State, http::header, response::IntoResponse, Extension};
 use axum_extra::{
-	headers::{ContentType, ETag, IfNoneMatch},
+	headers::{CacheControl, ContentType, ETag, IfNoneMatch},
 	TypedHeader,
 };
 use reqwest::StatusCode;
@@ -30,8 +31,15 @@ use super::{
 // NOTE: Bump this if changing any behavior that impacts output binary data for assets, to ensure ETag is cache-broken.
 const ASSET_ETAG_VERSION: usize = 2;
 
-pub fn router() -> ApiRouter<service::State> {
-	ApiRouter::new().api_route("/*path", get_with(asset, asset_docs))
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+	maxage: u64,
+}
+
+pub fn router(config: Config) -> ApiRouter<service::State> {
+	ApiRouter::new()
+		.api_route("/*path", get_with(asset, asset_docs))
+		.layer(Extension(config))
 }
 
 /// Path variables accepted by the asset endpoint.
@@ -83,33 +91,46 @@ async fn asset(
 	Query(query): Query<AssetQuery>,
 	NoApi(header_if_none_match): NoApi<Option<TypedHeader<IfNoneMatch>>>,
 	State(asset): State<service::Asset>,
+	Extension(config): Extension<Config>,
 ) -> Result<impl IntoApiResponse> {
 	let format = query.format;
 
 	let etag = etag(&path, format, version_key);
 
+	// If the request came through with a passing ETag, we can skip doing any processing.
 	if let Some(TypedHeader(if_none_match)) = header_if_none_match {
 		if !if_none_match.precondition_passes(&etag) {
 			return Ok(StatusCode::NOT_MODIFIED.into_response());
 		}
 	}
 
+	// Perform the conversion.
+	// TODO: can this be made async?
 	let bytes = asset.convert(version_key, &path, format)?;
 
+	// Try to derive a filename to use for the Content-Disposition header.
 	let filepath = std::path::Path::new(&path).with_extension(format.extension());
 	let disposition = match filepath.file_name().and_then(OsStr::to_str) {
 		Some(name) => format!("inline; filename=\"{name}\""),
 		None => "inline".to_string(),
 	};
 
-	Ok((
+	// Set up the Cache-Control header based on configured max-age.
+	let cache_control = CacheControl::new()
+		.with_public()
+		.with_immutable()
+		.with_max_age(Duration::from_secs(config.maxage));
+
+	let response = (
 		TypedHeader(ContentType::from(format_mime(format))),
 		// TypedHeader only has a really naive inline value with no ability to customise :/
 		[(header::CONTENT_DISPOSITION, disposition)],
 		TypedHeader(etag),
+		TypedHeader(cache_control),
 		bytes,
-	)
-		.into_response())
+	);
+
+	Ok(response.into_response())
 }
 
 fn format_mime(format: Format) -> mime::Mime {

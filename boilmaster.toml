@@ -10,6 +10,9 @@ port = 8080
 username = "username"
 password = "password"
 
+[http.api1.asset]
+maxage = 604800 # 1 week
+
 [http.api1.search]
 limit.default = 100
 limit.max = 500

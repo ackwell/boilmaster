@@ -20,6 +20,7 @@ const OPENAPI_JSON_ROUTE: &str = "/openapi.json";
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+	asset: asset::Config,
 	search: search::Config,
 	sheet: sheet::Config,
 }
@@ -30,7 +31,7 @@ pub fn router(config: Config) -> Router<service::State> {
 	ApiRouter::new()
 		.nest(
 			"/asset",
-			asset::router().with_path_items(|item| item.tag("assets")),
+			asset::router(config.asset).with_path_items(|item| item.tag("assets")),
 		)
 		.nest(
 			"/search",
