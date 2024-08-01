@@ -20,7 +20,15 @@ struct ConsoleConfig {
 #[derive(Debug, Deserialize)]
 struct StdoutConfig {
 	enabled: bool,
+	format: StdoutFormat,
 	filters: TracingFilters,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum StdoutFormat {
+	Full,
+	Json,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +100,11 @@ where
 	}
 
 	let layer = tracing_subscriber::fmt::layer();
+
+	let layer = match config.format {
+		StdoutFormat::Full => layer.boxed(),
+		StdoutFormat::Json => layer.json().boxed(),
+	};
 
 	let filter = filter::Targets::new()
 		.with_default(config.filters.default)

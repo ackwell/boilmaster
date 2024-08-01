@@ -3,6 +3,7 @@ enabled = false
 
 [tracing.stdout]
 enabled = true
+format = "full"
 filters.default = "debug"
 filters.hyper = "info"
 
