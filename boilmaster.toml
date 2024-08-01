@@ -1,6 +1,11 @@
-[tracing.filters]
-default = "debug"
-hyper = "info"
+[tracing.console]
+enabled = false
+
+[tracing.stdout]
+enabled = true
+format = "full"
+filters.default = "debug"
+filters.hyper = "info"
 
 [http]
 # address = "0.0.0.0"
