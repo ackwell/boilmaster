@@ -1,13 +1,25 @@
 use std::{collections::HashMap, fmt, str::FromStr};
 
 use serde::{de, Deserialize};
-use tracing::metadata::LevelFilter;
-use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing::{metadata::LevelFilter, Subscriber};
+use tracing_subscriber::{
+	filter, layer::SubscriberExt, registry::LookupSpan, util::SubscriberInitExt, Layer,
+};
 
-// TODO: tracing should proooobably be it's own file at this point
 #[derive(Debug, Deserialize)]
 pub struct Config {
-	// TODO: log file config? or like, sink config? work out how that's going to work i guess.
+	console: ConsoleConfig,
+	stdout: StdoutConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConsoleConfig {
+	enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct StdoutConfig {
+	enabled: bool,
 	filters: TracingFilters,
 }
 
@@ -46,19 +58,44 @@ impl<'de> Deserialize<'de> for ConfigLevelFilter {
 }
 
 pub fn init(config: Config) {
-	// TODO: consider enabling this with a config flag or something tracing.console?
-	let console_filter = filter::Targets::new()
-		.with_target("tokio", LevelFilter::TRACE)
-		.with_target("runtime", LevelFilter::TRACE);
-
-	let tracing_filter = filter::Targets::new()
-		.with_default(config.filters.default)
-		.with_targets(config.filters.targets);
-
 	// TODO: env filter (will need feature enabled). consider enabling pulling from log! too.
 	// TODO: now that i have config working, is it worth using env filter here or should i handle it via config env?
 	tracing_subscriber::registry()
-		.with(console_subscriber::spawn().with_filter(console_filter))
-		.with(tracing_subscriber::fmt::layer().with_filter(tracing_filter))
+		.with(tokio_console(config.console))
+		.with(stdout(config.stdout))
 		.init();
+}
+
+fn tokio_console<S>(config: ConsoleConfig) -> Option<impl Layer<S>>
+where
+	S: Subscriber + for<'a> LookupSpan<'a>,
+{
+	if !config.enabled {
+		return None;
+	}
+
+	let layer = console_subscriber::spawn();
+
+	let filter = filter::Targets::new()
+		.with_target("tokio", LevelFilter::TRACE)
+		.with_target("runtime", LevelFilter::TRACE);
+
+	Some(layer.with_filter(filter))
+}
+
+fn stdout<S>(config: StdoutConfig) -> Option<impl Layer<S>>
+where
+	S: Subscriber + for<'a> LookupSpan<'a>,
+{
+	if !config.enabled {
+		return None;
+	}
+
+	let layer = tracing_subscriber::fmt::layer();
+
+	let filter = filter::Targets::new()
+		.with_default(config.filters.default)
+		.with_targets(config.filters.targets);
+
+	Some(layer.with_filter(filter))
 }
