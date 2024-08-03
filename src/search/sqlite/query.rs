@@ -77,12 +77,11 @@ fn resolve_query(sheet_name: String, node: post::Node) -> Result<SelectStatement
 			Error::MalformedQuery(format!("joined sheet {} not referenced", relation.sheet))
 		})?;
 
-		let mut condition = Expr::col(relation.foreign_key)
-			.equals((base_alias.clone(), KnownColumn::RowId))
-			.into_condition();
+		let mut condition = Condition::all()
+			.add(Expr::col(relation.foreign_key).equals((base_alias.clone(), KnownColumn::RowId)));
 
 		if let Some(relation_condition) = relation.condition {
-			condition = Condition::all().add(condition).add(relation_condition);
+			condition = condition.add(relation_condition)
 		}
 
 		query.left_join(base_reference, condition);

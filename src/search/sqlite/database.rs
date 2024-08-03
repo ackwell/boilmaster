@@ -128,6 +128,11 @@ impl Database {
 			statement.offset(u64::try_from(offset).context("invalid offset")?);
 		}
 
+		if tracing::enabled!(tracing::Level::TRACE) {
+			let query_string = statement.to_string(SqliteQueryBuilder);
+			tracing::trace!(%query_string, "executing query");
+		}
+
 		let (query, values) = statement.build_rusqlite(SqliteQueryBuilder);
 
 		let connection = self.pool.get().await?;

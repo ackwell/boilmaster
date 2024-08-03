@@ -242,11 +242,13 @@ unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 
 		let iterator = match index_number {
 			Index::SCAN => Index::Scan(sheet.into_iter()),
-			Index::ROW_ID => match arguments.get::<Option<u32>>(0)? {
+			Index::ROW_ID => match arguments.get::<Option<i32>>(0)? {
 				None => Index::Never,
+				Some(row_id) if row_id < 0 => Index::Never,
 				Some(row_id) => Index::RowId(RowIdIndex {
 					sheet,
-					row_id,
+					row_id: u32::try_from(row_id)
+						.expect("row_id should always be >= 0 due to prior condition"),
 					subrow_id: 0,
 				}),
 			},
