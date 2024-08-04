@@ -8,7 +8,7 @@ pub enum Value {
 	Icon(i32),
 	Reference(Reference),
 	Scalar(excel::Field),
-	Struct(HashMap<StructKey, Value>),
+	Struct(HashMap<String, Value>),
 }
 
 #[derive(Debug)]
@@ -20,10 +20,4 @@ pub enum Reference {
 		row_id: u32,
 		fields: Box<Value>,
 	},
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct StructKey {
-	pub name: String,
-	// pub language: excel::Language,
 }

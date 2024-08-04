@@ -155,15 +155,12 @@ impl ValueReference<'_> {
 	fn serialize_struct<S>(
 		&self,
 		serializer: S,
-		fields: &HashMap<read::StructKey, read::Value>,
+		fields: &HashMap<String, read::Value>,
 	) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
-		let mut fields = fields
-			.into_iter()
-			.map(|(read::StructKey { name }, value)| (name, value))
-			.collect::<Vec<_>>();
+		let mut fields = fields.into_iter().collect::<Vec<_>>();
 
 		fields.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 

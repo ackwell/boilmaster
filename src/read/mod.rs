@@ -9,5 +9,5 @@ pub use {
 	filter::{Filter, Language, StructEntry},
 	language::LanguageString,
 	read::{Config, Read},
-	value::{Reference, StructKey, Value},
+	value::{Reference, Value},
 };

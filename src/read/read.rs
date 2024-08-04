@@ -17,7 +17,7 @@ use super::{
 	error::{Error, MismatchError, Result},
 	filter::{Filter, StructEntry},
 	language::LanguageString,
-	value::{Reference, StructKey, Value},
+	value::{Reference, Value},
 };
 
 #[derive(Debug, Deserialize)]
@@ -184,14 +184,14 @@ fn read_scalar_reference(
 	// NOTE: a lot of the TODOs here are immediately break;ing - this is to avoid a potentially correct target that is simply unhandled being ignored and a later, incorrect target being picked as a result.
 	for target in targets {
 		if let Some(condition) = &target.condition {
-			let key = "__bm_target_condition".to_string();
+			let key = "__bm_target_condition";
 
 			// TODO: This is effectively spinning an entirely new read tree just to check the condition, which is dumb. It'll technically hit cache all the way down, but this is incredibly dumb.
 			let mut language_map = IntMap::default();
 			language_map.insert(Language(context.language), Filter::All);
 			let data = read_sheet(ReaderContext {
 				filter: &Filter::Struct(HashMap::from([(
-					key.clone(),
+					key.to_string(),
 					StructEntry {
 						field: condition.selector.clone(),
 						language: Language(context.language),
@@ -204,7 +204,7 @@ fn read_scalar_reference(
 
 			let struct_value = match data {
 				Value::Struct(mut map) => map
-					.remove(&StructKey { name: key })
+					.remove(key)
 					.ok_or_else(|| Error::Failure(anyhow!("Schema target condition mismatch.")))?,
 				_ => Err(anyhow!(
 					"Did not recieve a struct from target condition lookup."
@@ -417,9 +417,7 @@ fn read_node_struct(
 				},
 			)?;
 
-			match value_fields.entry(StructKey {
-				name: key.to_string(),
-			}) {
+			match value_fields.entry(key.to_string()) {
 				hash_map::Entry::Vacant(entry) => {
 					entry.insert(value);
 				}
