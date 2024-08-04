@@ -8,10 +8,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
-use nohash_hasher::IntMap;
 use serde::Deserialize;
-
-use crate::read::Language;
 
 use super::{
 	error::{Error, MismatchError, Result},
@@ -187,14 +184,12 @@ fn read_scalar_reference(
 			let key = "__bm_target_condition";
 
 			// TODO: This is effectively spinning an entirely new read tree just to check the condition, which is dumb. It'll technically hit cache all the way down, but this is incredibly dumb.
-			let mut language_map = IntMap::default();
-			language_map.insert(Language(context.language), Filter::All);
 			let data = read_sheet(ReaderContext {
 				filter: &Filter::Struct(HashMap::from([(
 					key.to_string(),
 					StructEntry {
 						field: condition.selector.clone(),
-						language: Language(context.language),
+						language: context.language,
 						filter: Filter::All,
 					},
 				)])),
@@ -391,7 +386,7 @@ fn read_node_struct(
 				field_name.to_string(),
 				StructEntry {
 					field: field_name.to_string(),
-					language: Language(context.language),
+					language: context.language,
 					filter: Filter::All,
 				},
 			))),
@@ -409,7 +404,7 @@ fn read_node_struct(
 				node,
 				ReaderContext {
 					filter: &entry.filter,
-					language: entry.language.0,
+					language: entry.language,
 					columns,
 					rows: &mut context.rows,
 					path: &path,

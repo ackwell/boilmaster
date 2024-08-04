@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use ironworks::excel;
-use nohash_hasher::IsEnabled;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Filter {
@@ -13,11 +12,6 @@ pub enum Filter {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructEntry {
 	pub field: String,
-	pub language: Language,
+	pub language: excel::Language,
 	pub filter: Filter,
 }
-
-// TODO: Merge with LanguageString?
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Language(pub excel::Language);
-impl IsEnabled for Language {}

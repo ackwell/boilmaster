@@ -35,7 +35,6 @@ itertools = "0.12.1"
 maud = { version = "0.26.0", features = ["axum"] }
 mime = "0.3.17"
 mini-moka = "0.10.0"
-nohash-hasher = "0.2.0"
 nonempty = { version = "0.10.0", features = ["serialize"] }
 nom = "7.1.1"
 regex = "1.10.5"

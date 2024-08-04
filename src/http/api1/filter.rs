@@ -99,7 +99,7 @@ fn build_filter(path: Path, default_language: excel::Language) -> read::Filter {
 				key,
 				read::StructEntry {
 					field,
-					language: read::Language(language.unwrap_or(default_language)),
+					language: language.unwrap_or(default_language),
 					filter: output,
 				},
 			)])),
@@ -277,7 +277,7 @@ mod test {
 						key.to_string(),
 						StructEntry {
 							field: field.to_string(),
-							language: read::Language(language),
+							language,
 							filter,
 						},
 					)
