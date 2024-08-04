@@ -6,7 +6,7 @@ mod value;
 
 pub use {
 	error::Error,
-	filter::{Filter, StructEntry},
+	filter::{As, Filter, StructEntry},
 	language::LanguageString,
 	read::{Config, Read},
 	value::{Reference, Value},

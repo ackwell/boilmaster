@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use super::{
 	error::{Error, MismatchError, Result},
-	filter::{Filter, StructEntry},
+	filter::{As, Filter, StructEntry},
 	language::LanguageString,
 	value::{Reference, Value},
 };
@@ -76,6 +76,7 @@ impl Read {
 			subrow_id,
 
 			filter,
+			read_as: As::Default,
 			rows: &mut HashMap::new(),
 			columns: &[],
 			depth,
@@ -140,6 +141,13 @@ fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
 }
 
 fn read_node_scalar(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {
+	match context.read_as {
+		As::Raw => Ok(Value::Scalar(context.next_field()?)),
+		As::Default => read_scalar_default(scalar, context),
+	}
+}
+
+fn read_scalar_default(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {
 	let field = context.next_field()?;
 
 	use schema::Scalar as S;
@@ -190,6 +198,7 @@ fn read_scalar_reference(
 					StructEntry {
 						field: condition.selector.clone(),
 						language: context.language,
+						read_as: As::Raw,
 						filter: Filter::All,
 					},
 				)])),
@@ -391,6 +400,7 @@ fn read_node_struct(
 				Cow::Owned(StructEntry {
 					field: field_name.to_string(),
 					language: context.language,
+					read_as: As::Default,
 					filter: Filter::All,
 				}),
 			))),
@@ -400,7 +410,7 @@ fn read_node_struct(
 			.path
 			.iter()
 			.chain(&[field_name.as_ref()])
-			.map(|&x| x)
+			.map(|&field| field)
 			.collect::<Vec<_>>();
 
 		for (key, entry) in language_filters {
@@ -409,6 +419,7 @@ fn read_node_struct(
 				ReaderContext {
 					filter: &entry.filter,
 					language: entry.language,
+					read_as: entry.read_as,
 					columns,
 					rows: &mut context.rows,
 					path: &path,
@@ -525,6 +536,7 @@ struct ReaderContext<'a> {
 	subrow_id: u16,
 
 	filter: &'a Filter,
+	read_as: As,
 	columns: &'a [exh::ColumnDefinition],
 	rows: &'a mut HashMap<excel::Language, excel::Row>,
 	depth: u8,

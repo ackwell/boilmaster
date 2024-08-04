@@ -48,6 +48,7 @@ enum Entry {
 		key: String,
 		field: String,
 		language: Option<excel::Language>,
+		read_as: Option<read::As>,
 	},
 	Index,
 }
@@ -95,11 +96,13 @@ fn build_filter(path: Path, default_language: excel::Language) -> read::Filter {
 				key,
 				field,
 				language,
+				read_as,
 			} => read::Filter::Struct(HashMap::from([(
 				key,
 				read::StructEntry {
 					field,
 					language: language.unwrap_or(default_language),
+					read_as: read_as.unwrap_or(read::As::Default),
 					filter: output,
 				},
 			)])),
@@ -261,10 +264,13 @@ fn key(input: &str) -> IResult<&str, Entry> {
 	))(input)?;
 
 	let mut language = None;
+	let mut read_as = None;
+
 	(|| -> Result<(), &'static str> {
 		for decorator in decorators {
 			match decorator {
-				Decorator::Language(dlang) => language = set_option_once(language, dlang)?,
+				Decorator::Language(d_lang) => set_option_once(&mut language, d_lang)?,
+				Decorator::As(d_as) => set_option_once(&mut read_as, d_as)?,
 			}
 		}
 		Ok(())
@@ -279,18 +285,19 @@ fn key(input: &str) -> IResult<&str, Entry> {
 			key: format!("{field}{decorator_input}"),
 			field: field.into(),
 			language,
+			read_as,
 		},
 	))
 }
 
-fn set_option_once<T>(mut option: Option<T>, value: T) -> Result<Option<T>, &'static str> {
+fn set_option_once<T>(option: &mut Option<T>, value: T) -> Result<(), &'static str> {
 	if option.is_some() {
 		return Err("duplicate decorator");
 	}
 
-	option = Some(value);
+	*option = Some(value);
 
-	Ok(option)
+	Ok(())
 }
 
 fn index(input: &str) -> IResult<&str, Entry> {
@@ -300,6 +307,7 @@ fn index(input: &str) -> IResult<&str, Entry> {
 #[derive(Debug, Clone)]
 enum Decorator {
 	Language(excel::Language),
+	As(read::As),
 }
 
 fn decorator(input: &str) -> IResult<&str, Decorator> {
@@ -310,6 +318,7 @@ fn decorator(input: &str) -> IResult<&str, Decorator> {
 			map(language, Decorator::Language),
 			// Call-syntax decorators
 			map(call("lang", language), Decorator::Language),
+			map(call("as", read_as), Decorator::As),
 		)),
 	)(input)
 }
@@ -318,7 +327,7 @@ fn call<'a, O, F>(name: &'a str, arguments: F) -> impl FnMut(&'a str) -> IResult
 where
 	F: Parser<&'a str, O, ParseError<&'a str>>,
 {
-	preceded(tag(name), delimited(char('('), arguments, char(')')))
+	preceded(tag(name), delimited(char('('), cut(arguments), char(')')))
 }
 
 fn language(input: &str) -> IResult<&str, excel::Language> {
@@ -327,6 +336,13 @@ fn language(input: &str) -> IResult<&str, excel::Language> {
 			.parse::<read::LanguageString>()
 			.map(excel::Language::from)
 	})(input)
+}
+
+fn read_as(input: &str) -> IResult<&str, read::As> {
+	alt((
+		//
+		value(read::As::Raw, tag("raw")),
+	))(input)
 }
 
 #[cfg(test)]
@@ -367,6 +383,7 @@ mod test {
 						StructEntry {
 							field: field.to_string(),
 							language,
+							read_as: read::As::Default,
 							filter,
 						},
 					)

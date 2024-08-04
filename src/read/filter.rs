@@ -13,5 +13,12 @@ pub enum Filter {
 pub struct StructEntry {
 	pub field: String,
 	pub language: excel::Language,
+	pub read_as: As,
 	pub filter: Filter,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum As {
+	Default,
+	Raw,
 }
