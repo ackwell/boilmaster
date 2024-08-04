@@ -25,5 +25,5 @@ pub enum Reference {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructKey {
 	pub name: String,
-	pub language: excel::Language,
+	// pub language: excel::Language,
 }

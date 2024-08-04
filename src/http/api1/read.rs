@@ -72,7 +72,6 @@ impl RowResult {
 				read::Value::Struct(HashMap::from([(
 					read::StructKey {
 						name: "FieldName".into(),
-						language: excel::Language::English,
 					},
 					read::Value::Scalar(excel::Field::U32(14)),
 				)])),

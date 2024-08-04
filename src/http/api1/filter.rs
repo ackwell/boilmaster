@@ -1,12 +1,11 @@
 use std::{collections::HashMap, str::FromStr};
 
 use ironworks::excel;
-use nohash_hasher::IntMap;
 use nom::{
 	branch::alt,
 	bytes::complete::{escaped_transform, is_not, tag},
 	character::complete::{alphanumeric1, char},
-	combinator::{all_consuming, map, map_res, opt, value, verify},
+	combinator::{all_consuming, consumed, map, map_res, opt, value, verify},
 	multi::{many0, separated_list0, separated_list1},
 	sequence::{preceded, tuple},
 	Finish, IResult,
@@ -45,7 +44,11 @@ type Path = Vec<Entry>;
 
 #[derive(Debug, Clone)]
 enum Entry {
-	Key(String, Option<excel::Language>),
+	Key {
+		key: String,
+		field: String,
+		language: Option<excel::Language>,
+	},
 	Index,
 }
 
@@ -88,13 +91,18 @@ fn build_filter(path: Path, default_language: excel::Language) -> read::Filter {
 		output = match entry {
 			Entry::Index => read::Filter::Array(output.into()),
 
-			Entry::Key(key, specified_language) => {
-				let language = specified_language.unwrap_or(default_language);
-				let mut language_map = IntMap::default();
-				language_map.insert(read::Language(language), output);
-				let key_map = HashMap::from([(key, language_map)]);
-				read::Filter::Struct(key_map)
-			}
+			Entry::Key {
+				key,
+				field,
+				language,
+			} => read::Filter::Struct(HashMap::from([(
+				key,
+				read::StructEntry {
+					field,
+					language: read::Language(language.unwrap_or(default_language)),
+					filter: output,
+				},
+			)])),
 		}
 	}
 
@@ -113,17 +121,23 @@ fn merge_filters(a: read::Filter, b: read::Filter) -> error::Result<read::Filter
 			F::Array(merge_filters(*a_inner, *b_inner)?.into())
 		}
 
-		// Structs need to be merged across both the inner maps.
+		// Structs need to have entry filters merged for matching keys.
 		(F::Struct(mut a_fields), F::Struct(b_fields)) => {
-			for (field_name, b_languages) in b_fields {
-				let a_languages = a_fields.entry(field_name).or_default();
-				for (language, b_filter) in b_languages {
-					let new_filter = match a_languages.remove(&language) {
-						None => b_filter,
-						Some(a_filter) => merge_filters(a_filter, b_filter)?,
-					};
-					a_languages.insert(language, new_filter);
-				}
+			for (b_key, b_entry) in b_fields {
+				let new_entry = match a_fields.remove(&b_key) {
+					None => b_entry,
+
+					// NOTE: This will technically kludge b's entry's non-filter
+					// properties if there's a mismatch with a - however, given the
+					// properties of entries are driven off the key in this filter
+					// parser, there is no real opportunity for a mismatching entry for
+					// a matching key.
+					Some(a_entry) => read::StructEntry {
+						filter: merge_filters(a_entry.filter, b_entry.filter)?,
+						..a_entry
+					},
+				};
+				a_fields.insert(b_key, new_entry);
 			}
 			F::Struct(a_fields)
 		}
@@ -204,9 +218,13 @@ fn key(input: &str) -> IResult<&str, Entry> {
 	map(
 		tuple((
 			verify(escaped_key, |t: &str| !t.is_empty()),
-			opt(preceded(char('@'), language)),
+			consumed(opt(preceded(char('@'), language))),
 		)),
-		|(key, language)| Entry::Key(key.into(), language),
+		|(field, (decorators, language))| Entry::Key {
+			key: format!("{field}{decorators}"),
+			field: field.into(),
+			language,
+		},
 	)(input)
 }
 
@@ -224,8 +242,8 @@ fn language(input: &str) -> IResult<&str, excel::Language> {
 
 #[cfg(test)]
 mod test {
-	use nohash_hasher::IntMap;
 	use pretty_assertions::assert_eq;
+	use read::StructEntry;
 
 	use super::*;
 
@@ -244,28 +262,28 @@ mod test {
 		test_language_struct(
 			entries
 				.into_iter()
-				.map(|(key, value)| (key, test_language_map([(excel::Language::English, value)]))),
+				.map(|(key, value)| (key.to_string(), key, excel::Language::English, value)),
 		)
 	}
 
 	fn test_language_struct(
-		entries: impl IntoIterator<Item = (impl ToString, IntMap<read::Language, read::Filter>)>,
+		entries: impl IntoIterator<Item = (impl ToString, impl ToString, excel::Language, read::Filter)>,
 	) -> read::Filter {
 		read::Filter::Struct(
 			entries
 				.into_iter()
-				.map(|(key, languages)| (key.to_string(), languages))
+				.map(|(key, field, language, filter)| {
+					(
+						key.to_string(),
+						StructEntry {
+							field: field.to_string(),
+							language: read::Language(language),
+							filter,
+						},
+					)
+				})
 				.collect(),
 		)
-	}
-
-	fn test_language_map(
-		entries: impl IntoIterator<Item = (excel::Language, read::Filter)>,
-	) -> IntMap<read::Language, read::Filter> {
-		entries
-			.into_iter()
-			.map(|(l, f)| (read::Language(l), f))
-			.collect()
 	}
 
 	fn test_array(child: read::Filter) -> read::Filter {
@@ -298,10 +316,8 @@ mod test {
 
 	#[test]
 	fn parse_struct_language() {
-		let expected = test_language_struct([(
-			"a",
-			test_language_map([(excel::Language::English, read::Filter::All)]),
-		)]);
+		let expected =
+			test_language_struct([("a@en", "a", excel::Language::English, read::Filter::All)]);
 
 		let got = test_parse("a@en");
 		assert_eq!(got, expected);

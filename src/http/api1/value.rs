@@ -162,14 +162,7 @@ impl ValueReference<'_> {
 	{
 		let mut fields = fields
 			.into_iter()
-			.map(|(read::StructKey { name, language }, value)| {
-				let key = match *language == self.language {
-					true => name.to_owned(),
-					false => format!("{name}@{}", read::LanguageString::from(*language)),
-				};
-
-				(key, value)
-			})
+			.map(|(read::StructKey { name }, value)| (name, value))
 			.collect::<Vec<_>>();
 
 		fields.sort_unstable_by(|a, b| a.0.cmp(&b.0));
