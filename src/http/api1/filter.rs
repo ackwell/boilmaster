@@ -7,8 +7,8 @@ use nom::{
 	character::complete::{alphanumeric1, char},
 	combinator::{all_consuming, consumed, cut, eof, map, map_res, value, verify},
 	multi::{many0, separated_list0, separated_list1},
-	sequence::{preceded, tuple},
-	Finish,
+	sequence::{delimited, preceded, tuple},
+	Finish, Parser,
 };
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
@@ -308,8 +308,17 @@ fn decorator(input: &str) -> IResult<&str, Decorator> {
 		alt((
 			// Legacy support for un-prefixed languages
 			map(language, Decorator::Language),
+			// Call-syntax decorators
+			map(call("lang", language), Decorator::Language),
 		)),
 	)(input)
+}
+
+fn call<'a, O, F>(name: &'a str, arguments: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
+where
+	F: Parser<&'a str, O, ParseError<&'a str>>,
+{
+	preceded(tag(name), delimited(char('('), arguments, char(')')))
 }
 
 fn language(input: &str) -> IResult<&str, excel::Language> {
@@ -395,7 +404,20 @@ mod test {
 	}
 
 	#[test]
-	fn parse_struct_language() {
+	fn parse_struct_decorator_language() {
+		let expected = test_language_struct([(
+			"a@lang(en)",
+			"a",
+			excel::Language::English,
+			read::Filter::All,
+		)]);
+
+		let got = test_parse("a@lang(en)");
+		assert_eq!(got, expected);
+	}
+
+	#[test]
+	fn parse_struct_decorator_language_legacy() {
 		let expected =
 			test_language_struct([("a@en", "a", excel::Language::English, read::Filter::All)]);
 
@@ -405,9 +427,9 @@ mod test {
 
 	#[test]
 	fn parse_struct_decorator_duplicated() {
-		let got = "a@en@ja".parse::<FilterString>();
+		let got = "a@lang(en)@lang(ja)".parse::<FilterString>();
 		assert!(
-			matches!(got, Err(error::Error::Invalid(message)) if message == "duplicate decorator: @en@ja")
+			matches!(got, Err(error::Error::Invalid(message)) if message == "duplicate decorator: @lang(en)@lang(ja)")
 		);
 	}
 
