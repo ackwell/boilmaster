@@ -378,17 +378,21 @@ fn read_node_struct(
 				None => either::Left(iter::empty()),
 
 				// Entry exists for the name, map the language pairs to the expected shape.
-				Some(entries) => either::Right(entries.iter().map(|e| (e.0.clone(), e.1.clone()))),
+				Some(entries) => either::Right(
+					entries
+						.iter()
+						.map(|(key, entry)| (key.as_str(), Cow::Borrowed(*entry))),
+				),
 			}),
 
 			// ::All filter, walk with the current context language.
 			None => either::Right(std::iter::once((
-				field_name.to_string(),
-				StructEntry {
+				field_name.as_ref(),
+				Cow::Owned(StructEntry {
 					field: field_name.to_string(),
 					language: context.language,
 					filter: Filter::All,
-				},
+				}),
 			))),
 		};
 
