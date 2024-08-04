@@ -1,14 +1,14 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, fmt, str::FromStr};
 
 use ironworks::excel;
 use nom::{
 	branch::alt,
 	bytes::complete::{escaped_transform, is_not, tag},
 	character::complete::{alphanumeric1, char},
-	combinator::{all_consuming, consumed, map, map_res, opt, value, verify},
+	combinator::{all_consuming, consumed, cut, eof, map, map_res, value, verify},
 	multi::{many0, separated_list0, separated_list1},
 	sequence::{preceded, tuple},
-	Finish, IResult,
+	Finish,
 };
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
@@ -179,10 +179,50 @@ impl FromStr for FilterString {
 	}
 }
 
+type IResult<I, O> = nom::IResult<I, O, ParseError<I>>;
+
+#[derive(Debug)]
+enum ParseError<I> {
+	Nom(nom::error::Error<I>),
+	Failure(String),
+}
+
+impl<I> nom::error::ParseError<I> for ParseError<I> {
+	fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
+		Self::Nom(nom::error::Error::from_error_kind(input, kind))
+	}
+
+	fn append(_input: I, _kind: nom::error::ErrorKind, other: Self) -> Self {
+		other
+	}
+}
+
+impl<I, E> nom::error::FromExternalError<I, E> for ParseError<I> {
+	fn from_external_error(input: I, kind: nom::error::ErrorKind, e: E) -> Self {
+		Self::Nom(nom::error::Error::from_external_error(input, kind, e))
+	}
+}
+
+impl<I> fmt::Display for ParseError<I>
+where
+	I: fmt::Display,
+{
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Nom(inner) => inner.fmt(formatter),
+			Self::Failure(message) => message.fmt(formatter),
+		}
+	}
+}
+
 fn filter(input: &str) -> IResult<&str, FilterStringInner> {
 	alt((
+		map(eof, |_| FilterStringInner::Paths(vec![])),
 		value(FilterStringInner::All, char('*')),
-		map(separated_list0(char(','), path), FilterStringInner::Paths),
+		map(
+			separated_list0(char(','), cut(path)),
+			FilterStringInner::Paths,
+		),
 	))(input)
 }
 
@@ -215,21 +255,61 @@ fn key(input: &str) -> IResult<&str, Entry> {
 		)),
 	);
 
-	map(
-		tuple((
-			verify(escaped_key, |t: &str| !t.is_empty()),
-			consumed(opt(preceded(char('@'), language))),
-		)),
-		|(field, (decorators, language))| Entry::Key {
-			key: format!("{field}{decorators}"),
+	let (rest, (field, (decorator_input, decorators))) = tuple((
+		verify(escaped_key, |t: &str| !t.is_empty()),
+		consumed(many0(decorator)),
+	))(input)?;
+
+	let mut language = None;
+	(|| -> Result<(), &'static str> {
+		for decorator in decorators {
+			match decorator {
+				Decorator::Language(dlang) => language = set_option_once(language, dlang)?,
+			}
+		}
+		Ok(())
+	})()
+	.map_err(|message| {
+		nom::Err::Failure(ParseError::Failure(format!("{message}: {decorator_input}")))
+	})?;
+
+	Ok((
+		rest,
+		Entry::Key {
+			key: format!("{field}{decorator_input}"),
 			field: field.into(),
 			language,
 		},
-	)(input)
+	))
+}
+
+fn set_option_once<T>(mut option: Option<T>, value: T) -> Result<Option<T>, &'static str> {
+	if option.is_some() {
+		return Err("duplicate decorator");
+	}
+
+	option = Some(value);
+
+	Ok(option)
 }
 
 fn index(input: &str) -> IResult<&str, Entry> {
 	value(Entry::Index, tag("[]"))(input)
+}
+
+#[derive(Debug, Clone)]
+enum Decorator {
+	Language(excel::Language),
+}
+
+fn decorator(input: &str) -> IResult<&str, Decorator> {
+	preceded(
+		char('@'),
+		alt((
+			// Legacy support for un-prefixed languages
+			map(language, Decorator::Language),
+		)),
+	)(input)
 }
 
 fn language(input: &str) -> IResult<&str, excel::Language> {
@@ -321,6 +401,14 @@ mod test {
 
 		let got = test_parse("a@en");
 		assert_eq!(got, expected);
+	}
+
+	#[test]
+	fn parse_struct_decorator_duplicated() {
+		let got = "a@en@ja".parse::<FilterString>();
+		assert!(
+			matches!(got, Err(error::Error::Invalid(message)) if message == "duplicate decorator: @en@ja")
+		);
 	}
 
 	#[test]
