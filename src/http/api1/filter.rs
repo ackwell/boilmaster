@@ -22,11 +22,19 @@ use super::error;
 /// Filters are comprised of a comma-seperated list of field paths, i.e. `a,b`
 /// will select the fields `a` and `b`.
 ///
-/// A language may be specified on a field by field bases with an `@` suffix, i.e.
-/// `a@ja` will select the field `a`, retrieving the Japanese data associated with it.
+/// Decorators may be used to modify the way a field is read. They take the form
+/// of `@decorator(arguments)`, i.e. `field@lang(en)`. Currently accepted
+/// decorators:
 ///
-/// Nested fields may be selected using dot notation, i.e. `a.b` will select
-/// the field `b` contained in the struct `a`.
+/// - `@lang(<language>)`: Overrides the query's language for the decorated
+///   field. Allows one query to access data for multiple languages. `language`
+///   accepts any valid `LanguageString`.
+///
+/// - `@as(raw)`: Prevents further processing, such as sheet relations, being
+///   performed on the decorated field. Has no effect on regular scalar fields.
+///
+/// Nested fields may be selected using dot notation, i.e. `a.b` will select the
+/// field `b` contained in the struct `a`.
 ///
 /// Arrays must be targeted if selecting fields within them, i.e. `a[].b` will
 /// select _all_ `b` fields of structs within the array `a`, however `a.b` will
