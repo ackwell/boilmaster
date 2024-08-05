@@ -1,15 +1,14 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, fmt, str::FromStr};
 
 use ironworks::excel;
-use nohash_hasher::IntMap;
 use nom::{
 	branch::alt,
 	bytes::complete::{escaped_transform, is_not, tag},
 	character::complete::{alphanumeric1, char},
-	combinator::{all_consuming, map, map_res, opt, value, verify},
+	combinator::{all_consuming, consumed, cut, eof, map, map_res, value, verify},
 	multi::{many0, separated_list0, separated_list1},
-	sequence::{preceded, tuple},
-	Finish, IResult,
+	sequence::{delimited, preceded, tuple},
+	Finish, Parser,
 };
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
@@ -23,11 +22,19 @@ use super::error;
 /// Filters are comprised of a comma-seperated list of field paths, i.e. `a,b`
 /// will select the fields `a` and `b`.
 ///
-/// A language may be specified on a field by field bases with an `@` suffix, i.e.
-/// `a@ja` will select the field `a`, retrieving the Japanese data associated with it.
+/// Decorators may be used to modify the way a field is read. They take the form
+/// of `@decorator(arguments)`, i.e. `field@lang(en)`. Currently accepted
+/// decorators:
 ///
-/// Nested fields may be selected using dot notation, i.e. `a.b` will select
-/// the field `b` contained in the struct `a`.
+/// - `@lang(<language>)`: Overrides the query's language for the decorated
+///   field. Allows one query to access data for multiple languages. `language`
+///   accepts any valid `LanguageString`.
+///
+/// - `@as(raw)`: Prevents further processing, such as sheet relations, being
+///   performed on the decorated field. Has no effect on regular scalar fields.
+///
+/// Nested fields may be selected using dot notation, i.e. `a.b` will select the
+/// field `b` contained in the struct `a`.
 ///
 /// Arrays must be targeted if selecting fields within them, i.e. `a[].b` will
 /// select _all_ `b` fields of structs within the array `a`, however `a.b` will
@@ -45,7 +52,12 @@ type Path = Vec<Entry>;
 
 #[derive(Debug, Clone)]
 enum Entry {
-	Key(String, Option<excel::Language>),
+	Key {
+		key: String,
+		field: String,
+		language: Option<excel::Language>,
+		read_as: Option<read::As>,
+	},
 	Index,
 }
 
@@ -88,13 +100,20 @@ fn build_filter(path: Path, default_language: excel::Language) -> read::Filter {
 		output = match entry {
 			Entry::Index => read::Filter::Array(output.into()),
 
-			Entry::Key(key, specified_language) => {
-				let language = specified_language.unwrap_or(default_language);
-				let mut language_map = IntMap::default();
-				language_map.insert(read::Language(language), output);
-				let key_map = HashMap::from([(key, language_map)]);
-				read::Filter::Struct(key_map)
-			}
+			Entry::Key {
+				key,
+				field,
+				language,
+				read_as,
+			} => read::Filter::Struct(HashMap::from([(
+				key,
+				read::StructEntry {
+					field,
+					language: language.unwrap_or(default_language),
+					read_as: read_as.unwrap_or(read::As::Default),
+					filter: output,
+				},
+			)])),
 		}
 	}
 
@@ -113,17 +132,23 @@ fn merge_filters(a: read::Filter, b: read::Filter) -> error::Result<read::Filter
 			F::Array(merge_filters(*a_inner, *b_inner)?.into())
 		}
 
-		// Structs need to be merged across both the inner maps.
+		// Structs need to have entry filters merged for matching keys.
 		(F::Struct(mut a_fields), F::Struct(b_fields)) => {
-			for (field_name, b_languages) in b_fields {
-				let a_languages = a_fields.entry(field_name).or_default();
-				for (language, b_filter) in b_languages {
-					let new_filter = match a_languages.remove(&language) {
-						None => b_filter,
-						Some(a_filter) => merge_filters(a_filter, b_filter)?,
-					};
-					a_languages.insert(language, new_filter);
-				}
+			for (b_key, b_entry) in b_fields {
+				let new_entry = match a_fields.remove(&b_key) {
+					None => b_entry,
+
+					// NOTE: This will technically kludge b's entry's non-filter
+					// properties if there's a mismatch with a - however, given the
+					// properties of entries are driven off the key in this filter
+					// parser, there is no real opportunity for a mismatching entry for
+					// a matching key.
+					Some(a_entry) => read::StructEntry {
+						filter: merge_filters(a_entry.filter, b_entry.filter)?,
+						..a_entry
+					},
+				};
+				a_fields.insert(b_key, new_entry);
 			}
 			F::Struct(a_fields)
 		}
@@ -165,10 +190,50 @@ impl FromStr for FilterString {
 	}
 }
 
+type IResult<I, O> = nom::IResult<I, O, ParseError<I>>;
+
+#[derive(Debug)]
+enum ParseError<I> {
+	Nom(nom::error::Error<I>),
+	Failure(String),
+}
+
+impl<I> nom::error::ParseError<I> for ParseError<I> {
+	fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
+		Self::Nom(nom::error::Error::from_error_kind(input, kind))
+	}
+
+	fn append(_input: I, _kind: nom::error::ErrorKind, other: Self) -> Self {
+		other
+	}
+}
+
+impl<I, E> nom::error::FromExternalError<I, E> for ParseError<I> {
+	fn from_external_error(input: I, kind: nom::error::ErrorKind, e: E) -> Self {
+		Self::Nom(nom::error::Error::from_external_error(input, kind, e))
+	}
+}
+
+impl<I> fmt::Display for ParseError<I>
+where
+	I: fmt::Display,
+{
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Nom(inner) => inner.fmt(formatter),
+			Self::Failure(message) => message.fmt(formatter),
+		}
+	}
+}
+
 fn filter(input: &str) -> IResult<&str, FilterStringInner> {
 	alt((
+		map(eof, |_| FilterStringInner::Paths(vec![])),
 		value(FilterStringInner::All, char('*')),
-		map(separated_list0(char(','), path), FilterStringInner::Paths),
+		map(
+			separated_list0(char(','), cut(path)),
+			FilterStringInner::Paths,
+		),
 	))(input)
 }
 
@@ -201,17 +266,76 @@ fn key(input: &str) -> IResult<&str, Entry> {
 		)),
 	);
 
-	map(
-		tuple((
-			verify(escaped_key, |t: &str| !t.is_empty()),
-			opt(preceded(char('@'), language)),
-		)),
-		|(key, language)| Entry::Key(key.into(), language),
-	)(input)
+	let (rest, (field, (decorator_input, decorators))) = tuple((
+		verify(escaped_key, |t: &str| !t.is_empty()),
+		consumed(many0(decorator)),
+	))(input)?;
+
+	let mut language = None;
+	let mut read_as = None;
+
+	(|| -> Result<(), &'static str> {
+		for decorator in decorators {
+			match decorator {
+				Decorator::Language(d_lang) => set_option_once(&mut language, d_lang)?,
+				Decorator::As(d_as) => set_option_once(&mut read_as, d_as)?,
+			}
+		}
+		Ok(())
+	})()
+	.map_err(|message| {
+		nom::Err::Failure(ParseError::Failure(format!("{message}: {decorator_input}")))
+	})?;
+
+	Ok((
+		rest,
+		Entry::Key {
+			key: format!("{field}{decorator_input}"),
+			field: field.into(),
+			language,
+			read_as,
+		},
+	))
+}
+
+fn set_option_once<T>(option: &mut Option<T>, value: T) -> Result<(), &'static str> {
+	if option.is_some() {
+		return Err("duplicate decorator");
+	}
+
+	*option = Some(value);
+
+	Ok(())
 }
 
 fn index(input: &str) -> IResult<&str, Entry> {
 	value(Entry::Index, tag("[]"))(input)
+}
+
+#[derive(Debug, Clone)]
+enum Decorator {
+	Language(excel::Language),
+	As(read::As),
+}
+
+fn decorator(input: &str) -> IResult<&str, Decorator> {
+	preceded(
+		char('@'),
+		alt((
+			// Legacy support for un-prefixed languages
+			map(language, Decorator::Language),
+			// Call-syntax decorators
+			map(call("lang", language), Decorator::Language),
+			map(call("as", read_as), Decorator::As),
+		)),
+	)(input)
+}
+
+fn call<'a, O, F>(name: &'a str, arguments: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
+where
+	F: Parser<&'a str, O, ParseError<&'a str>>,
+{
+	preceded(tag(name), delimited(char('('), cut(arguments), char(')')))
 }
 
 fn language(input: &str) -> IResult<&str, excel::Language> {
@@ -222,10 +346,17 @@ fn language(input: &str) -> IResult<&str, excel::Language> {
 	})(input)
 }
 
+fn read_as(input: &str) -> IResult<&str, read::As> {
+	alt((
+		//
+		value(read::As::Raw, tag("raw")),
+	))(input)
+}
+
 #[cfg(test)]
 mod test {
-	use nohash_hasher::IntMap;
 	use pretty_assertions::assert_eq;
+	use read::StructEntry;
 
 	use super::*;
 
@@ -244,28 +375,29 @@ mod test {
 		test_language_struct(
 			entries
 				.into_iter()
-				.map(|(key, value)| (key, test_language_map([(excel::Language::English, value)]))),
+				.map(|(key, value)| (key.to_string(), key, excel::Language::English, value)),
 		)
 	}
 
 	fn test_language_struct(
-		entries: impl IntoIterator<Item = (impl ToString, IntMap<read::Language, read::Filter>)>,
+		entries: impl IntoIterator<Item = (impl ToString, impl ToString, excel::Language, read::Filter)>,
 	) -> read::Filter {
 		read::Filter::Struct(
 			entries
 				.into_iter()
-				.map(|(key, languages)| (key.to_string(), languages))
+				.map(|(key, field, language, filter)| {
+					(
+						key.to_string(),
+						StructEntry {
+							field: field.to_string(),
+							language,
+							read_as: read::As::Default,
+							filter,
+						},
+					)
+				})
 				.collect(),
 		)
-	}
-
-	fn test_language_map(
-		entries: impl IntoIterator<Item = (excel::Language, read::Filter)>,
-	) -> IntMap<read::Language, read::Filter> {
-		entries
-			.into_iter()
-			.map(|(l, f)| (read::Language(l), f))
-			.collect()
 	}
 
 	fn test_array(child: read::Filter) -> read::Filter {
@@ -297,14 +429,33 @@ mod test {
 	}
 
 	#[test]
-	fn parse_struct_language() {
+	fn parse_struct_decorator_language() {
 		let expected = test_language_struct([(
+			"a@lang(en)",
 			"a",
-			test_language_map([(excel::Language::English, read::Filter::All)]),
+			excel::Language::English,
+			read::Filter::All,
 		)]);
+
+		let got = test_parse("a@lang(en)");
+		assert_eq!(got, expected);
+	}
+
+	#[test]
+	fn parse_struct_decorator_language_legacy() {
+		let expected =
+			test_language_struct([("a@en", "a", excel::Language::English, read::Filter::All)]);
 
 		let got = test_parse("a@en");
 		assert_eq!(got, expected);
+	}
+
+	#[test]
+	fn parse_struct_decorator_duplicated() {
+		let got = "a@lang(en)@lang(ja)".parse::<FilterString>();
+		assert!(
+			matches!(got, Err(error::Error::Invalid(message)) if message == "duplicate decorator: @lang(en)@lang(ja)")
+		);
 	}
 
 	#[test]

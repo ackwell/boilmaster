@@ -70,10 +70,7 @@ impl RowResult {
 			subrow_id: None,
 			fields: ValueString(
 				read::Value::Struct(HashMap::from([(
-					read::StructKey {
-						name: "FieldName".into(),
-						language: excel::Language::English,
-					},
+					"FieldName".into(),
 					read::Value::Scalar(excel::Field::U32(14)),
 				)])),
 				excel::Language::English,

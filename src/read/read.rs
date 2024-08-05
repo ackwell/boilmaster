@@ -8,16 +8,13 @@ use std::{
 use anyhow::{anyhow, Context};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
-use nohash_hasher::IntMap;
 use serde::Deserialize;
-
-use crate::read::Language;
 
 use super::{
 	error::{Error, MismatchError, Result},
-	filter::Filter,
+	filter::{As, Filter, StructEntry},
 	language::LanguageString,
-	value::{Reference, StructKey, Value},
+	value::{Reference, Value},
 };
 
 #[derive(Debug, Deserialize)]
@@ -79,6 +76,7 @@ impl Read {
 			subrow_id,
 
 			filter,
+			read_as: As::Default,
 			rows: &mut HashMap::new(),
 			columns: &[],
 			depth,
@@ -143,6 +141,13 @@ fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
 }
 
 fn read_node_scalar(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {
+	match context.read_as {
+		As::Raw => Ok(Value::Scalar(context.next_field()?)),
+		As::Default => read_scalar_default(scalar, context),
+	}
+}
+
+fn read_scalar_default(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {
 	let field = context.next_field()?;
 
 	use schema::Scalar as S;
@@ -184,13 +189,18 @@ fn read_scalar_reference(
 	// NOTE: a lot of the TODOs here are immediately break;ing - this is to avoid a potentially correct target that is simply unhandled being ignored and a later, incorrect target being picked as a result.
 	for target in targets {
 		if let Some(condition) = &target.condition {
+			let key = "__bm_target_condition";
+
 			// TODO: This is effectively spinning an entirely new read tree just to check the condition, which is dumb. It'll technically hit cache all the way down, but this is incredibly dumb.
-			let mut language_map = IntMap::default();
-			language_map.insert(Language(context.language), Filter::All);
 			let data = read_sheet(ReaderContext {
 				filter: &Filter::Struct(HashMap::from([(
-					condition.selector.clone(),
-					language_map,
+					key.to_string(),
+					StructEntry {
+						field: condition.selector.clone(),
+						language: context.language,
+						read_as: As::Raw,
+						filter: Filter::All,
+					},
 				)])),
 				rows: &mut *context.rows,
 				..context
@@ -198,10 +208,7 @@ fn read_scalar_reference(
 
 			let struct_value = match data {
 				Value::Struct(mut map) => map
-					.remove(&StructKey {
-						name: condition.selector.clone(),
-						language: context.language,
-					})
+					.remove(key)
 					.ok_or_else(|| Error::Failure(anyhow!("Schema target condition mismatch.")))?,
 				_ => Err(anyhow!(
 					"Did not recieve a struct from target condition lookup."
@@ -348,10 +355,22 @@ fn read_node_array(
 	Ok(Value::Array(values))
 }
 
-fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) -> Result<Value> {
+fn read_node_struct(
+	schema_fields: &[schema::StructField],
+	mut context: ReaderContext,
+) -> Result<Value> {
 	let filter_fields = match context.filter {
 		Filter::All => None,
-		Filter::Struct(filter_fields) => Some(filter_fields),
+		Filter::Struct(filter_fields) => {
+			let mut filters_by_field = HashMap::new();
+			for (key, entry) in filter_fields.iter() {
+				filters_by_field
+					.entry(entry.field.clone())
+					.or_insert_with(|| Vec::new())
+					.push((key, entry));
+			}
+			Some(filters_by_field)
+		}
 		other => {
 			return Err(Error::FilterSchemaMismatch(
 				context.mismatch_error(format!("expected struct filter, got {other:?}")),
@@ -361,37 +380,46 @@ fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) 
 
 	let mut value_fields = HashMap::new();
 
-	for (name, node, columns) in iterate_struct_fields(fields, context.columns)? {
-		let language_filters = match filter_fields {
-			Some(fields) => either::Left(match fields.get(name.as_ref()) {
+	for (field_name, node, columns) in iterate_struct_fields(schema_fields, context.columns)? {
+		let language_filters = match &filter_fields {
+			Some(fields) => either::Left(match fields.get(field_name.as_ref()) {
 				// Filter exists, but has no entry for this name - no languages to filter to.
 				None => either::Left(iter::empty()),
 
 				// Entry exists for the name, map the language pairs to the expected shape.
-				Some(languages) => either::Right(
-					languages
+				Some(entries) => either::Right(
+					entries
 						.iter()
-						.map(|(language, filter)| (language.0, filter)),
+						.map(|(key, entry)| (key.as_str(), Cow::Borrowed(*entry))),
 				),
 			}),
 
 			// ::All filter, walk with the current context language.
-			None => either::Right(std::iter::once((context.language, &Filter::All))),
+			None => either::Right(std::iter::once((
+				field_name.as_ref(),
+				Cow::Owned(StructEntry {
+					field: field_name.to_string(),
+					language: context.language,
+					read_as: As::Default,
+					filter: Filter::All,
+				}),
+			))),
 		};
 
 		let path = context
 			.path
 			.iter()
-			.chain(&[name.as_ref()])
-			.map(|&x| x)
+			.chain(&[field_name.as_ref()])
+			.map(|&field| field)
 			.collect::<Vec<_>>();
 
-		for (language, filter) in language_filters {
+		for (key, entry) in language_filters {
 			let value = read_node(
 				node,
 				ReaderContext {
-					filter,
-					language,
+					filter: &entry.filter,
+					language: entry.language,
+					read_as: entry.read_as,
 					columns,
 					rows: &mut context.rows,
 					path: &path,
@@ -399,10 +427,7 @@ fn read_node_struct(fields: &[schema::StructField], mut context: ReaderContext) 
 				},
 			)?;
 
-			match value_fields.entry(StructKey {
-				name: name.to_string(),
-				language,
-			}) {
+			match value_fields.entry(key.to_string()) {
 				hash_map::Entry::Vacant(entry) => {
 					entry.insert(value);
 				}
@@ -511,6 +536,7 @@ struct ReaderContext<'a> {
 	subrow_id: u16,
 
 	filter: &'a Filter,
+	read_as: As,
 	columns: &'a [exh::ColumnDefinition],
 	rows: &'a mut HashMap<excel::Language, excel::Row>,
 	depth: u8,
