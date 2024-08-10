@@ -160,8 +160,8 @@ impl<'a> Normalizer<'a> {
 				context,
 			),
 
-			(pre::FieldSpecifier::Array, schema::Node::Array { count, node }) => {
-				self.normalize_leaf_bound_array(operation, node, *count, context)
+			(pre::FieldSpecifier::Array(index), schema::Node::Array { count, node }) => {
+				self.normalize_leaf_bound_array(operation, node, *count, *index, context)
 			}
 
 			// Anything other than a like-for-like match is, well, a mismatch.
@@ -169,7 +169,7 @@ impl<'a> Normalizer<'a> {
 				"cannot use {} query specifier for {} schema structures",
 				match specifier {
 					pre::FieldSpecifier::Struct(..) => "struct",
-					pre::FieldSpecifier::Array => "array",
+					pre::FieldSpecifier::Array(..) => "array",
 				},
 				match node {
 					schema::Node::Array { .. } => "array",
@@ -243,33 +243,41 @@ impl<'a> Normalizer<'a> {
 		operation: &pre::Operation,
 		node: &schema::Node,
 		count: u32,
+		index: Option<u32>,
 		context: Context,
 	) -> Result<post::Node> {
+		let path_entry = match index {
+			None => std::borrow::Cow::Borrowed("[]"),
+			Some(value) => std::borrow::Cow::Owned(format!("[{value}]")),
+		};
+
 		let context = Context {
-			path: &([context.path, &["[]"]].concat()),
+			path: &([context.path, &[path_entry.as_ref()]].concat()),
 			..context
 		};
 
 		let size = usize::try_from(node.size()).unwrap();
+
+		// If there's an index, shortcut with a leaf node.
+		if let Some(index) = index {
+			let index_usize = usize::try_from(index).unwrap();
+			return self.normalise_leaf_bound_array_index(
+				operation,
+				node,
+				index_usize,
+				size,
+				context,
+			);
+		}
+
 		let clauses = (0..usize::try_from(count).unwrap())
 			.map(|index| -> Result<_> {
-				let start = index * size;
-				let end = start + size;
-
-				// TODO: This is duped, helper?
-				let narrowed_columns = context.columns.get(start..end).ok_or_else(|| {
-					Error::SchemaGameMismatch(
-						context.mismatch("game data does not contain enough columns"),
-					)
-				})?;
-
-				let query = self.normalize_operation(
+				let query = self.normalise_leaf_bound_array_index(
 					operation,
-					Context {
-						schema: node,
-						columns: narrowed_columns,
-						..context
-					},
+					node,
+					index,
+					size,
+					context.clone(),
 				)?;
 
 				Ok((post::Occur::Should, query))
@@ -277,6 +285,32 @@ impl<'a> Normalizer<'a> {
 			.collect::<Result<Vec<_>>>()?;
 
 		Ok(post::Node::Group(post::Group { clauses }))
+	}
+
+	fn normalise_leaf_bound_array_index(
+		&self,
+		operation: &pre::Operation,
+		node: &schema::Node,
+		index: usize,
+		size: usize,
+		context: Context,
+	) -> Result<post::Node> {
+		let start = index * size;
+		let end = start + size;
+
+		// TODO: This is duped, helper?
+		let narrowed_columns = context.columns.get(start..end).ok_or_else(|| {
+			Error::SchemaGameMismatch(context.mismatch("game data does not contain enough columns"))
+		})?;
+
+		self.normalize_operation(
+			operation,
+			Context {
+				schema: node,
+				columns: narrowed_columns,
+				..context
+			},
+		)
 	}
 
 	fn normalize_leaf_unbound(

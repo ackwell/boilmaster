@@ -30,6 +30,10 @@ use super::error;
 /// inside structs and relations (i.e. `Foo.Bar=1)`, as well as language tags to
 /// target fields in particular languages (i.e. `Foo@ja=1`).
 ///
+/// Arrays must be selected explicitly (i.e. `Foo[]=1`), resulting in a match
+/// for any value within the array. An index can be used to reduce the search
+/// space (i.e. `Foo[1]=1`).
+///
 /// By default, results will match at least one clause, with higher relevance
 /// scores for those that match more. To modify this behavior, clauses can
 /// decorated. `+clause` specifies that the clause _must_ be matched for any
@@ -149,7 +153,10 @@ fn language(input: &str) -> ParseResult<excel::Language> {
 }
 
 fn array_specifier(input: &str) -> ParseResult<query::FieldSpecifier> {
-	nom_value(query::FieldSpecifier::Array, tag("[]"))(input)
+	map(
+		delimited(char('['), opt(map_res(digit1, str::parse)), char(']')),
+		|index: Option<u32>| query::FieldSpecifier::Array(index),
+	)(input)
 }
 
 fn operation(input: &str) -> ParseResult<query::Operation> {
@@ -308,13 +315,30 @@ mod test {
 			leaf(
 				field_struct("A"),
 				operation_relation(leaf(
-					query::FieldSpecifier::Array,
+					query::FieldSpecifier::Array(None),
 					query::Operation::Eq(u64(1)),
 				)),
 			),
 		)]);
 
 		let got = test_parse("A[]=1");
+		assert_eq!(got, expected);
+	}
+
+	#[test]
+	fn parse_arrays_indexing() {
+		let expected = group(vec![(
+			query::Occur::Should,
+			leaf(
+				field_struct("A"),
+				operation_relation(leaf(
+					query::FieldSpecifier::Array(Some(1)),
+					query::Operation::Eq(u64(1)),
+				)),
+			),
+		)]);
+
+		let got = test_parse("A[1]=1");
 		assert_eq!(got, expected);
 	}
 

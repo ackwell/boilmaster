@@ -18,5 +18,5 @@ pub type RelationTarget = ();
 #[derive(Debug, Clone, PartialEq)]
 pub enum FieldSpecifier {
 	Struct(String, Option<excel::Language>),
-	Array,
+	Array(Option<u32>),
 }
