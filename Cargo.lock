@@ -1415,7 +1415,7 @@ checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 [[package]]
 name = "ironworks"
 version = "0.4.1"
-source = "git+https://github.com/ackwell/ironworks.git#5241bb96868e21562a4753f0218589082420f45c"
+source = "git+https://github.com/ackwell/ironworks.git#c5d9aefde4565beb50a69b029e0e86ff989c6251"
 dependencies = [
  "binrw",
  "derivative",
@@ -1432,7 +1432,7 @@ dependencies = [
 [[package]]
 name = "ironworks_schema"
 version = "0.2.0"
-source = "git+https://github.com/ackwell/ironworks.git#5241bb96868e21562a4753f0218589082420f45c"
+source = "git+https://github.com/ackwell/ironworks.git#c5d9aefde4565beb50a69b029e0e86ff989c6251"
 dependencies = [
  "derivative",
  "git2",

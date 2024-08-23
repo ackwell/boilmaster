@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
-use ironworks::excel;
+use ironworks::{excel, sestring::SeString};
 
 #[derive(Debug)]
 pub enum Value {
 	Array(Vec<Value>),
+	// TODO: consider moving icon/html (maybe reference?) into a seperate scalar type/enum (if html is kept)
+	Html(SeString<'static>),
 	Icon(i32),
 	Reference(Reference),
 	Scalar(excel::Field),

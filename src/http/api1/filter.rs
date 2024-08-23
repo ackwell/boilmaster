@@ -30,8 +30,17 @@ use super::error;
 ///   field. Allows one query to access data for multiple languages. `language`
 ///   accepts any valid `LanguageString`.
 ///
-/// - `@as(raw)`: Prevents further processing, such as sheet relations, being
+/// - `@as(<format>)`: Overrides the default output format for the decorated
+///   field.
+///  
+/// Currently accepted `format`s for `@as`:
+///
+/// - `raw`: Prevents further processing, such as sheet relations, being
 ///   performed on the decorated field. Has no effect on regular scalar fields.
+///
+/// - `html`: Formats a string field as rich HTML. Invalid on non-string
+///   fields. Output will be a valid HTML fragment, however no stability
+///   guarantees are made over the precise markup used.
 ///
 /// Nested fields may be selected using dot notation, i.e. `a.b` will select the
 /// field `b` contained in the struct `a`.
@@ -348,8 +357,8 @@ fn language(input: &str) -> IResult<&str, excel::Language> {
 
 fn read_as(input: &str) -> IResult<&str, read::As> {
 	alt((
-		//
 		value(read::As::Raw, tag("raw")),
+		value(read::As::Html, tag("html")),
 	))(input)
 }
 

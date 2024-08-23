@@ -7,6 +7,7 @@ mod query;
 mod read;
 mod search;
 mod sheet;
+mod string;
 mod value;
 mod version;
 
