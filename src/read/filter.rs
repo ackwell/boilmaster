@@ -21,4 +21,9 @@ pub struct StructEntry {
 pub enum As {
 	Default,
 	Raw,
+	// NOTE: Passing this through read (and presumably json in future) really
+	// kinda reeks, but the alternative is having api1 store html/json state in
+	// some tree other than a filter while it gets read, which also kinda sucks.
+	// Would need some intermediary format.
+	Html,
 }

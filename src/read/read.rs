@@ -143,8 +143,19 @@ fn read_node(node: &schema::Node, context: ReaderContext) -> Result<Value> {
 fn read_node_scalar(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {
 	match context.read_as {
 		As::Raw => Ok(Value::Scalar(context.next_field()?)),
+		As::Html => read_scalar_html(context),
 		As::Default => read_scalar_default(scalar, context),
 	}
+}
+
+fn read_scalar_html(mut context: ReaderContext) -> Result<Value> {
+	let field = context.next_field()?;
+	let string = field.into_string().map_err(|field| {
+		Error::FilterSchemaMismatch(
+			context.mismatch_error(format!("cannot format {field:?} as html")),
+		)
+	})?;
+	Ok(Value::Html(string))
 }
 
 fn read_scalar_default(scalar: &schema::Scalar, mut context: ReaderContext) -> Result<Value> {

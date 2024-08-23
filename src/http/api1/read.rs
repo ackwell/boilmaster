@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+	collections::HashMap,
+	sync::{Arc, RwLock},
+};
 
 use aide::OperationIo;
 use anyhow::anyhow;
@@ -8,16 +11,17 @@ use axum::{
 	http::request::Parts,
 	Extension, RequestPartsExt,
 };
-use ironworks::{excel, file::exh};
+use ironworks::{excel, file::exh, sestring::format::Input};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{http::service, read, schema, utility::anyhow::Anyhow};
+use crate::{http::service, read, schema, utility::anyhow::Anyhow, version::VersionKey};
 
 use super::{
 	error::{Error, Result},
 	extract::{Query, VersionQuery},
 	filter::FilterString,
+	string::build_input,
 	value::ValueString,
 };
 
@@ -74,10 +78,32 @@ impl RowResult {
 					read::Value::Scalar(excel::Field::U32(14)),
 				)])),
 				excel::Language::English,
+				Input::new().into(),
 			),
 			// TODO: should this have an example?
 			transient: None,
 		}
+	}
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct RowReaderState {
+	string_input: Arc<RwLock<HashMap<VersionKey, Arc<Input>>>>,
+}
+
+impl RowReaderState {
+	fn input(&self, version: VersionKey, excel: &excel::Excel) -> Result<Arc<Input>> {
+		let inputs = self.string_input.read().expect("poisoned");
+		if let Some(input) = inputs.get(&version) {
+			return Ok(input.clone());
+		}
+
+		drop(inputs);
+		let mut inputs_mut = self.string_input.write().expect("poisoned");
+		let input = Arc::new(build_input(excel)?);
+		inputs_mut.insert(version, input.clone());
+
+		Ok(input)
 	}
 }
 
@@ -91,6 +117,7 @@ pub struct RowReader {
 	pub language: excel::Language,
 	fields: read::Filter,
 	transient: Option<read::Filter>,
+	string_input: Arc<Input>,
 }
 
 // todo maybe an extra bit of state requirements on this for the filters? that would allow the filters to be wired up per-handler i think. not sure how that aligns with existing state though
@@ -119,6 +146,12 @@ where
 			.await
 			.map_err(|error| Error::Other(error.into()))?;
 
+		// TODO: again - how can i get this in the typechecked state?
+		let Extension(state) = parts
+			.extract::<Extension<RowReaderState>>()
+			.await
+			.map_err(|error| Error::Other(error.into()))?;
+
 		let excel = data.version(version_key)?.excel();
 
 		// TODO: should this be a bit like versionquery for the schema shit?
@@ -128,6 +161,8 @@ where
 			.language
 			.map(excel::Language::from)
 			.unwrap_or_else(|| read.default_language());
+
+		let string_input = state.input(version_key, &excel)?;
 
 		let fields = query
 			.fields
@@ -155,6 +190,7 @@ where
 			language,
 			fields,
 			transient,
+			string_input,
 		})
 	}
 }
@@ -180,6 +216,7 @@ impl RowReader {
 				depth,
 			)?,
 			self.language,
+			self.string_input.clone(),
 		);
 
 		// Try to read a transient row.
@@ -195,7 +232,7 @@ impl RowReader {
 				filter,
 				depth,
 			) {
-				Ok(value) => Some(ValueString(value, self.language)),
+				Ok(value) => Some(ValueString(value, self.language, self.string_input.clone())),
 				Err(read::Error::NotFound(_)) => None,
 				Err(error) => Err(error)?,
 			},

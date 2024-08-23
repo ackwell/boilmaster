@@ -1,16 +1,22 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-use ironworks::excel;
+use ironworks::{excel, sestring};
 use schemars::{
 	gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject},
 };
-use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct};
+use serde::ser::{Error as SerError, Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
 use crate::{read, utility::jsonschema::impl_jsonschema};
 
+use super::string;
+
 #[derive(Debug)]
-pub struct ValueString(pub read::Value, pub excel::Language);
+pub struct ValueString(
+	pub read::Value,
+	pub excel::Language,
+	pub Arc<sestring::format::Input>,
+);
 
 impl Serialize for ValueString {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -20,6 +26,7 @@ impl Serialize for ValueString {
 		ValueReference {
 			value: &self.0,
 			language: self.1,
+			string_input: &self.2,
 		}
 		.serialize(serializer)
 	}
@@ -36,6 +43,7 @@ fn valuestring_schema(_generator: &mut SchemaGenerator) -> Schema {
 struct ValueReference<'a> {
 	value: &'a read::Value,
 	language: excel::Language,
+	string_input: &'a sestring::format::Input,
 }
 
 impl Serialize for ValueReference<'_> {
@@ -46,6 +54,7 @@ impl Serialize for ValueReference<'_> {
 		use read::Value as V;
 		match self.value {
 			V::Array(values) => self.serialize_array(serializer, values),
+			V::Html(string) => self.serialize_html(serializer, string),
 			V::Icon(id) => self.serialize_icon(serializer, *id),
 			V::Reference(reference) => self.serialize_reference(serializer, reference),
 			V::Scalar(field) => self.serialize_scalar(serializer, field),
@@ -64,9 +73,23 @@ impl ValueReference<'_> {
 			sequence.serialize_element(&ValueReference {
 				value,
 				language: self.language,
+				string_input: self.string_input,
 			})?;
 		}
 		sequence.end()
+	}
+
+	fn serialize_html<S>(
+		&self,
+		serializer: S,
+		string: &sestring::SeString,
+	) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		let output =
+			string::as_html(string.as_ref(), self.string_input).map_err(SerError::custom)?;
+		serializer.serialize_str(&output)
 	}
 
 	fn serialize_icon<S>(&self, serializer: S, id: i32) -> Result<S::Ok, S::Error>
@@ -124,6 +147,7 @@ impl ValueReference<'_> {
 					&ValueReference {
 						value: fields,
 						language: self.language,
+						string_input: self.string_input,
 					},
 				)?;
 				state.end()
@@ -171,6 +195,7 @@ impl ValueReference<'_> {
 				&ValueReference {
 					value,
 					language: self.language,
+					string_input: self.string_input,
 				},
 			)?;
 		}
