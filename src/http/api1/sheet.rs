@@ -22,7 +22,7 @@ use crate::{
 use super::{
 	error::{Error, Result},
 	extract::{Path, Query, VersionQuery},
-	read::{RowReader, RowReaderConfig, RowReaderState, RowResult},
+	read::{RowReader, RowReaderConfig, RowResult},
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -48,7 +48,6 @@ pub fn router(config: Config) -> ApiRouter<service::State> {
 		.layer(Extension(config.list))
 		.api_route("/:sheet/:row", get_with(row, row_docs))
 		.layer(Extension(config.entry))
-		.layer(Extension(RowReaderState::default()))
 		.layer(Extension(config.limit))
 }
 

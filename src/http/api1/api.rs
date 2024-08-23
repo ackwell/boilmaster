@@ -14,7 +14,7 @@ use tower_http::cors::CorsLayer;
 
 use crate::http::service;
 
-use super::{asset, extract::RouterPath, search, sheet, version};
+use super::{asset, extract::RouterPath, read::RowReaderState, search, sheet, version};
 
 const OPENAPI_JSON_ROUTE: &str = "/openapi.json";
 
@@ -45,6 +45,7 @@ pub fn router(config: Config) -> Router<service::State> {
 			"/version",
 			version::router().with_path_items(|item| item.tag("versions")),
 		)
+		.layer(Extension(RowReaderState::default()))
 		.finish_api_with(&mut openapi, api_docs)
 		.layer(CorsLayer::permissive())
 		.route(OPENAPI_JSON_ROUTE, get(openapi_json))
