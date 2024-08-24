@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::Context;
 use axum::{
 	debug_handler,
@@ -17,10 +19,17 @@ use crate::{
 use super::{base::BaseTemplate, error::Result};
 
 pub fn router(state: HttpState) -> Router {
-	Router::new().route(
-		"/:version_key",
-		get(get_version).post(post_version).with_state(state),
-	)
+	Router::new()
+		.route(
+			"/:version_key",
+			get(get_version)
+				.post(post_version)
+				.with_state(state.clone()),
+		)
+		.route(
+			"/:version_key/delete",
+			get(delete_instructions).with_state(state),
+		)
 }
 
 #[debug_handler(state = HttpState)]
@@ -99,4 +108,57 @@ async fn post_version(
 	version.set_names(version_key, names).await?;
 
 	Ok(Redirect::to(&uri.to_string()))
+}
+
+#[debug_handler(state = HttpState)]
+async fn delete_instructions(
+	Path(target_key): Path<VersionKey>,
+	State(Service { version, .. }): State<Service>,
+) -> Result<impl IntoResponse> {
+	// Build set of each repository's patch paths for the target version.
+	let target = version.version(target_key).context("unknown version")?;
+	let mut target_paths = target
+		.repositories
+		.into_iter()
+		.flat_map(|repository| repository.patches.into_iter().map(|patch| patch.path))
+		.collect::<HashSet<_>>();
+
+	// Iterate over all versions other than the target.
+	let keys = version.keys().into_iter().filter(|&key| key != target_key);
+	for key in keys {
+		let other = version.version(key).context("missing version")?;
+
+		// Remove any paths in this versions's repositories.
+		for repository in other.repositories {
+			for patch in repository.patches {
+				target_paths.remove(&patch.path);
+			}
+		}
+	}
+
+	Ok((BaseTemplate {
+		title: format!("version {target_key}: delete instructions"),
+		content: html! {
+			h2 { "instructions" }
+			ol {
+				li { "copy the list of orphaned patch files below" }
+				li { "delete " code { (version.version_path(target_key).to_string_lossy()) } }
+				li {
+					"remove all references to "
+					code { (target_key) }
+					" from "
+					code { (version.metadata_path().to_string_lossy()) }
+				}
+				li { "restart service and ensure that " code { (target_key) } " is not listed" }
+				li { "delete orphaned patch files" }
+			}
+			h2 { "orphaned patch files" }
+			ul {
+				@for path in target_paths {
+					li { (path.to_string_lossy()) }
+				}
+			}
+		},
+	})
+	.render())
 }

@@ -271,11 +271,11 @@ impl Manager {
 		})
 	}
 
-	fn metadata_path(&self) -> PathBuf {
+	pub fn metadata_path(&self) -> PathBuf {
 		self.directory.join("metadata.json")
 	}
 
-	fn version_path(&self, key: VersionKey) -> PathBuf {
+	pub fn version_path(&self, key: VersionKey) -> PathBuf {
 		self.directory.join(format!("version-{key}.json"))
 	}
 
