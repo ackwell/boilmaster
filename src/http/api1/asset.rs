@@ -10,7 +10,12 @@ use aide::{
 	transform::TransformOperation,
 	NoApi,
 };
-use axum::{debug_handler, extract::State, http::header, response::IntoResponse, Extension};
+use axum::{
+	debug_handler,
+	extract::{FromRef, State},
+	http::header,
+	response::IntoResponse,
+};
 use axum_extra::{
 	headers::{CacheControl, ContentType, ETag, IfNoneMatch},
 	TypedHeader,
@@ -21,9 +26,10 @@ use seahash::SeaHasher;
 use serde::Deserialize;
 use strum::IntoEnumIterator;
 
-use crate::{asset::Format, http::service, version::VersionKey};
+use crate::{asset::Format, http::service::Service, version::VersionKey};
 
 use super::{
+	api::ApiState,
 	error::Result,
 	extract::{Path, Query, VersionQuery},
 };
@@ -36,10 +42,19 @@ pub struct Config {
 	maxage: u64,
 }
 
-pub fn router(config: Config) -> ApiRouter<service::State> {
-	ApiRouter::new()
-		.api_route("/*path", get_with(asset, asset_docs))
-		.layer(Extension(config))
+#[derive(Clone, FromRef)]
+struct AssetState {
+	services: Service,
+	config: Config,
+}
+
+pub fn router(config: Config, state: ApiState) -> ApiRouter {
+	let state = AssetState {
+		services: state.services,
+		config,
+	};
+
+	ApiRouter::new().api_route("/*path", get_with(asset, asset_docs).with_state(state))
 }
 
 /// Path variables accepted by the asset endpoint.
@@ -84,14 +99,14 @@ fn asset_docs(operation: TransformOperation) -> TransformOperation {
 		.response_with::<304, (), _>(|res| res.description("not modified"))
 }
 
-#[debug_handler(state = service::State)]
+#[debug_handler(state = AssetState)]
 async fn asset(
 	Path(AssetPath { path }): Path<AssetPath>,
 	VersionQuery(version_key): VersionQuery,
 	Query(query): Query<AssetQuery>,
 	NoApi(header_if_none_match): NoApi<Option<TypedHeader<IfNoneMatch>>>,
-	State(asset): State<service::Asset>,
-	Extension(config): Extension<Config>,
+	State(Service { asset, .. }): State<Service>,
+	State(config): State<Config>,
 ) -> Result<impl IntoApiResponse> {
 	let format = query.format;
 

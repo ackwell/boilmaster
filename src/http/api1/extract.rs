@@ -10,7 +10,7 @@ use axum::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::{http::service, version::VersionKey};
+use crate::{http::service::Service, version::VersionKey};
 
 use super::error::Error;
 
@@ -30,7 +30,7 @@ pub struct VersionQuery(pub VersionKey);
 impl<S> FromRequestParts<S> for VersionQuery
 where
 	S: Send + Sync,
-	service::Version: FromRef<S>,
+	Service: FromRef<S>,
 {
 	type Rejection = Error;
 
@@ -40,7 +40,7 @@ where
 			.await
 			.map_err(|error| Error::Invalid(error.to_string()))?;
 
-		let version = service::Version::from_ref(state);
+		let Service { version, .. } = Service::from_ref(state);
 
 		let version_name = params.version.as_deref();
 		let version_key = version.resolve(version_name).ok_or_else(|| {

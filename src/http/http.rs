@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
-use axum::Router;
+use axum::{extract::FromRef, Router};
 use serde::Deserialize;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
@@ -16,6 +16,11 @@ pub struct Config {
 
 	address: Option<IpAddr>,
 	port: u16,
+}
+
+#[derive(Clone, FromRef)]
+pub struct HttpState {
+	pub services: service::Service,
 }
 
 pub async fn serve(
@@ -35,19 +40,22 @@ pub async fn serve(
 
 	tracing::info!("http binding to {bind_address:?}");
 
-	let router = Router::new()
-		.nest("/admin", admin::router(config.admin))
-		.nest("/api/1", api1::router(config.api1))
-		.nest("/health", health::router())
-		.layer(TraceLayer::new_for_http())
-		.with_state(service::State {
+	let state = HttpState {
+		services: service::Service {
 			asset,
 			data,
 			read,
 			schema,
 			search,
 			version,
-		});
+		},
+	};
+
+	let router = Router::new()
+		.nest("/admin", admin::router(config.admin, state.clone()))
+		.nest("/api/1", api1::router(config.api1, state.clone()))
+		.nest("/health", health::router(state))
+		.layer(TraceLayer::new_for_http());
 
 	let listener = TcpListener::bind(bind_address).await.unwrap();
 	axum::serve(listener, router)

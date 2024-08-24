@@ -1,12 +1,12 @@
 use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Router};
 use reqwest::StatusCode;
 
-use super::service;
+use super::{http::HttpState, service::Service};
 
-pub fn router() -> Router<service::State> {
+pub fn router(state: HttpState) -> Router {
 	Router::new()
 		.route("/live", get(live))
-		.route("/ready", get(ready))
+		.route("/ready", get(ready).with_state(state))
 }
 
 #[debug_handler]
@@ -14,13 +14,16 @@ async fn live() -> impl IntoResponse {
 	(StatusCode::OK, "LIVE")
 }
 
-#[debug_handler(state = service::State)]
+#[debug_handler(state = HttpState)]
 async fn ready(
-	State(asset): State<service::Asset>,
-	State(data): State<service::Data>,
-	State(schema): State<service::Schema>,
-	State(search): State<service::Search>,
-	State(version): State<service::Version>,
+	State(Service {
+		asset,
+		data,
+		schema,
+		search,
+		version,
+		..
+	}): State<Service>,
 ) -> impl IntoResponse {
 	let ready =
 		asset.ready() && data.ready() && schema.ready() && search.ready() && version.ready();

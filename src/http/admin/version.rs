@@ -9,19 +9,25 @@ use axum::{
 use maud::{html, Render};
 use serde::Deserialize;
 
-use crate::{http::service, version::VersionKey};
+use crate::{
+	http::{http::HttpState, service::Service},
+	version::VersionKey,
+};
 
 use super::{base::BaseTemplate, error::Result};
 
-pub fn router() -> Router<service::State> {
-	Router::new().route("/:version_key", get(get_version).post(post_version))
+pub fn router(state: HttpState) -> Router {
+	Router::new().route(
+		"/:version_key",
+		get(get_version).post(post_version).with_state(state),
+	)
 }
 
-#[debug_handler]
+#[debug_handler(state = HttpState)]
 async fn get_version(
 	OriginalUri(uri): OriginalUri,
 	Path(version_key): Path<VersionKey>,
-	State(version): State<service::Version>,
+	State(Service { version, .. }): State<Service>,
 ) -> Result<impl IntoResponse> {
 	let names = version.names(version_key).context("unknown version")?;
 
@@ -82,11 +88,11 @@ struct VersionPostRequest {
 	names: String,
 }
 
-#[debug_handler]
+#[debug_handler(state = HttpState)]
 async fn post_version(
 	OriginalUri(uri): OriginalUri,
 	Path(version_key): Path<VersionKey>,
-	State(version): State<service::Version>,
+	State(Service { version, .. }): State<Service>,
 	Form(request): Form<VersionPostRequest>,
 ) -> Result<impl IntoResponse> {
 	let names = request.names.split(',').map(str::trim);

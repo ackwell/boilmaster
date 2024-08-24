@@ -4,10 +4,12 @@ use aide::{
 };
 use axum::{debug_handler, extract::State, Json};
 
-use crate::http::service;
+use crate::http::service::Service;
 
-pub fn router() -> ApiRouter<service::State> {
-	ApiRouter::new().api_route("/", get_with(versions, versions_docs))
+use super::api::ApiState;
+
+pub fn router(state: ApiState) -> ApiRouter {
+	ApiRouter::new().api_route("/", get_with(versions, versions_docs).with_state(state))
 }
 
 fn versions_docs(operation: TransformOperation) -> TransformOperation {
@@ -19,8 +21,8 @@ fn versions_docs(operation: TransformOperation) -> TransformOperation {
 		})
 }
 
-#[debug_handler(state = service::State)]
-async fn versions(State(version): State<service::Version>) -> impl IntoApiResponse {
+#[debug_handler(state = ApiState)]
+async fn versions(State(Service { version, .. }): State<Service>) -> impl IntoApiResponse {
 	let mut names = version.all_names();
 	names.sort_unstable();
 	Json(names)

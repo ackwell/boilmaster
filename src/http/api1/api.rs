@@ -1,18 +1,20 @@
 use std::sync::Arc;
 
-use aide::{
-	axum::ApiRouter,
-	openapi::{self, Tag},
-	transform::TransformOpenApi,
+use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
+use axum::{
+	debug_handler,
+	extract::{FromRef, State},
+	response::IntoResponse,
+	routing::get,
+	Json, Router,
 };
-use axum::{debug_handler, response::IntoResponse, routing::get, Extension, Json, Router};
 use git_version::git_version;
 use maud::{html, DOCTYPE};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 
-use crate::http::service;
+use crate::http::{http::HttpState, service::Service};
 
 use super::{asset, extract::RouterPath, read::RowReaderState, search, sheet, version};
 
@@ -25,54 +27,68 @@ pub struct Config {
 	sheet: sheet::Config,
 }
 
-pub fn router(config: Config) -> Router<service::State> {
+#[derive(Clone, FromRef)]
+pub struct ApiState {
+	pub services: Service,
+	pub reader_state: RowReaderState,
+}
+
+pub fn router(config: Config, state: HttpState) -> Router {
 	let mut openapi = openapi::OpenApi::default();
+
+	let state = ApiState {
+		services: state.services,
+		reader_state: RowReaderState::default(),
+	};
 
 	ApiRouter::new()
 		.nest(
 			"/asset",
-			asset::router(config.asset).with_path_items(|item| item.tag("assets")),
+			asset::router(config.asset, state.clone()).with_path_items(|item| item.tag("assets")),
 		)
 		.nest(
 			"/search",
-			search::router(config.search).with_path_items(|item| item.tag("search")),
+			search::router(config.search, state.clone()).with_path_items(|item| item.tag("search")),
 		)
 		.nest(
 			"/sheet",
-			sheet::router(config.sheet).with_path_items(|item| item.tag("sheets")),
+			sheet::router(config.sheet, state.clone()).with_path_items(|item| item.tag("sheets")),
 		)
 		.nest(
 			"/version",
-			version::router().with_path_items(|item| item.tag("versions")),
+			version::router(state).with_path_items(|item| item.tag("versions")),
 		)
-		.layer(Extension(RowReaderState::default()))
 		.finish_api_with(&mut openapi, api_docs)
 		.layer(CorsLayer::permissive())
-		.route(OPENAPI_JSON_ROUTE, get(openapi_json))
+		.route(
+			OPENAPI_JSON_ROUTE,
+			get(openapi_json).with_state(OpenApiState {
+				openapi: Arc::new(openapi),
+			}),
+		)
 		.route("/docs", get(scalar))
-		.layer(Extension(Arc::new(openapi)))
 }
 
 fn api_docs(api: TransformOpenApi) -> TransformOpenApi {
 	let mut api = api
 		.title("boilmaster")
 		.version(git_version!(prefix = "1-", fallback = "unknown"))
-		.tag(Tag {
+		.tag(openapi::Tag {
 			name: "assets".into(),
 			description: Some("Endpoints for accessing game data on a file-by-file basis. Commonly useful for fetching icons or other textures to display on the web.".into()),
 			..Default::default()
 		})
-		.tag(Tag {
+		.tag(openapi::Tag {
 			name: "search".into(),
 			description: Some("Endpoints for seaching and filtering the game's static relational data store.".into()),
 			..Default::default()
 		})
-		.tag(Tag {
+		.tag(openapi::Tag {
 			name: "sheets".into(),
 			description: Some("Endpoints for reading data from the game's static relational data store.".into()),
 			..Default::default()
 		})
-		.tag(Tag {
+		.tag(openapi::Tag {
 			name: "versions".into(),
 			description: Some("Endpoints for querying metadata about the versions recorded by the boilmaster system.".into()),
 			..Default::default()
@@ -102,6 +118,11 @@ fn api_docs(api: TransformOpenApi) -> TransformOpenApi {
 	api
 }
 
+#[derive(Clone, FromRef)]
+struct OpenApiState {
+	openapi: Arc<openapi::OpenApi>,
+}
+
 // We want to avoid cloning the OpenApi struct, but need runtime information to
 // know the location of the API routes within the routing heirachy. As such, we're
 // overriding the `servers` here by including it after the flattened base.
@@ -116,7 +137,7 @@ struct OpenApiOverrides<'a> {
 #[debug_handler]
 async fn openapi_json(
 	RouterPath(router_path): RouterPath,
-	Extension(openapi): Extension<Arc<openapi::OpenApi>>,
+	State(openapi): State<Arc<openapi::OpenApi>>,
 ) -> impl IntoResponse {
 	Json(OpenApiOverrides {
 		base: &*openapi,

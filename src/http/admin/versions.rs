@@ -8,12 +8,15 @@ use axum::{
 };
 use maud::{html, Render};
 
-use crate::{http::service, version::VersionKey};
+use crate::{
+	http::{http::HttpState, service::Service},
+	version::VersionKey,
+};
 
 use super::{base::BaseTemplate, error::Result};
 
-pub fn router() -> Router<service::State> {
-	Router::new().route("/", get(versions))
+pub fn router(state: HttpState) -> Router {
+	Router::new().route("/", get(versions).with_state(state))
 }
 
 struct VersionInfo {
@@ -22,10 +25,10 @@ struct VersionInfo {
 	names: Vec<String>,
 }
 
-#[debug_handler]
+#[debug_handler(state = HttpState)]
 async fn versions(
 	OriginalUri(uri): OriginalUri,
-	State(version): State<service::Version>,
+	State(Service { version, .. }): State<Service>,
 ) -> Result<impl IntoResponse> {
 	let version_info = |key: VersionKey| -> Result<_> {
 		let latest = version

@@ -4,7 +4,11 @@ use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	transform::TransformOperation,
 };
-use axum::{debug_handler, extract::State, Extension, Json};
+use axum::{
+	debug_handler,
+	extract::{FromRef, State},
+	Json,
+};
 use either::Either;
 use schemars::{
 	gen::SchemaGenerator,
@@ -14,15 +18,16 @@ use schemars::{
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 use crate::{
-	http::service,
+	http::service::Service,
 	schema,
 	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
 };
 
 use super::{
+	api::ApiState,
 	error::{Error, Result},
 	extract::{Path, Query, VersionQuery},
-	read::{RowReader, RowReaderConfig, RowResult},
+	read::{RowReader, RowReaderConfig, RowReaderState, RowResult},
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,15 +45,35 @@ struct LimitConfig {
 	depth: u8,
 }
 
-pub fn router(config: Config) -> ApiRouter<service::State> {
-	// Using Extension so I don't need to worry about nested state destructuring.
+#[derive(Clone, FromRef)]
+struct RowsState {
+	services: Service,
+	reader_config: RowReaderConfig,
+	reader_state: RowReaderState,
+	limit_config: LimitConfig,
+}
+
+pub fn router(config: Config, api_state: ApiState) -> ApiRouter {
 	ApiRouter::new()
-		.api_route("/", get_with(list, list_docs))
-		.api_route("/:sheet", get_with(sheet, sheet_docs))
-		.layer(Extension(config.list))
-		.api_route("/:sheet/:row", get_with(row, row_docs))
-		.layer(Extension(config.entry))
-		.layer(Extension(config.limit))
+		.api_route("/", get_with(list, list_docs).with_state(api_state.clone()))
+		.api_route(
+			"/:sheet",
+			get_with(sheet, sheet_docs).with_state(RowsState {
+				services: api_state.services.clone(),
+				reader_config: config.list,
+				reader_state: api_state.reader_state.clone(),
+				limit_config: config.limit.clone(),
+			}),
+		)
+		.api_route(
+			"/:sheet/:row",
+			get_with(row, row_docs).with_state(RowsState {
+				services: api_state.services,
+				reader_config: config.entry,
+				reader_state: api_state.reader_state,
+				limit_config: config.limit,
+			}),
+		)
 }
 
 fn list_docs(operation: TransformOperation) -> TransformOperation {
@@ -60,10 +85,10 @@ fn list_docs(operation: TransformOperation) -> TransformOperation {
 		})
 }
 
-#[debug_handler(state = service::State)]
+#[debug_handler(state = ApiState)]
 async fn list(
 	VersionQuery(version_key): VersionQuery,
-	State(data): State<service::Data>,
+	State(Service { data, .. }): State<Service>,
 ) -> Result<impl IntoApiResponse> {
 	let excel = data.version(version_key)?.excel();
 
@@ -210,11 +235,11 @@ fn sheet_docs(operation: TransformOperation) -> TransformOperation {
 		})
 }
 
-#[debug_handler(state = service::State)]
+#[debug_handler(state = RowsState)]
 async fn sheet(
 	Path(path): Path<SheetPath>,
 	Query(query): Query<SheetQuery>,
-	Extension(config): Extension<LimitConfig>,
+	State(config): State<LimitConfig>,
 	reader: RowReader,
 ) -> Result<impl IntoApiResponse> {
 	// Get a reference to the sheet we'll be reading from.
@@ -307,10 +332,10 @@ fn row_docs(operation: TransformOperation) -> TransformOperation {
 		})
 }
 
-#[debug_handler(state = service::State)]
+#[debug_handler(state = RowsState)]
 async fn row(
 	Path(path): Path<RowPath>,
-	Extension(config): Extension<LimitConfig>,
+	State(config): State<LimitConfig>,
 	reader: RowReader,
 ) -> Result<Json<RowResponse>> {
 	let row = reader.read_row(

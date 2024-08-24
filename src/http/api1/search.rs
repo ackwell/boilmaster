@@ -4,22 +4,27 @@ use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	transform::TransformOperation,
 };
-use axum::{debug_handler, extract::State, Extension, Json};
+use axum::{
+	debug_handler,
+	extract::{FromRef, State},
+	Json,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-	http::service,
+	http::service::Service,
 	schema,
 	search::{SearchRequest as InnerSearchRequest, SearchRequestQuery},
 };
 
 use super::{
+	api::ApiState,
 	error::{Error, Result},
 	extract::{Query, VersionQuery},
 	query::QueryString,
-	read::{RowReader, RowReaderConfig, RowResult},
+	read::{RowReader, RowReaderConfig, RowReaderState, RowResult},
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -37,11 +42,23 @@ struct LimitConfig {
 	depth: u8,
 }
 
-pub fn router(config: Config) -> ApiRouter<service::State> {
-	ApiRouter::new()
-		.api_route("/", get_with(search, search_docs))
-		.layer(Extension(config.reader))
-		.layer(Extension(config.limit))
+#[derive(Clone, FromRef)]
+struct RowsState {
+	services: Service,
+	reader_config: RowReaderConfig,
+	reader_state: RowReaderState,
+	limit_config: LimitConfig,
+}
+
+pub fn router(config: Config, state: ApiState) -> ApiRouter {
+	let state = RowsState {
+		services: state.services,
+		reader_config: config.reader,
+		reader_state: state.reader_state,
+		limit_config: config.limit,
+	};
+
+	ApiRouter::new().api_route("/", get_with(search, search_docs).with_state(state))
 }
 
 /// Query paramters accepted by the search endpoint.
@@ -118,13 +135,13 @@ fn search_docs(operation: TransformOperation) -> TransformOperation {
 		})
 }
 
-#[debug_handler(state = service::State)]
+#[debug_handler(state = RowsState)]
 async fn search(
 	// TODO: this is a second versionquery extract for this, and it is being run twice. it's idempotent, but would be good to avoid
 	VersionQuery(version_key): VersionQuery,
 	Query(query): Query<SearchQuery>,
-	State(search): State<service::Search>,
-	Extension(config): Extension<LimitConfig>,
+	State(Service { search, .. }): State<Service>,
+	State(config): State<LimitConfig>,
 	reader: RowReader,
 ) -> Result<impl IntoApiResponse> {
 	// Resolve search request into something the search service understands.

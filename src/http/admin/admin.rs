@@ -1,7 +1,7 @@
 use axum::{middleware, Router};
 use serde::Deserialize;
 
-use crate::http::service;
+use crate::http::http::HttpState;
 
 use super::{
 	auth::{basic_auth, BasicAuth},
@@ -13,9 +13,9 @@ pub struct Config {
 	auth: BasicAuth,
 }
 
-pub fn router(config: Config) -> Router<service::State> {
+pub fn router(config: Config, state: HttpState) -> Router {
 	Router::new()
-		.merge(versions::router())
-		.merge(version::router())
+		.merge(versions::router(state.clone()))
+		.merge(version::router(state))
 		.layer(middleware::from_fn_with_state(config.auth, basic_auth))
 }

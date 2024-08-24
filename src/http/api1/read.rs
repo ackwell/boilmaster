@@ -9,7 +9,7 @@ use axum::{
 	async_trait,
 	extract::{FromRef, FromRequestParts},
 	http::request::Parts,
-	Extension, RequestPartsExt,
+	RequestPartsExt,
 };
 use ironworks::{excel, file::exh, sestring::format::Input};
 use schemars::JsonSchema;
@@ -29,6 +29,27 @@ use super::{
 pub struct RowReaderConfig {
 	fields: HashMap<String, FilterString>,
 	transient: HashMap<String, FilterString>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct RowReaderState {
+	string_input: Arc<RwLock<HashMap<VersionKey, Arc<Input>>>>,
+}
+
+impl RowReaderState {
+	fn input(&self, version: VersionKey, excel: &excel::Excel) -> Result<Arc<Input>> {
+		let inputs = self.string_input.read().expect("poisoned");
+		if let Some(input) = inputs.get(&version) {
+			return Ok(input.clone());
+		}
+
+		drop(inputs);
+		let mut inputs_mut = self.string_input.write().expect("poisoned");
+		let input = Arc::new(build_input(excel)?);
+		inputs_mut.insert(version, input.clone());
+
+		Ok(input)
+	}
 }
 
 // todo: maybe it's readrequest? something? "rowreader" is perhaps overindexing, and i should be referring to it simply as "read"?
@@ -86,27 +107,6 @@ impl RowResult {
 	}
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct RowReaderState {
-	string_input: Arc<RwLock<HashMap<VersionKey, Arc<Input>>>>,
-}
-
-impl RowReaderState {
-	fn input(&self, version: VersionKey, excel: &excel::Excel) -> Result<Arc<Input>> {
-		let inputs = self.string_input.read().expect("poisoned");
-		if let Some(input) = inputs.get(&version) {
-			return Ok(input.clone());
-		}
-
-		drop(inputs);
-		let mut inputs_mut = self.string_input.write().expect("poisoned");
-		let input = Arc::new(build_input(excel)?);
-		inputs_mut.insert(version, input.clone());
-
-		Ok(input)
-	}
-}
-
 #[derive(OperationIo)]
 #[aide(input_with = "Query<RowReaderQuery>")]
 pub struct RowReader {
@@ -125,32 +125,24 @@ pub struct RowReader {
 impl<S> FromRequestParts<S> for RowReader
 where
 	S: Send + Sync,
-	service::Data: FromRef<S>,
-	service::Read: FromRef<S>,
-	service::Schema: FromRef<S>,
-	service::Version: FromRef<S>,
+	service::Service: FromRef<S>,
+	RowReaderConfig: FromRef<S>,
+	RowReaderState: FromRef<S>,
 {
 	type Rejection = Error;
 
 	async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-		let data = service::Data::from_ref(state);
-		let read = service::Read::from_ref(state);
-		let schema_provider = service::Schema::from_ref(state);
-
 		let VersionQuery(version_key) = parts.extract_with_state::<VersionQuery, _>(state).await?;
 		let Query(query) = parts.extract::<Query<RowReaderQuery>>().await?;
 
-		// TODO: can i at all get this added to state?
-		let Extension(config) = parts
-			.extract::<Extension<RowReaderConfig>>()
-			.await
-			.map_err(|error| Error::Other(error.into()))?;
-
-		// TODO: again - how can i get this in the typechecked state?
-		let Extension(state) = parts
-			.extract::<Extension<RowReaderState>>()
-			.await
-			.map_err(|error| Error::Other(error.into()))?;
+		let service::Service {
+			data,
+			read,
+			schema: schema_provider,
+			..
+		} = service::Service::from_ref(state);
+		let config = RowReaderConfig::from_ref(state);
+		let state = RowReaderState::from_ref(state);
 
 		let excel = data.version(version_key)?.excel();
 
