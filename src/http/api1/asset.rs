@@ -15,6 +15,7 @@ use axum::{
 	extract::{FromRef, State},
 	http::header,
 	response::IntoResponse,
+	routing::get,
 };
 use axum_extra::{
 	headers::{CacheControl, ContentType, ETag, IfNoneMatch},
@@ -54,34 +55,65 @@ pub fn router(config: Config, state: ApiState) -> ApiRouter {
 		config,
 	};
 
-	ApiRouter::new().api_route("/*path", get_with(asset, asset_docs).with_state(state))
+	ApiRouter::new()
+		.api_route("/", get_with(asset2, asset2_docs).with_state(state.clone()))
+		// Fall back to the old asset endpoint for compatibility.
+		.route("/*path", get(asset1).with_state(state))
 }
 
-/// Path variables accepted by the asset endpoint.
+// Original asset endpoint based on a game path in the url path.
+
+#[derive(Deserialize)]
+struct Asset1Path {
+	path: String,
+}
+
+#[derive(Deserialize)]
+struct Asset1Query {
+	format: Format,
+}
+
+#[debug_handler(state = AssetState)]
+async fn asset1(
+	Path(Asset1Path { path }): Path<Asset1Path>,
+	query_version: VersionQuery,
+	Query(Asset1Query { format }): Query<Asset1Query>,
+	header_if_none_match: NoApi<Option<TypedHeader<IfNoneMatch>>>,
+	state_service: State<Service>,
+	state_config: State<Config>,
+) -> Result<impl IntoApiResponse> {
+	// The endpoints are nearly identical - just call through to the new endpoint with an emulated query.
+	asset2(
+		query_version,
+		Query(AssetQuery { path, format }),
+		header_if_none_match,
+		state_service,
+		state_config,
+	)
+	.await
+}
+
+/// Query parameters accepted by the asset endpoint.
 #[derive(Deserialize, JsonSchema)]
-struct AssetPath {
+struct AssetQuery {
 	/// Game path of the asset to retrieve.
 	#[schemars(example = "example_path")]
 	path: String,
+
+	/// Format that the asset should be converted into.
+	#[schemars(example = "example_format")]
+	format: Format,
 }
 
 fn example_path() -> &'static str {
 	"ui/icon/051000/051474_hr1.tex"
 }
 
-/// Query parameters accepted by the asset endpoint.
-#[derive(Deserialize, JsonSchema)]
-struct AssetQuery {
-	/// Format that the asset should be converted into.
-	#[schemars(example = "example_format")]
-	format: Format,
-}
-
 fn example_format() -> Format {
 	Format::Png
 }
 
-fn asset_docs(operation: TransformOperation) -> TransformOperation {
+fn asset2_docs(operation: TransformOperation) -> TransformOperation {
 	operation
 		.summary("read an asset")
 		.description("Read an asset from the game at the specified path, converting it into a usable format. If no valid conversion between the game file type and specified format exists, an error will be returned.")
@@ -100,16 +132,13 @@ fn asset_docs(operation: TransformOperation) -> TransformOperation {
 }
 
 #[debug_handler(state = AssetState)]
-async fn asset(
-	Path(AssetPath { path }): Path<AssetPath>,
+async fn asset2(
 	VersionQuery(version_key): VersionQuery,
-	Query(query): Query<AssetQuery>,
+	Query(AssetQuery { path, format }): Query<AssetQuery>,
 	NoApi(header_if_none_match): NoApi<Option<TypedHeader<IfNoneMatch>>>,
 	State(Service { asset, .. }): State<Service>,
 	State(config): State<Config>,
 ) -> Result<impl IntoApiResponse> {
-	let format = query.format;
-
 	let etag = etag(&path, format, version_key);
 
 	// If the request came through with a passing ETag, we can skip doing any processing.
