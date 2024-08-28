@@ -15,7 +15,6 @@ use axum::{
 	extract::{FromRef, State},
 	http::header,
 	response::IntoResponse,
-	routing::get,
 };
 use axum_extra::{
 	headers::{CacheControl, ContentType, ETag, IfNoneMatch},
@@ -56,9 +55,11 @@ pub fn router(config: Config, state: ApiState) -> ApiRouter {
 	};
 
 	ApiRouter::new()
-		.api_route("/", get_with(asset2, asset2_docs).with_state(state.clone()))
+		.api_route("/", get_with(asset2, asset2_docs))
+		.api_route("/map/:territory/:index", get_with(map, map_docs))
 		// Fall back to the old asset endpoint for compatibility.
-		.route("/*path", get(asset1).with_state(state))
+		.route("/*path", axum::routing::get(asset1))
+		.with_state(state)
 }
 
 // Original asset endpoint based on a game path in the url path.
@@ -192,4 +193,32 @@ fn etag(path: &str, format: Format, version: VersionKey) -> ETag {
 	format!("\"{resource_hash:016x}.{version}.{ASSET_ETAG_VERSION}\"")
 		.parse()
 		.expect("malformed etag")
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct MapPath {
+	territory: String,
+	index: String,
+}
+
+fn map_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+}
+
+#[debug_handler]
+async fn map(
+	Path(MapPath { territory, index }): Path<MapPath>,
+	VersionQuery(version_key): VersionQuery,
+	State(Service { asset, .. }): State<Service>,
+) -> Result<impl IntoApiResponse> {
+	// todo: caches and all that
+	let bytes = asset.map(version_key, &territory, &index)?;
+
+	let response = (
+		TypedHeader(ContentType::png()),
+		[(header::CONTENT_DISPOSITION, "inline")],
+		bytes,
+	);
+
+	Ok(response.into_response())
 }
