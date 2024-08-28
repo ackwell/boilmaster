@@ -2,7 +2,7 @@ use super::format::Format;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	#[error("source \"{0}\" does not exist")]
+	#[error("source file \"{0}\" does not exist")]
 	NotFound(String),
 
 	#[error("source file \"{0}\" is unsupported: {1}")]

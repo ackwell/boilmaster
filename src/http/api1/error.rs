@@ -29,7 +29,7 @@ impl From<asset::Error> for Error {
 	fn from(error: asset::Error) -> Self {
 		use asset::Error as AE;
 		match error {
-			AE::NotFound(value) => Self::NotFound(value),
+			AE::NotFound(..) => Self::NotFound(error.to_string()),
 			AE::UnsupportedSource(..) | AE::InvalidConversion(..) | AE::UnknownFormat(..) => {
 				Self::Invalid(error.to_string())
 			}
