@@ -162,14 +162,43 @@ fn format_mime(format: Format) -> mime::Mime {
 	}
 }
 
+/// Path segments expected by the asset map endpoint.
 #[derive(Debug, Deserialize, JsonSchema)]
 struct MapPath {
+	/// Territory of the map to be retrieved. This typically takes the form of 4
+	/// characters, [letter][number][letter][number]. See `Map`'s `Id` field for
+	/// examples of possible combinations of `territory` and `index`.
+	#[schemars(example = "example_territory")]
 	territory: String,
+
+	/// Index of the map within the territory. This invariably takes the form of a
+	/// two-digit zero-padded number. See `Map`'s `Id` field for examples of
+	/// possible combinations of `territory` and `index`.
+	#[schemars(example = "example_index")]
 	index: String,
+}
+
+fn example_territory() -> &'static str {
+	"s1d1"
+}
+
+fn example_index() -> &'static str {
+	"00"
 }
 
 fn map_docs(operation: TransformOperation) -> TransformOperation {
 	operation
+		.summary("compose a map")
+		.description(
+			"Retrieve the specified map, composing it from split source files if necessary.",
+		)
+		.response_with::<200, Vec<u8>, _>(|mut response| {
+			let content = &mut response.inner().content;
+			content.clear();
+			content.insert(mime::IMAGE_PNG.to_string(), openapi::MediaType::default());
+			response
+		})
+		.response_with::<304, (), _>(|res| res.description("not modified"))
 }
 
 #[debug_handler]
@@ -182,8 +211,10 @@ async fn map(
 
 	let response = (
 		TypedHeader(ContentType::png()),
-		// TODO: better name?
-		[(header::CONTENT_DISPOSITION, "inline")],
+		[(
+			header::CONTENT_DISPOSITION,
+			format!("inline; filename=\"{territory}_{index}.png\""),
+		)],
 		bytes,
 	);
 
