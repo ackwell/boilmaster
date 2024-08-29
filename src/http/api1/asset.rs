@@ -8,16 +8,16 @@ use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	openapi,
 	transform::TransformOperation,
-	NoApi,
 };
 use axum::{
 	debug_handler,
-	extract::{FromRef, State},
+	extract::{FromRef, OriginalUri, Request, State},
 	http::header,
-	response::IntoResponse,
+	middleware,
+	response::{IntoResponse, Response},
 };
 use axum_extra::{
-	headers::{CacheControl, ContentType, ETag, IfNoneMatch},
+	headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch},
 	TypedHeader,
 };
 use reqwest::StatusCode;
@@ -26,7 +26,7 @@ use seahash::SeaHasher;
 use serde::Deserialize;
 use strum::IntoEnumIterator;
 
-use crate::{asset::Format, http::service::Service, version::VersionKey};
+use crate::{asset::Format, http::service::Service};
 
 use super::{
 	api::ApiState,
@@ -59,6 +59,7 @@ pub fn router(config: Config, state: ApiState) -> ApiRouter {
 		.api_route("/map/:territory/:index", get_with(map, map_docs))
 		// Fall back to the old asset endpoint for compatibility.
 		.route("/*path", axum::routing::get(asset1))
+		.layer(middleware::from_fn_with_state(state.clone(), cache_layer))
 		.with_state(state)
 }
 
@@ -79,17 +80,13 @@ async fn asset1(
 	Path(Asset1Path { path }): Path<Asset1Path>,
 	query_version: VersionQuery,
 	Query(Asset1Query { format }): Query<Asset1Query>,
-	header_if_none_match: NoApi<Option<TypedHeader<IfNoneMatch>>>,
 	state_service: State<Service>,
-	state_config: State<Config>,
 ) -> Result<impl IntoApiResponse> {
 	// The endpoints are nearly identical - just call through to the new endpoint with an emulated query.
 	asset2(
 		query_version,
 		Query(AssetQuery { path, format }),
-		header_if_none_match,
 		state_service,
-		state_config,
 	)
 	.await
 }
@@ -136,19 +133,8 @@ fn asset2_docs(operation: TransformOperation) -> TransformOperation {
 async fn asset2(
 	VersionQuery(version_key): VersionQuery,
 	Query(AssetQuery { path, format }): Query<AssetQuery>,
-	NoApi(header_if_none_match): NoApi<Option<TypedHeader<IfNoneMatch>>>,
 	State(Service { asset, .. }): State<Service>,
-	State(config): State<Config>,
 ) -> Result<impl IntoApiResponse> {
-	let etag = etag(&path, format, version_key);
-
-	// If the request came through with a passing ETag, we can skip doing any processing.
-	if let Some(TypedHeader(if_none_match)) = header_if_none_match {
-		if !if_none_match.precondition_passes(&etag) {
-			return Ok(StatusCode::NOT_MODIFIED.into_response());
-		}
-	}
-
 	// Perform the conversion.
 	// TODO: can this be made async?
 	let bytes = asset.convert(version_key, &path, format)?;
@@ -160,18 +146,10 @@ async fn asset2(
 		None => "inline".to_string(),
 	};
 
-	// Set up the Cache-Control header based on configured max-age.
-	let cache_control = CacheControl::new()
-		.with_public()
-		.with_immutable()
-		.with_max_age(Duration::from_secs(config.maxage));
-
 	let response = (
 		TypedHeader(ContentType::from(format_mime(format))),
 		// TypedHeader only has a really naive inline value with no ability to customise :/
 		[(header::CONTENT_DISPOSITION, disposition)],
-		TypedHeader(etag),
-		TypedHeader(cache_control),
 		bytes,
 	);
 
@@ -182,17 +160,6 @@ fn format_mime(format: Format) -> mime::Mime {
 	match format {
 		Format::Png => mime::IMAGE_PNG,
 	}
-}
-
-fn etag(path: &str, format: Format, version: VersionKey) -> ETag {
-	let mut hasher = SeaHasher::new();
-	path.hash(&mut hasher);
-	format.extension().hash(&mut hasher);
-	let resource_hash = hasher.finish();
-
-	format!("\"{resource_hash:016x}.{version}.{ASSET_ETAG_VERSION}\"")
-		.parse()
-		.expect("malformed etag")
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -211,14 +178,54 @@ async fn map(
 	VersionQuery(version_key): VersionQuery,
 	State(Service { asset, .. }): State<Service>,
 ) -> Result<impl IntoApiResponse> {
-	// todo: caches and all that
 	let bytes = asset.map(version_key, &territory, &index)?;
 
 	let response = (
 		TypedHeader(ContentType::png()),
+		// TODO: better name?
 		[(header::CONTENT_DISPOSITION, "inline")],
 		bytes,
 	);
 
 	Ok(response.into_response())
+}
+
+async fn cache_layer(
+	uri: OriginalUri,
+	VersionQuery(version): VersionQuery,
+	header_if_none_match: Option<TypedHeader<IfNoneMatch>>,
+	State(config): State<Config>,
+	request: Request,
+	next: middleware::Next,
+) -> Response {
+	// Build ETag for this request.
+	let mut hasher = SeaHasher::new();
+	uri.hash(&mut hasher);
+	let uri_hash = hasher.finish();
+
+	let etag = format!("\"{uri_hash:016x}.{version}.{ASSET_ETAG_VERSION}\"")
+		.parse::<ETag>()
+		.expect("malformed etag");
+
+	// If the request came through with a passing ETag, we can skip doing any processing.
+	if let Some(TypedHeader(if_none_match)) = header_if_none_match {
+		if !if_none_match.precondition_passes(&etag) {
+			return StatusCode::NOT_MODIFIED.into_response();
+		}
+	}
+
+	// ETag didn't match, pass down to the rest of the handlers.
+	let mut response = next.run(request).await;
+
+	// Add cache headers.
+	let cache_control = CacheControl::new()
+		.with_public()
+		.with_immutable()
+		.with_max_age(Duration::from_secs(config.maxage));
+
+	let headers = response.headers_mut();
+	headers.typed_insert(etag);
+	headers.typed_insert(cache_control);
+
+	response
 }
