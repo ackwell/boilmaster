@@ -196,7 +196,7 @@ fn map_docs(operation: TransformOperation) -> TransformOperation {
 		.response_with::<200, Vec<u8>, _>(|mut response| {
 			let content = &mut response.inner().content;
 			content.clear();
-			content.insert(mime::IMAGE_PNG.to_string(), openapi::MediaType::default());
+			content.insert(mime::IMAGE_JPEG.to_string(), openapi::MediaType::default());
 			response
 		})
 		.response_with::<304, (), _>(|res| res.description("not modified"))
