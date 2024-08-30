@@ -1,10 +1,8 @@
-use std::convert::Infallible;
-
 use aide::OperationIo;
 use axum::{
 	async_trait,
-	extract::{FromRef, FromRequestParts, OriginalUri},
-	http::{request::Parts, Uri},
+	extract::{FromRef, FromRequestParts},
+	http::request::Parts,
 	RequestPartsExt,
 };
 use schemars::JsonSchema;
@@ -51,23 +49,6 @@ where
 		})?;
 
 		Ok(Self(version_key))
-	}
-}
-
-// This cursed garbage courtesy of trying to get the path of the parent router. Fun.
-pub struct RouterPath(pub String);
-
-#[async_trait]
-impl<S> FromRequestParts<S> for RouterPath {
-	type Rejection = Infallible;
-
-	async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-		let uri = parts.extract::<Uri>().await?;
-		let OriginalUri(original_uri) = parts.extract::<OriginalUri>().await?;
-
-		let router_path = original_uri.path().strip_suffix(uri.path()).unwrap_or("");
-
-		Ok(Self(router_path.into()))
 	}
 }
 

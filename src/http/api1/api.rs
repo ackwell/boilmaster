@@ -3,7 +3,7 @@ use std::sync::Arc;
 use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
 use axum::{
 	debug_handler,
-	extract::{FromRef, State},
+	extract::{FromRef, NestedPath, State},
 	response::IntoResponse,
 	routing::get,
 	Json, Router,
@@ -16,7 +16,7 @@ use tower_http::cors::CorsLayer;
 
 use crate::http::{http::HttpState, service::Service};
 
-use super::{asset, extract::RouterPath, read::RowReaderState, search, sheet, version};
+use super::{asset, read::RowReaderState, search, sheet, version};
 
 const OPENAPI_JSON_ROUTE: &str = "/openapi.json";
 
@@ -136,13 +136,13 @@ struct OpenApiOverrides<'a> {
 
 #[debug_handler]
 async fn openapi_json(
-	RouterPath(router_path): RouterPath,
+	nested_path: NestedPath,
 	State(openapi): State<Arc<openapi::OpenApi>>,
 ) -> impl IntoResponse {
 	Json(OpenApiOverrides {
 		base: &*openapi,
 		servers: &[openapi::Server {
-			url: router_path,
+			url: nested_path.as_str().to_string(),
 			..Default::default()
 		}],
 	})
@@ -150,7 +150,7 @@ async fn openapi_json(
 }
 
 #[debug_handler]
-async fn scalar(RouterPath(router_path): RouterPath) -> impl IntoResponse {
+async fn scalar(nested_path: NestedPath) -> impl IntoResponse {
 	html! {
 		(DOCTYPE)
 		html {
@@ -160,7 +160,7 @@ async fn scalar(RouterPath(router_path): RouterPath) -> impl IntoResponse {
 				meta name="viewport" content="width=device-width, initial-scale=1";
 			}
 			body {
-				script id="api-reference" data-url={ (router_path) (OPENAPI_JSON_ROUTE) } {}
+				script id="api-reference" data-url={ (nested_path.as_str()) (OPENAPI_JSON_ROUTE) } {}
 				script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference" {}
 			}
 		}
