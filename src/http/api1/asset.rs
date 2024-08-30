@@ -8,16 +8,16 @@ use aide::{
 	axum::{routing::get_with, ApiRouter, IntoApiResponse},
 	openapi,
 	transform::TransformOperation,
-	NoApi,
 };
 use axum::{
 	debug_handler,
-	extract::{FromRef, State},
+	extract::{FromRef, OriginalUri, Request, State},
 	http::header,
-	response::IntoResponse,
+	middleware,
+	response::{IntoResponse, Response},
 };
 use axum_extra::{
-	headers::{CacheControl, ContentType, ETag, IfNoneMatch},
+	headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch},
 	TypedHeader,
 };
 use reqwest::StatusCode;
@@ -26,7 +26,7 @@ use seahash::SeaHasher;
 use serde::Deserialize;
 use strum::IntoEnumIterator;
 
-use crate::{asset::Format, http::service::Service, version::VersionKey};
+use crate::{asset::Format, http::service::Service};
 
 use super::{
 	api::ApiState,
@@ -54,34 +54,64 @@ pub fn router(config: Config, state: ApiState) -> ApiRouter {
 		config,
 	};
 
-	ApiRouter::new().api_route("/*path", get_with(asset, asset_docs).with_state(state))
+	ApiRouter::new()
+		.api_route("/", get_with(asset2, asset2_docs))
+		.api_route("/map/:territory/:index", get_with(map, map_docs))
+		// Fall back to the old asset endpoint for compatibility.
+		.route("/*path", axum::routing::get(asset1))
+		.layer(middleware::from_fn_with_state(state.clone(), cache_layer))
+		.with_state(state)
 }
 
-/// Path variables accepted by the asset endpoint.
+// Original asset endpoint based on a game path in the url path.
+
+#[derive(Deserialize)]
+struct Asset1Path {
+	path: String,
+}
+
+#[derive(Deserialize)]
+struct Asset1Query {
+	format: Format,
+}
+
+#[debug_handler(state = AssetState)]
+async fn asset1(
+	Path(Asset1Path { path }): Path<Asset1Path>,
+	query_version: VersionQuery,
+	Query(Asset1Query { format }): Query<Asset1Query>,
+	state_service: State<Service>,
+) -> Result<impl IntoApiResponse> {
+	// The endpoints are nearly identical - just call through to the new endpoint with an emulated query.
+	asset2(
+		query_version,
+		Query(AssetQuery { path, format }),
+		state_service,
+	)
+	.await
+}
+
+/// Query parameters accepted by the asset endpoint.
 #[derive(Deserialize, JsonSchema)]
-struct AssetPath {
+struct AssetQuery {
 	/// Game path of the asset to retrieve.
 	#[schemars(example = "example_path")]
 	path: String,
+
+	/// Format that the asset should be converted into.
+	#[schemars(example = "example_format")]
+	format: Format,
 }
 
 fn example_path() -> &'static str {
 	"ui/icon/051000/051474_hr1.tex"
 }
 
-/// Query parameters accepted by the asset endpoint.
-#[derive(Deserialize, JsonSchema)]
-struct AssetQuery {
-	/// Format that the asset should be converted into.
-	#[schemars(example = "example_format")]
-	format: Format,
-}
-
 fn example_format() -> Format {
 	Format::Png
 }
 
-fn asset_docs(operation: TransformOperation) -> TransformOperation {
+fn asset2_docs(operation: TransformOperation) -> TransformOperation {
 	operation
 		.summary("read an asset")
 		.description("Read an asset from the game at the specified path, converting it into a usable format. If no valid conversion between the game file type and specified format exists, an error will be returned.")
@@ -100,25 +130,11 @@ fn asset_docs(operation: TransformOperation) -> TransformOperation {
 }
 
 #[debug_handler(state = AssetState)]
-async fn asset(
-	Path(AssetPath { path }): Path<AssetPath>,
+async fn asset2(
 	VersionQuery(version_key): VersionQuery,
-	Query(query): Query<AssetQuery>,
-	NoApi(header_if_none_match): NoApi<Option<TypedHeader<IfNoneMatch>>>,
+	Query(AssetQuery { path, format }): Query<AssetQuery>,
 	State(Service { asset, .. }): State<Service>,
-	State(config): State<Config>,
 ) -> Result<impl IntoApiResponse> {
-	let format = query.format;
-
-	let etag = etag(&path, format, version_key);
-
-	// If the request came through with a passing ETag, we can skip doing any processing.
-	if let Some(TypedHeader(if_none_match)) = header_if_none_match {
-		if !if_none_match.precondition_passes(&etag) {
-			return Ok(StatusCode::NOT_MODIFIED.into_response());
-		}
-	}
-
 	// Perform the conversion.
 	// TODO: can this be made async?
 	let bytes = asset.convert(version_key, &path, format)?;
@@ -130,18 +146,10 @@ async fn asset(
 		None => "inline".to_string(),
 	};
 
-	// Set up the Cache-Control header based on configured max-age.
-	let cache_control = CacheControl::new()
-		.with_public()
-		.with_immutable()
-		.with_max_age(Duration::from_secs(config.maxage));
-
 	let response = (
 		TypedHeader(ContentType::from(format_mime(format))),
 		// TypedHeader only has a really naive inline value with no ability to customise :/
 		[(header::CONTENT_DISPOSITION, disposition)],
-		TypedHeader(etag),
-		TypedHeader(cache_control),
 		bytes,
 	);
 
@@ -154,13 +162,101 @@ fn format_mime(format: Format) -> mime::Mime {
 	}
 }
 
-fn etag(path: &str, format: Format, version: VersionKey) -> ETag {
-	let mut hasher = SeaHasher::new();
-	path.hash(&mut hasher);
-	format.extension().hash(&mut hasher);
-	let resource_hash = hasher.finish();
+/// Path segments expected by the asset map endpoint.
+#[derive(Debug, Deserialize, JsonSchema)]
+struct MapPath {
+	/// Territory of the map to be retrieved. This typically takes the form of 4
+	/// characters, [letter][number][letter][number]. See `Map`'s `Id` field for
+	/// examples of possible combinations of `territory` and `index`.
+	#[schemars(example = "example_territory")]
+	territory: String,
 
-	format!("\"{resource_hash:016x}.{version}.{ASSET_ETAG_VERSION}\"")
-		.parse()
-		.expect("malformed etag")
+	/// Index of the map within the territory. This invariably takes the form of a
+	/// two-digit zero-padded number. See `Map`'s `Id` field for examples of
+	/// possible combinations of `territory` and `index`.
+	#[schemars(example = "example_index")]
+	index: String,
+}
+
+fn example_territory() -> &'static str {
+	"s1d1"
+}
+
+fn example_index() -> &'static str {
+	"00"
+}
+
+fn map_docs(operation: TransformOperation) -> TransformOperation {
+	operation
+		.summary("compose a map")
+		.description(
+			"Retrieve the specified map, composing it from split source files if necessary.",
+		)
+		.response_with::<200, Vec<u8>, _>(|mut response| {
+			let content = &mut response.inner().content;
+			content.clear();
+			content.insert(mime::IMAGE_PNG.to_string(), openapi::MediaType::default());
+			response
+		})
+		.response_with::<304, (), _>(|res| res.description("not modified"))
+}
+
+#[debug_handler]
+async fn map(
+	Path(MapPath { territory, index }): Path<MapPath>,
+	VersionQuery(version_key): VersionQuery,
+	State(Service { asset, .. }): State<Service>,
+) -> Result<impl IntoApiResponse> {
+	let bytes = asset.map(version_key, &territory, &index)?;
+
+	let response = (
+		TypedHeader(ContentType::png()),
+		[(
+			header::CONTENT_DISPOSITION,
+			format!("inline; filename=\"{territory}_{index}.png\""),
+		)],
+		bytes,
+	);
+
+	Ok(response.into_response())
+}
+
+async fn cache_layer(
+	uri: OriginalUri,
+	VersionQuery(version): VersionQuery,
+	header_if_none_match: Option<TypedHeader<IfNoneMatch>>,
+	State(config): State<Config>,
+	request: Request,
+	next: middleware::Next,
+) -> Response {
+	// Build ETag for this request.
+	let mut hasher = SeaHasher::new();
+	uri.hash(&mut hasher);
+	let uri_hash = hasher.finish();
+
+	let etag = format!("\"{uri_hash:016x}.{version}.{ASSET_ETAG_VERSION}\"")
+		.parse::<ETag>()
+		.expect("malformed etag");
+
+	// If the request came through with a passing ETag, we can skip doing any processing.
+	if let Some(TypedHeader(if_none_match)) = header_if_none_match {
+		if !if_none_match.precondition_passes(&etag) {
+			return StatusCode::NOT_MODIFIED.into_response();
+		}
+	}
+
+	// ETag didn't match, pass down to the rest of the handlers.
+	let mut response = next.run(request).await;
+
+	// Add cache headers.
+	let cache_control = CacheControl::new()
+		.with_public()
+		.with_immutable()
+		.with_max_age(Duration::from_secs(config.maxage));
+
+	let headers = response.headers_mut();
+	headers.typed_insert(etag);
+	headers.typed_insert(cache_control);
+
+	response
 }
