@@ -1,5 +1,7 @@
+use std::io::Cursor;
+
 use anyhow::Context;
-use image::{DynamicImage, ImageBuffer};
+use image::{DynamicImage, ImageBuffer, ImageFormat};
 use ironworks::{file::tex, Ironworks};
 use itertools::Itertools;
 
@@ -122,4 +124,28 @@ fn read_texture_dxt(texture: tex::Texture, dxt_format: texpresso::Format) -> Res
 	)
 	.context("failed to build image buffer")?;
 	Ok(DynamicImage::ImageRgba8(image_buffer))
+}
+
+pub fn write(image: impl Into<DynamicImage>, format: ImageFormat) -> Result<Vec<u8>> {
+	fn inner(mut image: DynamicImage, format: ImageFormat) -> Result<Vec<u8>> {
+		// JPEG encoder errors out on anything with an alpha channel.
+		if format == ImageFormat::Jpeg {
+			image = match image {
+				image @ DynamicImage::ImageLumaA8(..) | image @ DynamicImage::ImageLuma16(..) => {
+					image.into_luma8().into()
+				}
+				other => other.into_rgb8().into(),
+			}
+		}
+
+		// TODO: are there any non-failure cases here?
+		let mut bytes = Cursor::new(vec![]);
+		image
+			.write_to(&mut bytes, format)
+			.context("failed to write output buffer")?;
+
+		Ok(bytes.into_inner())
+	}
+
+	inner(image.into(), format)
 }

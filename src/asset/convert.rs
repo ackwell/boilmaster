@@ -1,6 +1,5 @@
-use std::{io::Cursor, path::Path};
+use std::path::Path;
 
-use anyhow::Context;
 use image::ImageFormat;
 
 use crate::data;
@@ -24,8 +23,9 @@ impl Converter for Image {
 			.extension()
 			.and_then(|extension| extension.to_str());
 
-		// TODO: add error handling case on this once more than one format exists.
+		// TODO: add error handling case on this once a failure case actually exists.
 		let output_format = match format {
+			Format::Jpeg => ImageFormat::Jpeg,
 			Format::Png => ImageFormat::Png,
 		};
 
@@ -43,12 +43,6 @@ impl Converter for Image {
 			}
 		}?;
 
-		// TODO: are there any non-failure cases here?
-		let mut bytes = Cursor::new(vec![]);
-		buffer
-			.write_to(&mut bytes, output_format)
-			.context("failed to write output buffer")?;
-
-		Ok(bytes.into_inner())
+		texture::write(buffer, output_format)
 	}
 }

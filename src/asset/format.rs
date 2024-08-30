@@ -13,18 +13,21 @@ use super::{convert, error::Error};
 
 #[derive(Debug, Clone, Copy, EnumIter)]
 pub enum Format {
+	Jpeg,
 	Png,
 }
 
 impl Format {
 	pub fn extension(&self) -> &str {
 		match self {
+			Self::Jpeg => "jpg",
 			Self::Png => "png",
 		}
 	}
 
 	pub(super) fn converter(&self) -> &dyn convert::Converter {
 		match self {
+			Self::Jpeg => &convert::Image,
 			Self::Png => &convert::Image,
 		}
 	}
@@ -45,6 +48,7 @@ impl FromStr for Format {
 
 	fn from_str(input: &str) -> Result<Self, Self::Err> {
 		Ok(match input {
+			"jpg" => Self::Jpeg,
 			"png" => Self::Png,
 			other => return Err(Error::UnknownFormat(other.into())),
 		})

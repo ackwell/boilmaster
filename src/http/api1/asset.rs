@@ -158,6 +158,7 @@ async fn asset2(
 
 fn format_mime(format: Format) -> mime::Mime {
 	match format {
+		Format::Jpeg => mime::IMAGE_JPEG,
 		Format::Png => mime::IMAGE_PNG,
 	}
 }
@@ -210,10 +211,10 @@ async fn map(
 	let bytes = asset.map(version_key, &territory, &index)?;
 
 	let response = (
-		TypedHeader(ContentType::png()),
+		TypedHeader(ContentType::jpeg()),
 		[(
 			header::CONTENT_DISPOSITION,
-			format!("inline; filename=\"{territory}_{index}.png\""),
+			format!("inline; filename=\"{territory}_{index}.jpg\""),
 		)],
 		bytes,
 	);

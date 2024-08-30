@@ -1,7 +1,7 @@
-use std::{io::Cursor, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
-use image::{ImageBuffer, Pixel, Rgba};
+use image::{ImageBuffer, Pixel, Rgb};
 use ironworks::Ironworks;
 
 use crate::{data, version::VersionKey};
@@ -48,12 +48,7 @@ impl Service {
 
 		let image = self.compose_map(&ironworks, territory, index)?;
 
-		let mut bytes = Cursor::new(vec![]);
-		image
-			.write_to(&mut bytes, image::ImageFormat::Png)
-			.context("failed to write output buffer")?;
-
-		Ok(bytes.into_inner())
+		texture::write(image, image::ImageFormat::Jpeg)
 	}
 
 	fn compose_map(
@@ -61,14 +56,14 @@ impl Service {
 		ironworks: &Ironworks,
 		territory: &str,
 		index: &str,
-	) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+	) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
 		let path = format!("ui/map/{territory}/{index}/{territory}{index}");
-		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgba8();
+		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgb8();
 
 		let buffer_background = match texture::read(&ironworks, &format!("{path}m_m.tex")) {
 			// If the background texture wasn't found, we can assume the map texture is pre-composed.
 			Err(Error::NotFound(_)) => return Ok(buffer_map),
-			Ok(image) => image.into_rgba8(),
+			Ok(image) => image.into_rgb8(),
 			Err(error) => Err(error)?,
 		};
 
