@@ -219,7 +219,7 @@ impl Manager {
 		let repositories = try_join_all(pending_repositories).await?;
 
 		// Build a version struct and it's associated key and save it to the versions map.
-		let version = Version {
+		let mut version = Version {
 			repositories,
 			ban_time: None,
 		};
@@ -236,7 +236,10 @@ impl Manager {
 
 			// Existing entry, check if the requisite patches have changed before saving.
 			Entry::Occupied(mut entry) => {
-				let changed = *entry.get() != version;
+				let old = entry.get();
+				version.ban_time = old.ban_time;
+
+				let changed = *old.repositories != version.repositories;
 				if changed {
 					entry.insert(version.clone());
 				}
@@ -253,12 +256,14 @@ impl Manager {
 
 		tracing::info!(%key, "new or updated version");
 
-		// Update latest tag.
+		// Update latest tag unless the version has been banned.
 		// TODO: This might need to be moved to manual-only for now? If there's any long-running ingestion tasks (i.e. search) hanging off versions, then setting latest _now_ would leave end-consumers pointing at an uningested tag.
-		self.names
-			.write()
-			.expect("poisoned")
-			.insert(TAG_LATEST.to_string(), key);
+		if version.ban_time.is_none() {
+			self.names
+				.write()
+				.expect("poisoned")
+				.insert(TAG_LATEST.to_string(), key);
+		}
 
 		// Persist updated metadata
 		tokio::try_join!(
