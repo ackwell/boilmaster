@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::SystemTime};
 
 use anyhow::Result;
 use nonempty::NonEmpty;
@@ -7,25 +7,39 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(Clone, PartialEq)]
 pub struct Version {
 	pub repositories: Vec<Repository>,
+	pub ban_time: Option<SystemTime>,
 }
 
 #[derive(Serialize, Deserialize)]
-struct PersistedVersion(Vec<PersistedRepository>);
+#[serde(untagged)]
+enum PersistedVersion {
+	V2(PersistedVersionV2),
+	V1(Vec<PersistedRepository>),
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedVersionV2 {
+	repositories: Vec<PersistedRepository>,
+	ban_time: Option<SystemTime>,
+}
 
 // NOTE: This using using `impl Serialize` so it doesn't become public API surface.
 impl Version {
 	pub(super) fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok> {
-		let persisted_version = PersistedVersion(
-			self.repositories
+		let persisted_version = PersistedVersionV2 {
+			repositories: self
+				.repositories
 				.iter()
 				.map(|repository| PersistedRepository {
 					name: repository.name.clone(),
 					patches: repository.patches.clone().map(|patch| patch.name),
 				})
 				.collect(),
-		);
 
-		persisted_version
+			ban_time: self.ban_time,
+		};
+
+		PersistedVersion::V2(persisted_version)
 			.serialize(serializer)
 			.map_err(|err| anyhow::anyhow!(err.to_string()))
 	}
@@ -36,8 +50,13 @@ impl Version {
 		deserializer: D,
 		get_path: impl Fn(&str, &str) -> PathBuf,
 	) -> Result<Self> {
-		let PersistedVersion(persisted_repositories) = PersistedVersion::deserialize(deserializer)
+		let persisted_version = PersistedVersion::deserialize(deserializer)
 			.map_err(|err| anyhow::anyhow!(err.to_string()))?;
+
+		let (persisted_repositories, ban_time) = match persisted_version {
+			PersistedVersion::V1(repositories) => (repositories, None),
+			PersistedVersion::V2(version) => (version.repositories, version.ban_time),
+		};
 
 		let repositories = persisted_repositories
 			.into_iter()
@@ -51,7 +70,10 @@ impl Version {
 			})
 			.collect();
 
-		Ok(Version { repositories })
+		Ok(Version {
+			repositories,
+			ban_time,
+		})
 	}
 }
 

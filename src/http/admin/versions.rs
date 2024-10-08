@@ -23,17 +23,21 @@ struct VersionInfo {
 	key: VersionKey,
 	patches: Vec<(String, String)>,
 	names: Vec<String>,
+	banned: bool,
 }
 
 #[debug_handler(state = HttpState)]
 async fn versions(
 	OriginalUri(uri): OriginalUri,
-	State(Service { version, .. }): State<Service>,
+	State(Service {
+		version: version_service,
+		..
+	}): State<Service>,
 ) -> Result<impl IntoResponse> {
 	let version_info = |key: VersionKey| -> Result<_> {
+		let version = version_service.version(key).context("missing version")?;
+
 		let latest = version
-			.version(key)
-			.context("missing version")?
 			.repositories
 			.into_iter()
 			.map(|repository| (repository.name, repository.patches.last().name.clone()))
@@ -42,11 +46,12 @@ async fn versions(
 		Ok(VersionInfo {
 			key,
 			patches: latest,
-			names: version.names(key).context("missing version")?,
+			names: version_service.names(key).context("missing version")?,
+			banned: version.ban_time.is_some(),
 		})
 	};
 
-	let versions = version
+	let versions = version_service
 		.keys()
 		.into_iter()
 		.map(version_info)
@@ -67,6 +72,10 @@ async fn versions(
 						(name)
 					}
 					")"
+
+					@if version.banned {
+						" (banned)"
+					}
 				}
 
 				dl {

@@ -36,16 +36,25 @@ pub fn router(state: HttpState) -> Router {
 async fn get_version(
 	OriginalUri(uri): OriginalUri,
 	Path(version_key): Path<VersionKey>,
-	State(Service { version, .. }): State<Service>,
+	State(Service {
+		version: version_service,
+		..
+	}): State<Service>,
 ) -> Result<impl IntoResponse> {
-	let names = version.names(version_key).context("unknown version")?;
+	let version = version_service
+		.version(version_key)
+		.context("unknown version")?;
+
+	let banned = version.ban_time.is_some();
+
+	let names = version_service
+		.names(version_key)
+		.context("unknown version")?;
 
 	// Patches are stored in oldest-first order for IW, which is lovely in code
 	// and horrible for reading. Given this is ostensibly the reading bit of the
 	// application, fix that.
 	let patch_list = version
-		.version(version_key)
-		.context("unknown version")?
 		.repositories
 		.into_iter()
 		.map(|repository| {
@@ -59,6 +68,17 @@ async fn get_version(
 	Ok((BaseTemplate {
 		title: format!("version {}", version_key),
 		content: html! {
+			h2 { "status" }
+			form action=(uri) method="post" {
+				ul {
+					li {
+						@if banned { "banned" }
+						@else { "ready" }
+						button type="submit" name="ban" value=(!banned) { "toggle ban" }
+					}
+				}
+			}
+
 			h2 { "names" }
 			form action=(uri) method="post" {
 				input type="text" name="names" value={
@@ -94,7 +114,8 @@ async fn get_version(
 
 #[derive(Debug, Deserialize)]
 struct VersionPostRequest {
-	names: String,
+	names: Option<String>,
+	ban: Option<bool>,
 }
 
 #[debug_handler(state = HttpState)]
@@ -104,8 +125,14 @@ async fn post_version(
 	State(Service { version, .. }): State<Service>,
 	Form(request): Form<VersionPostRequest>,
 ) -> Result<impl IntoResponse> {
-	let names = request.names.split(',').map(str::trim);
-	version.set_names(version_key, names).await?;
+	if let Some(names) = request.names {
+		let names = names.split(',').map(str::trim);
+		version.set_names(version_key, names).await?;
+	}
+
+	if let Some(ban) = request.ban {
+		version.set_banned(version_key, ban).await?;
+	}
 
 	Ok(Redirect::to(&uri.to_string()))
 }
