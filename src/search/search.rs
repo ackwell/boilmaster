@@ -99,23 +99,42 @@ impl Search {
 			return Ok(());
 		}
 
+		fn collect_sheets(
+			data: &Data,
+			version: VersionKey,
+		) -> Result<Vec<(VersionKey, excel::Sheet<String>)>> {
+			let data_version = data
+				.version(version)
+				.context("announced for ingestion but not provided")?;
+			let excel = data_version.excel();
+			let list = excel.list().context("failed to obtain excel list")?;
+
+			let sheets = list
+				.iter()
+				.map(|sheet_name| Ok((version, excel.sheet(sheet_name.to_string())?)))
+				.collect::<Result<Vec<_>>>()
+				.context("failed to obtain excel sheets")?;
+
+			Ok(sheets)
+		}
+
 		// Get a list of all sheets in the provided versions.
 		// TODO: This has more `.collect`s than i'd like, but given it's a fairly cold path, probably isn't a problem.
-		let sheets = versions
+		let (sheets, errors): (Vec<_>, Vec<_>) = versions
 			.into_iter()
 			.map(|version| -> Result<_> {
-				let data_version = self.data.version(version).with_context(|| {
-					format!("version {version} announced for ingestion but not provided")
-				})?;
-				let excel = data_version.excel();
-				let list = excel.list()?;
-
-				list.iter()
-					.map(|sheet_name| Ok((version, excel.sheet(sheet_name.to_string())?)))
-					.collect::<Result<Vec<_>>>()
+				Ok(collect_sheets(&self.data, version).with_context(|| {
+					format!("failed to prepare version {version} for ingestion")
+				})?)
 			})
 			.flatten_ok()
-			.collect::<Result<Vec<_>>>()?;
+			.partition_result();
+
+		// If there's any version-wide errors, trace them out instead of lifting the
+		// error - a hard failure here will nuke the entire server.
+		for error in errors {
+			tracing::error!("{error:?}");
+		}
 
 		// Fire off the ingestion in the provider.
 		Arc::clone(&self.provider).ingest(cancel, sheets).await?;

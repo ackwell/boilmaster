@@ -6,7 +6,7 @@ use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
 };
-use futures::TryFutureExt;
+use futures::FutureExt;
 use serde::Deserialize;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -62,15 +62,17 @@ async fn main() -> anyhow::Result<()> {
 	let shutdown_token = shutdown_token();
 
 	tokio::try_join!(
-		version.start(shutdown_token.clone()),
+		version
+			.start(shutdown_token.clone())
+			.map(|result| result.context("version service")),
 		data.start(shutdown_token.clone(), &version)
-			.map_err(anyhow::Error::from),
+			.map(|result| result.context("data service")),
 		schema
 			.start(shutdown_token.clone())
-			.map_err(anyhow::Error::from),
+			.map(|result| result.context("schema service")),
 		search
 			.start(shutdown_token.child_token())
-			.map_err(anyhow::Error::from),
+			.map(|result| result.context("search service")),
 		http::serve(
 			shutdown_token,
 			config.http,
