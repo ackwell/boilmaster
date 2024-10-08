@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::SystemTime};
 
 use anyhow::Result;
 use nonempty::NonEmpty;
@@ -7,6 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(Clone, PartialEq)]
 pub struct Version {
 	pub repositories: Vec<Repository>,
+	pub ban_time: Option<SystemTime>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -19,6 +20,7 @@ enum PersistedVersion {
 #[derive(Serialize, Deserialize)]
 struct PersistedVersionV2 {
 	repositories: Vec<PersistedRepository>,
+	ban_time: Option<SystemTime>,
 }
 
 // NOTE: This using using `impl Serialize` so it doesn't become public API surface.
@@ -33,6 +35,8 @@ impl Version {
 					patches: repository.patches.clone().map(|patch| patch.name),
 				})
 				.collect(),
+
+			ban_time: self.ban_time,
 		};
 
 		PersistedVersion::V2(persisted_version)
@@ -49,9 +53,9 @@ impl Version {
 		let persisted_version = PersistedVersion::deserialize(deserializer)
 			.map_err(|err| anyhow::anyhow!(err.to_string()))?;
 
-		let persisted_repositories = match persisted_version {
-			PersistedVersion::V1(repositories) => repositories,
-			PersistedVersion::V2(version) => version.repositories,
+		let (persisted_repositories, ban_time) = match persisted_version {
+			PersistedVersion::V1(repositories) => (repositories, None),
+			PersistedVersion::V2(version) => (version.repositories, version.ban_time),
 		};
 
 		let repositories = persisted_repositories
@@ -66,7 +70,10 @@ impl Version {
 			})
 			.collect();
 
-		Ok(Version { repositories })
+		Ok(Version {
+			repositories,
+			ban_time,
+		})
 	}
 }
 
