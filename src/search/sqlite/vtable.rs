@@ -116,6 +116,7 @@ unsafe impl<'vtab> vtab::VTab<'vtab> for IronworksTable {
 			{
 				use_row_id = true;
 				usage.set_argv_index(1);
+				break;
 			}
 		}
 
