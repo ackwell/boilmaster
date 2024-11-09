@@ -101,32 +101,37 @@ impl FilterString {
 	}
 }
 
-fn build_filter(path: Path, default_language: excel::Language) -> read::Filter {
-	let mut output = read::Filter::All;
+fn build_filter(mut path: Path, default_language: excel::Language) -> read::Filter {
+	// If there's nothing in the path left, fall back to an all-selection.
+	if path.is_empty() {
+		return read::Filter::All;
+	}
 
-	// Walk through the path in reverse, building a nested filter structure for it
-	for entry in path.into_iter().rev() {
-		output = match entry {
-			Entry::Index => read::Filter::Array(output.into()),
+	let entry = path.drain(..1).next().expect("Ensured by check above");
 
-			Entry::Key {
-				key,
-				field,
-				language,
-				read_as,
-			} => read::Filter::Struct(HashMap::from([(
+	match entry {
+		Entry::Index => read::Filter::Array(build_filter(path, default_language).into()),
+
+		Entry::Key {
+			key,
+			field,
+			language,
+			read_as,
+		} => {
+			// Structs can override the default language of inner path entries.
+			let inner_language = language.unwrap_or(default_language);
+
+			read::Filter::Struct(HashMap::from([(
 				key,
 				read::StructEntry {
 					field,
-					language: language.unwrap_or(default_language),
+					language: inner_language,
 					read_as: read_as.unwrap_or(read::As::Default),
-					filter: output,
+					filter: build_filter(path, inner_language),
 				},
-			)])),
+			)]))
 		}
 	}
-
-	output
 }
 
 fn merge_filters(a: read::Filter, b: read::Filter) -> error::Result<read::Filter> {
