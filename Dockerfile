@@ -1,5 +1,5 @@
 # Setup chef
-FROM rust:1.76-slim-buster AS base
+FROM rust:1.82.0-slim-bookworm AS base
 
 RUN apt-get update && apt-get install pkg-config libssl-dev git -y
 
@@ -28,7 +28,7 @@ COPY . .
 RUN cargo build --release --bin boilmaster
 
 # Create runtime image
-FROM debian:buster-slim AS runtime
+FROM debian:bookworm-slim AS runtime
 
 # Redirect persistent data into one shared volume
 ENV BM_VERSION_PATCH_DIRECTORY="/app/persist/patches"
