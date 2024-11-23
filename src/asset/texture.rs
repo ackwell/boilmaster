@@ -2,6 +2,7 @@ use std::io::Cursor;
 
 use anyhow::Context;
 use image::{DynamicImage, ImageBuffer, ImageFormat};
+use image_dds::Surface;
 use ironworks::{file::tex, Ironworks};
 use itertools::Itertools;
 
@@ -28,9 +29,13 @@ pub fn read(ironworks: &Ironworks, path: &str) -> Result<DynamicImage> {
 		tex::Format::Bgr5a1Unorm => read_bgr5a1(texture)?,
 		tex::Format::Bgra8Unorm => read_bgra8(texture)?,
 
-		tex::Format::Bc1Unorm => read_texture_bc(texture, texpresso::Format::Bc1)?,
-		tex::Format::Bc2Unorm => read_texture_bc(texture, texpresso::Format::Bc2)?,
-		tex::Format::Bc3Unorm => read_texture_bc(texture, texpresso::Format::Bc3)?,
+		tex::Format::Bc1Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC1RgbaUnorm)?,
+		tex::Format::Bc2Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC2RgbaUnorm)?,
+		tex::Format::Bc3Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC3RgbaUnorm)?,
+		tex::Format::Bc4Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC4RUnorm)?,
+		tex::Format::Bc5Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC5RgUnorm)?,
+		tex::Format::Bc6hFloat => read_texture_bc(texture, image_dds::ImageFormat::BC6hRgbSfloat)?,
+		tex::Format::Bc7Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC7RgbaUnorm)?,
 
 		other => {
 			return Err(Error::UnsupportedSource(
@@ -109,20 +114,31 @@ fn read_bgra8(texture: tex::Texture) -> Result<DynamicImage> {
 	Ok(DynamicImage::ImageRgba8(buffer))
 }
 
-fn read_texture_bc(texture: tex::Texture, dxt_format: texpresso::Format) -> Result<DynamicImage> {
-	let width = usize::from(texture.width());
-	let height = usize::from(texture.height());
+fn read_texture_bc(
+	texture: tex::Texture,
+	image_format: image_dds::ImageFormat,
+) -> Result<DynamicImage> {
+	let surface = Surface {
+		width: texture.width().into(),
+		height: texture.height().into(),
+		depth: texture.depth().into(),
+		layers: match texture.kind() {
+			tex::TextureKind::Cube => 6,
+			tex::TextureKind::D2Array => texture.array_size().into(),
+			_other => 1,
+		},
+		mipmaps: texture.mip_levels().into(),
+		image_format,
+		data: texture.data(),
+	};
 
-	let mut dxt_buffer = vec![0; width * height * 4];
-	dxt_format.decompress(texture.data(), width, height, &mut dxt_buffer);
+	let image = surface
+		.decode_rgba8()
+		.with_context(|| format!("failed to decode {image_format:?}"))?
+		.to_image(0)
+		.context("failed to build image from buffer")?;
 
-	let image_buffer = ImageBuffer::from_raw(
-		width.try_into().unwrap(),
-		height.try_into().unwrap(),
-		dxt_buffer,
-	)
-	.context("failed to build image buffer")?;
-	Ok(DynamicImage::ImageRgba8(image_buffer))
+	Ok(image.into())
 }
 
 pub fn write(image: impl Into<DynamicImage>, format: ImageFormat) -> Result<Vec<u8>> {

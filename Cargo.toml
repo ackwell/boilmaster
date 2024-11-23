@@ -25,6 +25,9 @@ image = { version = "0.25.1", default-features = false, features = [
     "jpeg",
     "png",
 ] }
+image_dds = { git = "https://github.com/ackwell/image_dds.git", branch = "fix-ddsfile-feature-gate", default-features = false, features = [
+    "image",
+] }
 ironworks = { git = "https://github.com/ackwell/ironworks.git", features = [
     "excel",
     "sqpack",
@@ -54,7 +57,6 @@ seahash = "4.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.95"
 strum = { version = "0.26.2", features = ["derive"] }
-texpresso = "2.0.1"
 thiserror = "2.0.3"
 tokio = { version = "1.32.0", features = ["full", "tracing"] }
 tokio-util = "0.7.4"
