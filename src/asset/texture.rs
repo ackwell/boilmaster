@@ -22,15 +22,15 @@ pub fn read(ironworks: &Ironworks, path: &str) -> Result<DynamicImage> {
 	}
 
 	let buffer = match texture.format() {
-		tex::Format::A8 => read_a8(texture)?,
+		tex::Format::A8Unorm => read_a8(texture)?,
 
-		tex::Format::Rgba4 => read_rgba4(texture)?,
-		tex::Format::Rgb5a1 => read_rgb5a1(texture)?,
-		tex::Format::Argb8 => read_argb8(texture)?,
+		tex::Format::Bgra4Unorm => read_bgra4(texture)?,
+		tex::Format::Bgr5a1Unorm => read_bgr5a1(texture)?,
+		tex::Format::Bgra8Unorm => read_bgra8(texture)?,
 
-		tex::Format::Dxt1 => read_texture_dxt(texture, texpresso::Format::Bc1)?,
-		tex::Format::Dxt3 => read_texture_dxt(texture, texpresso::Format::Bc2)?,
-		tex::Format::Dxt5 => read_texture_dxt(texture, texpresso::Format::Bc3)?,
+		tex::Format::Bc1Unorm => read_texture_bc(texture, texpresso::Format::Bc1)?,
+		tex::Format::Bc2Unorm => read_texture_bc(texture, texpresso::Format::Bc2)?,
+		tex::Format::Bc3Unorm => read_texture_bc(texture, texpresso::Format::Bc3)?,
 
 		other => {
 			return Err(Error::UnsupportedSource(
@@ -53,8 +53,7 @@ fn read_a8(texture: tex::Texture) -> Result<DynamicImage> {
 	Ok(DynamicImage::ImageLuma8(buffer))
 }
 
-// NOTE: This is actually BGRA4. Need to update names in ironworks. Reference https://github.com/NotAdam/Lumina/blob/master/src/Lumina/Data/Files/TexFile.cs#L53.
-fn read_rgba4(texture: tex::Texture) -> Result<DynamicImage> {
+fn read_bgra4(texture: tex::Texture) -> Result<DynamicImage> {
 	let data = texture
 		.data()
 		.iter()
@@ -73,7 +72,7 @@ fn read_rgba4(texture: tex::Texture) -> Result<DynamicImage> {
 	Ok(DynamicImage::ImageRgba8(buffer))
 }
 
-fn read_rgb5a1(texture: tex::Texture) -> Result<DynamicImage> {
+fn read_bgr5a1(texture: tex::Texture) -> Result<DynamicImage> {
 	let data = texture
 		.data()
 		.iter()
@@ -94,7 +93,7 @@ fn read_rgb5a1(texture: tex::Texture) -> Result<DynamicImage> {
 	Ok(DynamicImage::ImageRgba8(buffer))
 }
 
-fn read_argb8(texture: tex::Texture) -> Result<DynamicImage> {
+fn read_bgra8(texture: tex::Texture) -> Result<DynamicImage> {
 	// TODO: seems really wasteful to copy the entire image in memory just to reassign the channels. think of a better way to do this.
 	// TODO: use array_chunks once it hits stable
 	let data = texture
@@ -110,7 +109,7 @@ fn read_argb8(texture: tex::Texture) -> Result<DynamicImage> {
 	Ok(DynamicImage::ImageRgba8(buffer))
 }
 
-fn read_texture_dxt(texture: tex::Texture, dxt_format: texpresso::Format) -> Result<DynamicImage> {
+fn read_texture_bc(texture: tex::Texture, dxt_format: texpresso::Format) -> Result<DynamicImage> {
 	let width = usize::from(texture.width());
 	let height = usize::from(texture.height());
 
