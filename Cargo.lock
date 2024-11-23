@@ -278,7 +278,8 @@ dependencies = [
 [[package]]
 name = "bcdec_rs"
 version = "0.1.2"
-source = "git+https://github.com/ackwell/image_dds.git?branch=fix-ddsfile-feature-gate#add28a563d0e2ff5b79d03e8a32a690d7f88f796"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9934c2b68e46448d814db20e34a840ef9b4e7b3b7c8b1da91161481230f6350"
 
 [[package]]
 name = "binrw"
@@ -1474,8 +1475,9 @@ dependencies = [
 
 [[package]]
 name = "image_dds"
-version = "0.6.1"
-source = "git+https://github.com/ackwell/image_dds.git?branch=fix-ddsfile-feature-gate#add28a563d0e2ff5b79d03e8a32a690d7f88f796"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84c6d1a2d80bc7dd2928b2a72a46d71bccbb6becf8ce207522b0b92daf0a417f"
 dependencies = [
  "bcdec_rs",
  "bytemuck",

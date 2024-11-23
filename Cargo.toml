@@ -25,7 +25,7 @@ image = { version = "0.25.1", default-features = false, features = [
     "jpeg",
     "png",
 ] }
-image_dds = { git = "https://github.com/ackwell/image_dds.git", branch = "fix-ddsfile-feature-gate", default-features = false, features = [
+image_dds = { version = "0.6.2", default-features = false, features = [
     "image",
 ] }
 ironworks = { git = "https://github.com/ackwell/ironworks.git", features = [
