@@ -1,7 +1,15 @@
+ARG target=""
 # Setup chef
-FROM rust:1.82.0-slim-bookworm AS base
+FROM --platform=$BUILDPLATFORM rust:1.82.0-slim-bookworm AS base
 
 RUN apt-get update && apt-get install pkg-config libssl-dev git -y
+
+ARG arch
+RUN if [ "${arch}" = "aarch64-unknown-linux-gnu" ]; then \
+    dpkg --add-architecture arm64 && \
+    apt-get update && apt-get install libssl-dev:arm64 gcc-aarch64-linux-gnu zlib1g-dev:arm64 -y && \
+    rustup target add ${arch}; \
+    fi
 
 RUN cargo install cargo-chef --locked
 
@@ -25,10 +33,17 @@ RUN cargo chef cook --bin boilmaster --release --recipe-path recipe.json
 
 COPY . .
 
-RUN cargo build --release --bin boilmaster
+ARG arch
+
+ARG pkg-config-path
+ARG pkg-config-sysroot-dir
+ENV PKG_CONFIG_PATH=${pkg-config-path}
+ENV PKG_CONFIG_SYSROOT_DIR=${pkg-config-sysroot-dir}
+
+RUN cargo build --release --target ${arch} --bin boilmaster
 
 # Create runtime image
-FROM debian:bookworm-slim AS runtime
+FROM --platform=${target} debian:bookworm-slim AS runtime
 
 # Redirect persistent data into one shared volume
 ENV BM_VERSION_PATCH_DIRECTORY="/app/persist/patches"
@@ -40,9 +55,12 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y git curl
 
-COPY --from=builder /lib/x86_64-linux-gnu/libz.so.1 /lib/x86_64-linux-gnu/libz.so.1
-COPY --from=builder /app/boilmaster.toml /app
-COPY --from=builder /app/target/release/boilmaster /app
+ARG zlib
+ARG arch
+
+COPY --from=builder /lib/${zlib}/libz.so.1 /lib/${zlib}/libz.so.1
+COPY --from=builder /app/boilmaster.toml /app/
+COPY --from=builder /app/target/${arch}/release/boilmaster /app/
 
 VOLUME /app/persist
 
