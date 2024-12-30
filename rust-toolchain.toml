@@ -1,2 +1,3 @@
 [toolchain]
+# NOTE: Update README with this version when changing.
 channel = "1.82.0"

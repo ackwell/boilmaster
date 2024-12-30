@@ -8,7 +8,7 @@ Web service for Final Fantasy XIV game data and asset discovery.
 
 **Requirements**
 
-- [Rust](https://www.rust-lang.org/tools/install) >= 1.77.2
+- [Rust](https://www.rust-lang.org/tools/install) >= 1.82.0
 
 ```bash
 git clone https://github.com/ackwell/boilmaster
