@@ -20,7 +20,6 @@ jobs:
                 platform:
                     - os_name: x86_64
                       os: ubuntu-latest
-                      cargo_command: cargo
                       arch: x86_64-unknown-linux-gnu
                       target: linux/amd64
                       zlib: x86_64-linux-gnu
