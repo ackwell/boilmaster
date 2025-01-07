@@ -160,6 +160,7 @@ fn format_mime(format: Format) -> mime::Mime {
 	match format {
 		Format::Jpeg => mime::IMAGE_JPEG,
 		Format::Png => mime::IMAGE_PNG,
+		Format::Webp => "image/webp".parse().expect("mime parse should not fail"),
 	}
 }
 

@@ -15,6 +15,7 @@ use super::{convert, error::Error};
 pub enum Format {
 	Jpeg,
 	Png,
+	Webp,
 }
 
 impl Format {
@@ -22,6 +23,7 @@ impl Format {
 		match self {
 			Self::Jpeg => "jpg",
 			Self::Png => "png",
+			Self::Webp => "webp",
 		}
 	}
 
@@ -29,6 +31,7 @@ impl Format {
 		match self {
 			Self::Jpeg => &convert::Image,
 			Self::Png => &convert::Image,
+			Self::Webp => &convert::Image,
 		}
 	}
 }
@@ -50,6 +53,7 @@ impl FromStr for Format {
 		Ok(match input {
 			"jpg" => Self::Jpeg,
 			"png" => Self::Png,
+			"webp" => Self::Webp,
 			other => return Err(Error::UnknownFormat(other.into())),
 		})
 	}

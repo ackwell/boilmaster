@@ -27,6 +27,7 @@ impl Converter for Image {
 		let output_format = match format {
 			Format::Jpeg => ImageFormat::Jpeg,
 			Format::Png => ImageFormat::Png,
+			Format::Webp => ImageFormat::WebP,
 		};
 
 		// TODO: should i just pass IW to convert? is there any realistic expectation that a converter will need excel?

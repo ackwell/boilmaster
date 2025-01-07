@@ -24,6 +24,7 @@ graphql_client = { version = "0.14.0" }
 image = { version = "0.25.1", default-features = false, features = [
     "jpeg",
     "png",
+    "webp",
 ] }
 image_dds = { version = "0.6.2", default-features = false, features = [
     "image",
