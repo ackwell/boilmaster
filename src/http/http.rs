@@ -5,7 +5,8 @@ use axum::{extract::FromRef, Router};
 use serde::Deserialize;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
-use tower_http::trace::TraceLayer;
+use tower_http::trace::{DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer};
+use tracing::Level;
 
 use super::{admin, api1, health, service};
 
@@ -55,7 +56,15 @@ pub async fn serve(
 		.nest("/admin", admin::router(config.admin, state.clone()))
 		.nest("/api/1", api1::router(config.api1, state.clone()))
 		.nest("/health", health::router(state))
-		.layer(TraceLayer::new_for_http());
+		.layer(
+			// Set up tracing, but downgrade access logs to TRACE. Spans will remain
+			// at DEBUG, allowing them to show up as relevant metadata for other
+			// traces / failures in the system.
+			TraceLayer::new_for_http()
+				.on_request(DefaultOnRequest::new().level(Level::TRACE))
+				.on_response(DefaultOnResponse::new().level(Level::TRACE))
+				.on_failure(DefaultOnFailure::new().level(Level::TRACE)),
+		);
 
 	let listener = TcpListener::bind(bind_address).await.unwrap();
 	axum::serve(listener, router)
