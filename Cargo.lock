@@ -1562,6 +1562,7 @@ dependencies = [
 [[package]]
 name = "ironworks_schema"
 version = "0.2.0"
+source = "git+https://github.com/ackwell/ironworks.git#acd9716eb605c10c3dfb12220a445e32414651e8"
 dependencies = [
  "derivative",
  "git2",
