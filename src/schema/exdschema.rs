@@ -73,7 +73,6 @@ impl Source for ExdSchema {
 		// TODO: This is stupid, but it works. Would be preferable to avoid needing
 		// to re-fetch the specifier at all.
 		let specifier = if version.starts_with("2:ref:") {
-			println!("using ref: {}", &version[6..]);
 			self.provider.specifier_v2_ref(&version[6..])?
 		} else {
 			let (reference, game_version) = version.split_once('-').ok_or_else(|| {

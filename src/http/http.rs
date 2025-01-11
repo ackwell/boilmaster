@@ -1,7 +1,11 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
-use axum::{extract::FromRef, Router};
+use axum::{
+	extract::{FromRef, MatchedPath},
+	http::Request,
+	Router,
+};
 use serde::Deserialize;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
@@ -57,10 +61,23 @@ pub async fn serve(
 		.nest("/api/1", api1::router(config.api1, state.clone()))
 		.nest("/health", health::router(state))
 		.layer(
-			// Set up tracing, but downgrade access logs to TRACE. Spans will remain
-			// at DEBUG, allowing them to show up as relevant metadata for other
-			// traces / failures in the system.
 			TraceLayer::new_for_http()
+				// Add the matched route path to the spans.
+				.make_span_with(|request: &Request<_>| {
+					let route = request
+						.extensions()
+						.get::<MatchedPath>()
+						.map(MatchedPath::as_str);
+
+					tracing::info_span!(
+						"request",
+						method = %request.method(),
+						route,
+						uri = %request.uri(),
+					)
+				})
+				// Downgrade access logs to TRACE.
+				// TODO: Configurable? Should I just use envlogger syntax and call it a day?
 				.on_request(DefaultOnRequest::new().level(Level::TRACE))
 				.on_response(DefaultOnResponse::new().level(Level::TRACE))
 				.on_failure(DefaultOnFailure::new().level(Level::TRACE)),
