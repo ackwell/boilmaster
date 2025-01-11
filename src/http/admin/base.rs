@@ -12,10 +12,24 @@ impl Render for BaseTemplate {
 			html {
 				head {
 					title { "admin | " (self.title) }
+					link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css";
 				}
 				body {
-					h1 { (self.title) }
-					(self.content)
+					header.container {
+						nav {
+							ul {
+								li { strong { "boilmaster" } }
+								li { (self.title) }
+							}
+							ul {
+								li { a href="/admin" { "versions" } }
+							}
+						}
+					}
+
+					main.container {
+						(self.content)
+					}
 				}
 			}
 		}

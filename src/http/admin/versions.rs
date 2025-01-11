@@ -21,7 +21,7 @@ pub fn router(state: HttpState) -> Router {
 
 struct VersionInfo {
 	key: VersionKey,
-	patches: Vec<(String, String)>,
+	patch: String,
 	names: Vec<String>,
 	banned: bool,
 }
@@ -37,51 +37,67 @@ async fn versions(
 	let version_info = |key: VersionKey| -> Result<_> {
 		let version = version_service.version(key).context("missing version")?;
 
-		let latest = version
+		let patch = version
 			.repositories
-			.into_iter()
-			.map(|repository| (repository.name, repository.patches.last().name.clone()))
-			.collect();
+			.first()
+			.map(|repository| repository.patches.last().name.clone())
+			.unwrap_or_else(|| "(NONE)".into());
 
 		Ok(VersionInfo {
 			key,
-			patches: latest,
+			patch,
 			names: version_service.names(key).context("missing version")?,
 			banned: version.ban_time.is_some(),
 		})
 	};
 
-	let versions = version_service
+	let mut versions = version_service
 		.keys()
 		.into_iter()
 		.map(version_info)
 		.collect::<Result<Vec<_>>>()?;
 
+	versions.sort_unstable_by(|a, b| a.patch.cmp(&b.patch).reverse());
+
 	Ok((BaseTemplate {
 		title: "versions".to_string(),
 		content: html! {
-			@for version in versions {
-				h2 {
-					a href={ (uri) "/" (version.key) } {
-						(version.key)
-					}
-
-					" ("
-					@for (index, name) in version.names.iter().enumerate() {
-						@if index > 0 { ", " }
-						(name)
-					}
-					")"
-
-					@if version.banned {
-						" (banned)"
+			table.striped {
+				thead {
+					tr {
+						th { "key" }
+						th { "names" }
+						th { "banned" }
+						th { "patch" }
 					}
 				}
 
-				dl {
-					@for (repository, patch) in &version.patches {
-						dt { (repository) }
-						dd { (patch) }
+				tbody {
+					@for version in versions {
+						tr {
+							th {
+								code {
+									a href={ (uri) "/" (version.key) } {
+										(version.key)
+									}
+								}
+							}
+
+							td {
+								@for (index, name) in version.names.iter().enumerate() {
+									@if index > 0 { ", " }
+									(name)
+								}
+							}
+
+							td {
+								@if version.banned {
+									"❌"
+								}
+							}
+
+							td { (version.patch) }
+						}
 					}
 				}
 			}

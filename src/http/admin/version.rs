@@ -68,25 +68,32 @@ async fn get_version(
 	Ok((BaseTemplate {
 		title: format!("version {}", version_key),
 		content: html! {
-			h2 { "status" }
 			form action=(uri) method="post" {
-				ul {
-					li {
-						@if banned { "banned" }
-						@else { "ready" }
-						button type="submit" name="ban" value=(!banned) { "toggle ban" }
+				fieldset {
+					label {
+						"names"
+						input type="text" id="names" name="names" value={
+							@for (index, name) in names.into_iter().enumerate() {
+								@if index > 0 { ", " }
+								(name)
+							}
+						};
+						small { "comma separated" }
+					}
+
+					label {
+						input
+							type="checkbox"
+							role="switch"
+							name="ban"
+							value="true"
+							checked[banned]
+							style="--pico-switch-checked-background-color: #AF291D"; // pico-color-red-600
+
+						"banned"
 					}
 				}
-			}
 
-			h2 { "names" }
-			form action=(uri) method="post" {
-				input type="text" name="names" value={
-					@for (index, name) in names.into_iter().enumerate() {
-						@if index > 0 { ", " }
-						(name)
-					}
-				};
 				button type="submit" { "save" };
 			}
 
@@ -114,7 +121,8 @@ async fn get_version(
 
 #[derive(Debug, Deserialize)]
 struct VersionPostRequest {
-	names: Option<String>,
+	names: String,
+	// Will only be set if checked.
 	ban: Option<bool>,
 }
 
@@ -125,14 +133,11 @@ async fn post_version(
 	State(Service { version, .. }): State<Service>,
 	Form(request): Form<VersionPostRequest>,
 ) -> Result<impl IntoResponse> {
-	if let Some(names) = request.names {
-		let names = names.split(',').map(str::trim);
-		version.set_names(version_key, names).await?;
-	}
+	let names = request.names.split(',').map(str::trim);
+	version.set_names(version_key, names).await?;
 
-	if let Some(ban) = request.ban {
-		version.set_banned(version_key, ban).await?;
-	}
+	let banned = request.ban.is_some();
+	version.set_banned(version_key, banned).await?;
 
 	Ok(Redirect::to(&uri.to_string()))
 }
