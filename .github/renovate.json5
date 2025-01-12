@@ -17,16 +17,14 @@
 			"matchUpdateTypes": [
 				"major"
 			],
-			"groupName": "major versions",
-			"rangeStrategy": "replace"
+			"groupName": "major versions"
 		},
 		{
 			"matchUpdateTypes": [
 				"minor"
 			],
 			"matchCurrentVersion": "<1",
-			"groupName": "major versions",
-			"rangeStrategy": "replace"
+			"groupName": "major versions"
 		}
 	]
 }
