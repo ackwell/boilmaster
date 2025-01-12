@@ -17,14 +17,16 @@
 			"matchUpdateTypes": [
 				"major"
 			],
-			"groupName": "major versions"
+			"groupName": "major versions",
+			"enabled": true
 		},
 		{
 			"matchUpdateTypes": [
 				"minor"
 			],
 			"matchCurrentVersion": "<1",
-			"groupName": "major versions"
+			"groupName": "major versions",
+			"enabled": true
 		}
 	]
 }
