@@ -265,11 +265,10 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bb8"
-version = "0.8.6"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d89aabfae550a5c44b43ab941844ffcd2e993cb6900b342debf59e9ea74acdb8"
+checksum = "212d8b8e1a22743d9241575c6ba822cf9c8fef34771c86ab7e477a4fbfd254e5"
 dependencies = [
- "async-trait",
  "futures-util",
  "parking_lot",
  "tokio",
@@ -277,9 +276,9 @@ dependencies = [
 
 [[package]]
 name = "bcdec_rs"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9934c2b68e46448d814db20e34a840ef9b4e7b3b7c8b1da91161481230f6350"
+checksum = "f09c37bc0e9f0924b7dae9988265ef3c76c88538f41a3b06caf4bed07cee5226"
 
 [[package]]
 name = "binrw"
@@ -333,7 +332,6 @@ dependencies = [
  "aho-corasick",
  "aide",
  "anyhow",
- "async-trait",
  "axum",
  "axum-extra",
  "bb8",
@@ -349,7 +347,7 @@ dependencies = [
  "image_dds",
  "ironworks",
  "ironworks_schema",
- "itertools",
+ "itertools 0.14.0",
  "maud",
  "mime",
  "mini-moka",
@@ -826,9 +824,9 @@ dependencies = [
 
 [[package]]
 name = "fs4"
-version = "0.8.2"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21dabded2e32cd57ded879041205c60a4a4c4bab47bd0fd2fa8b01f30849f02b"
+checksum = "c29c30684418547d476f0b48e84f4821639119c483b1eccd566c8cd0cd05f521"
 dependencies = [
  "rustix",
  "windows-sys 0.52.0",
@@ -1486,9 +1484,9 @@ dependencies = [
 
 [[package]]
 name = "image_dds"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84c6d1a2d80bc7dd2928b2a72a46d71bccbb6becf8ce207522b0b92daf0a417f"
+checksum = "8e2b9fbc4237464c255c72f468bddaa25b2502c40a34a8fbc0fd9a9addfacc37"
 dependencies = [
  "bcdec_rs",
  "bytemuck",
@@ -1577,6 +1575,15 @@ name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
 dependencies = [
  "either",
 ]
@@ -1836,9 +1843,9 @@ dependencies = [
 
 [[package]]
 name = "nonempty"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "303e8749c804ccd6ca3b428de7fe0d86cb86bc7606bc15291f100fd487960bb8"
+checksum = "549e471b99ccaf2f89101bec68f4d244457d5a95a9c3d0672e9564124397741d"
 dependencies = [
  "serde",
 ]
@@ -2181,7 +2188,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9552f850d5f0964a4e4d0bf306459ac29323ddfbae05e35a7c0d35cb0803cc5"
 dependencies = [
  "anyhow",
- "itertools",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.89",

@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use async_trait::async_trait;
 use bb8::ManageConnection;
 use ironworks::excel::Excel;
 
@@ -17,7 +16,6 @@ impl SqliteConnectionManager {
 	}
 }
 
-#[async_trait]
 impl ManageConnection for SqliteConnectionManager {
 	type Connection = rusqlite::Connection;
 	type Error = rusqlite::Error;
