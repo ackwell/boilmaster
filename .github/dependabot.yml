@@ -3,7 +3,6 @@ version: 2
 updates:
   - package-ecosystem: "cargo"
     directory: "/"
-    versioning-strategy: "increase"
     reviewers:
       - "ackwell"
     schedule:
