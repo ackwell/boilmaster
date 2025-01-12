@@ -4,6 +4,11 @@
 		"replacements:all",
 		"workarounds:all"
 	],
+	// Open PRs at the start of the weekend.
+	"timezone": "Australia/Sydney",
+	"schedule": [
+		"* 0-9 * * 6"
+	],
 	"packageRules": [
 		// Group all rust package updates
 		{
