@@ -8,14 +8,14 @@
 		// Group all rust package updates
 		{
 			"matchManagers": [
-				"rust"
+				"cargo"
 			],
 			"groupName": "cargo"
 		},
 		// Disable updates for cargo updates that aren't semver-major
 		{
 			"matchManagers": [
-				"rust"
+				"cargo"
 			],
 			"matchUpdateTypes": [
 				"patch"
@@ -24,7 +24,7 @@
 		},
 		{
 			"matchManagers": [
-				"rust"
+				"cargo"
 			],
 			"matchUpdateTypes": [
 				"minor"
