@@ -5,28 +5,32 @@
 		"workarounds:all"
 	],
 	"packageRules": [
-		// Ignore absolutely everything by default
+		// Group all rust package updates
 		{
-			"matchPackageNames": [
-				"*"
+			"matchManagers": [
+				"rust"
+			],
+			"groupName": "cargo"
+		},
+		// Disable updates for cargo updates that aren't semver-major
+		{
+			"matchManagers": [
+				"rust"
+			],
+			"matchUpdateTypes": [
+				"patch"
 			],
 			"enabled": false
 		},
-		// Open a grouped PR for major updates and sub-1.0 minor updates.
 		{
-			"matchUpdateTypes": [
-				"major"
+			"matchManagers": [
+				"rust"
 			],
-			"groupName": "major versions",
-			"enabled": true
-		},
-		{
 			"matchUpdateTypes": [
 				"minor"
 			],
-			"matchCurrentVersion": "<1",
-			"groupName": "major versions",
-			"enabled": true
+			"matchCurrentVersion": ">=1",
+			"enabled": false
 		}
 	]
 }
