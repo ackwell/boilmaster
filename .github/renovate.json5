@@ -11,6 +11,22 @@
 				"*"
 			],
 			"enabled": false
+		},
+		// Open a grouped PR for major updates and sub-1.0 minor updates.
+		{
+			"matchUpdateTypes": [
+				"major"
+			],
+			"groupName": "major versions",
+			"rangeStrategy": "replace"
+		},
+		{
+			"matchUpdateTypes": [
+				"minor"
+			],
+			"matchCurrentVersion": "<1",
+			"groupName": "major versions",
+			"rangeStrategy": "replace"
 		}
 	]
 }
