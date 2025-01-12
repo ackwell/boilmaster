@@ -5,6 +5,7 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
+use bm_data::Data;
 use bm_version::VersionKey;
 use figment::value::magic::RelativePathBuf;
 use futures::future::try_join_all;
@@ -15,13 +16,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 use uuid::Uuid;
 
-use crate::{
-	data::Data,
-	search::{
-		error::{Error, Result},
-		internal_query::post,
-		search::SearchResult,
-	},
+use crate::search::{
+	error::{Error, Result},
+	internal_query::post,
+	search::SearchResult,
 };
 
 use super::{cursor, database::Database};

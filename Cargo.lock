@@ -326,6 +326,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bm_data"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "bm_version",
+ "ironworks",
+ "thiserror 2.0.3",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "bm_version"
 version = "0.0.0"
 dependencies = [
@@ -354,6 +367,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "bb8",
+ "bm_data",
  "bm_version",
  "console-subscriber",
  "derivative",

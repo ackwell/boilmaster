@@ -2,8 +2,6 @@ use std::path::Path;
 
 use image::ImageFormat;
 
-use crate::data;
-
 use super::{
 	error::{Error, Result},
 	format::Format,
@@ -12,13 +10,13 @@ use super::{
 
 pub trait Converter {
 	// TODO: Consider using a stream for this - the only converter I actually have right now doesn't operate with streams, but it may be relevant for other converters - or possibly would tie in with caching. Ref. https://github.com/tokio-rs/axum/discussions/608 re: responding to requests with streams.
-	fn convert(&self, data: &data::Version, path: &str, format: Format) -> Result<Vec<u8>>;
+	fn convert(&self, data: &bm_data::Version, path: &str, format: Format) -> Result<Vec<u8>>;
 }
 
 pub struct Image;
 
 impl Converter for Image {
-	fn convert(&self, data: &data::Version, path: &str, format: Format) -> Result<Vec<u8>> {
+	fn convert(&self, data: &bm_data::Version, path: &str, format: Format) -> Result<Vec<u8>> {
 		let extension = Path::new(path)
 			.extension()
 			.and_then(|extension| extension.to_str());

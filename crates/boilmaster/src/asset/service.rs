@@ -5,8 +5,6 @@ use bm_version::VersionKey;
 use image::{ImageBuffer, Pixel, Rgb};
 use ironworks::Ironworks;
 
-use crate::data;
-
 use super::{
 	error::{Error, Result},
 	format::Format,
@@ -14,11 +12,11 @@ use super::{
 };
 
 pub struct Service {
-	data: Arc<data::Data>,
+	data: Arc<bm_data::Data>,
 }
 
 impl Service {
-	pub fn new(data: Arc<data::Data>) -> Self {
+	pub fn new(data: Arc<bm_data::Data>) -> Self {
 		Self { data }
 	}
 

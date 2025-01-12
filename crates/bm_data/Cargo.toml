@@ -1,0 +1,20 @@
+[package]
+name = "bm_data"
+description = "Versioned data access for boilmaster"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bm_version = { path = "../bm_version" }
+
+ironworks = { git = "https://github.com/ackwell/ironworks.git" }
+thiserror = "2.0.3"
+
+anyhow.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true

@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::Context;
+use bm_data::Data;
 use bm_version::VersionKey;
 use either::Either;
 use ironworks::excel;
@@ -17,7 +18,7 @@ use tokio::select;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::{data::Data, schema};
+use crate::schema;
 
 use super::{
 	error::{Error, Result},

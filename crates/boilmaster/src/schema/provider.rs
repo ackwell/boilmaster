@@ -7,8 +7,6 @@ use serde::Deserialize;
 use tokio::{select, time};
 use tokio_util::sync::CancellationToken;
 
-use crate::data;
-
 use super::{
 	error::{Error, Result},
 	exdschema,
@@ -44,7 +42,7 @@ pub struct Provider {
 }
 
 impl Provider {
-	pub fn new(config: Config, data: Arc<data::Data>) -> Result<Self> {
+	pub fn new(config: Config, data: Arc<bm_data::Data>) -> Result<Self> {
 		// TODO: at the moment this will hard fail if any source fails - should i make sources soft fail?
 		Ok(Self {
 			default: config.default,

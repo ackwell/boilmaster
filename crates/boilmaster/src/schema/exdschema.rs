@@ -5,7 +5,7 @@ use bm_version::VersionKey;
 use ironworks_schema::exdschema;
 use serde::Deserialize;
 
-use crate::{data, utility::anyhow::Anyhow};
+use crate::utility::anyhow::Anyhow;
 
 use super::{
 	error::{Error, Result},
@@ -20,7 +20,7 @@ pub struct Config {
 }
 
 pub struct ExdSchema {
-	data: Arc<data::Data>,
+	data: Arc<bm_data::Data>,
 
 	provider: exdschema::Provider,
 
@@ -28,7 +28,7 @@ pub struct ExdSchema {
 }
 
 impl ExdSchema {
-	pub fn new(config: Config, data: Arc<data::Data>) -> Result<Self> {
+	pub fn new(config: Config, data: Arc<bm_data::Data>) -> Result<Self> {
 		let provider = exdschema::Provider::with()
 			.remote(config.remote)
 			.directory(config.directory)
