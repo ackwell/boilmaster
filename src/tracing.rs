@@ -74,21 +74,34 @@ pub fn init(config: Config) {
 		.init();
 }
 
+// TODO: Remove this when console subscriber is re-enabled
+enum InfallibleLayer {}
+impl<S> Layer<S> for InfallibleLayer
+where
+	S: Subscriber,
+{
+	fn on_enter(&self, _id: &tracing::span::Id, _ctx: tracing_subscriber::layer::Context<'_, S>) {}
+	fn on_exit(&self, _id: &tracing::span::Id, _ctx: tracing_subscriber::layer::Context<'_, S>) {}
+	fn on_close(&self, _id: tracing::span::Id, _ctx: tracing_subscriber::layer::Context<'_, S>) {}
+}
+
 fn tokio_console<S>(config: ConsoleConfig) -> Option<impl Layer<S>>
 where
 	S: Subscriber + for<'a> LookupSpan<'a>,
 {
 	if !config.enabled {
-		return None;
+		return None::<InfallibleLayer>;
 	}
 
-	let layer = console_subscriber::spawn();
+	// let layer = console_subscriber::spawn();
 
-	let filter = filter::Targets::new()
-		.with_target("tokio", LevelFilter::TRACE)
-		.with_target("runtime", LevelFilter::TRACE);
+	// let filter = filter::Targets::new()
+	// 	.with_target("tokio", LevelFilter::TRACE)
+	// 	.with_target("runtime", LevelFilter::TRACE);
 
-	Some(layer.with_filter(filter))
+	// Some(layer.with_filter(filter))
+
+	panic!("console subscriber is disabled pending axum 0.8 support");
 }
 
 fn stdout<S>(config: StdoutConfig) -> Option<impl Layer<S>>
