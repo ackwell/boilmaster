@@ -1,13 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use ironworks::excel::Language;
-use schemars::{
-	gen::SchemaGenerator,
-	schema::{InstanceType, Metadata, Schema, SchemaObject},
-};
 use serde::de;
-
-use crate::utility::jsonschema::impl_jsonschema;
 
 use super::error::Error;
 
@@ -76,36 +70,4 @@ impl<'de> de::Deserialize<'de> for LanguageString {
 		let raw = String::deserialize(deserializer)?;
 		raw.parse().map_err(de::Error::custom)
 	}
-}
-
-impl_jsonschema!(LanguageString, languagestring_schema);
-fn languagestring_schema(_generator: &mut SchemaGenerator) -> Schema {
-	// TODO: keep this up to date with the full list.
-	let languages = [
-		Language::None,
-		Language::Japanese,
-		Language::English,
-		Language::German,
-		Language::French,
-		Language::ChineseSimplified,
-		Language::ChineseTraditional,
-		Language::Korean,
-	];
-
-	Schema::Object(SchemaObject {
-		metadata: Some(
-			Metadata {
-				description: Some("Known languages supported by the game data format. **NOTE:** Not all languages that are supported by the format are valid for all editions of the game. For example, the global game client acknowledges the existence of `chs` and `kr`, however does not provide any data for them.".into()),
-				..Default::default()
-			}
-			.into(),
-		),
-		instance_type: Some(InstanceType::String.into()),
-		enum_values: Some(
-			languages
-				.map(|language| LanguageString(language).to_string().into())
-				.to_vec(),
-		),
-		..Default::default()
-	})
 }

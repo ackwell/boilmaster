@@ -15,7 +15,7 @@ use bm_version::VersionKey;
 use ironworks::{excel, file::exh, sestring::format::Input};
 use schemars::{
 	gen::SchemaGenerator,
-	schema::{InstanceType, Schema, SchemaObject, StringValidation},
+	schema::{InstanceType, Metadata, Schema, SchemaObject, StringValidation},
 	JsonSchema,
 };
 use serde::{Deserialize, Serialize};
@@ -62,7 +62,7 @@ impl RowReaderState {
 #[derive(Deserialize, JsonSchema)]
 struct RowReaderQuery {
 	/// Language to use for data with no language otherwise specified in the fields filter.
-	language: Option<read::LanguageString>,
+	language: Option<SchemaLanguage>,
 
 	/// Schema that row data should be read with.
 	schema: Option<SchemaSpecifier>,
@@ -72,6 +72,42 @@ struct RowReaderQuery {
 
 	/// Data fields to read for selected rows' transient row, if any is present.
 	transient: Option<FilterString>,
+}
+
+#[derive(Deserialize)]
+#[repr(transparent)]
+struct SchemaLanguage(read::LanguageString);
+
+impl_jsonschema!(SchemaLanguage, languagestring_schema);
+fn languagestring_schema(_generator: &mut SchemaGenerator) -> Schema {
+	// TODO: keep this up to date with the full list. Honestly, this should be iterating the enum in excel or similar.
+	let languages = [
+		excel::Language::None,
+		excel::Language::Japanese,
+		excel::Language::English,
+		excel::Language::German,
+		excel::Language::French,
+		excel::Language::ChineseSimplified,
+		excel::Language::ChineseTraditional,
+		excel::Language::Korean,
+	];
+
+	Schema::Object(SchemaObject {
+		metadata: Some(
+			Metadata {
+				description: Some("Known languages supported by the game data format. **NOTE:** Not all languages that are supported by the format are valid for all editions of the game. For example, the global game client acknowledges the existence of `chs` and `kr`, however does not provide any data for them.".into()),
+				..Default::default()
+			}
+			.into(),
+		),
+		instance_type: Some(InstanceType::String.into()),
+		enum_values: Some(
+			languages
+				.map(|language| read::LanguageString::from(language).to_string().into())
+				.to_vec(),
+		),
+		..Default::default()
+	})
 }
 
 #[derive(Deserialize)]
@@ -172,11 +208,11 @@ where
 
 		// TODO: should this be a bit like versionquery for the schema shit?
 		let schema_specifier =
-			schema_provider.canonicalize(query.schema.map(|nt| nt.0), version_key)?;
+			schema_provider.canonicalize(query.schema.map(|wrap| wrap.0), version_key)?;
 
 		let language = query
 			.language
-			.map(excel::Language::from)
+			.map(|wrap| excel::Language::from(wrap.0))
 			.unwrap_or_else(|| read.default_language());
 
 		let string_input = state.input(version_key, &excel)?;
