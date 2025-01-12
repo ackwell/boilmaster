@@ -6,12 +6,19 @@ publish = false
 
 [dependencies]
 aho-corasick = "1.1.3"
-aide = { version = "0.13.4", features = ["axum", "axum-headers", "macros"] }
+aide = { version = "0.14.0", features = [
+    "axum",
+    "axum-json",
+    "axum-query",
+    "axum-extra-headers",
+    "macros",
+] }
 anyhow = "1.0.55"
-axum = { version = "0.7.5", features = ["macros"] }
-axum-extra = { version = "0.9.3", features = ["typed-header"] }
+axum = { version = "0.8.1", features = ["macros"] }
+axum-extra = { version = "0.10.0", features = ["typed-header"] }
 bb8 = "0.9.0"
-console-subscriber = "0.4.1"
+# Needs to be updated to axum^0.8
+# console-subscriber = "0.4.1"
 derivative = "2.2.0"
 either = "1.8.0"
 figment = { version = "0.10.8", features = ["env", "toml"] }
@@ -37,7 +44,8 @@ ironworks_schema = { git = "https://github.com/ackwell/ironworks.git", features 
     "exdschema",
 ] }
 itertools = "0.14.0"
-maud = { version = "0.26.0", features = ["axum"] }
+# maud = { version = "0.26.0", features = ["axum"] }
+maud = { git = "https://github.com/lambda-fairy/maud.git", features = ["axum"] }
 mime = "0.3.17"
 mini-moka = "0.10.0"
 nonempty = { version = "0.11.0", features = ["serialize"] }
