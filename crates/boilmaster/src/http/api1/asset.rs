@@ -21,12 +21,16 @@ use axum_extra::{
 	TypedHeader,
 };
 use reqwest::StatusCode;
-use schemars::JsonSchema;
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject},
+	JsonSchema,
+};
 use seahash::SeaHasher;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{asset::Format, http::service::Service};
+use crate::{asset::Format, http::service::Service, utility::jsonschema::impl_jsonschema};
 
 use super::{
 	api::ApiState,
@@ -72,7 +76,7 @@ struct Asset1Path {
 
 #[derive(Deserialize)]
 struct Asset1Query {
-	format: Format,
+	format: SchemaFormat,
 }
 
 #[debug_handler(state = AssetState)]
@@ -100,15 +104,32 @@ struct AssetQuery {
 
 	/// Format that the asset should be converted into.
 	#[schemars(example = "example_format")]
-	format: Format,
+	format: SchemaFormat,
 }
 
 fn example_path() -> &'static str {
 	"ui/icon/051000/051474_hr1.tex"
 }
 
-fn example_format() -> Format {
-	Format::Png
+#[derive(Serialize, Deserialize)]
+#[repr(transparent)]
+struct SchemaFormat(Format);
+
+impl_jsonschema!(SchemaFormat, format_schema);
+fn format_schema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		enum_values: Some(
+			Format::iter()
+				.map(|format| serde_json::to_value(format).expect("should not fail"))
+				.collect(),
+		),
+		..Default::default()
+	})
+}
+
+fn example_format() -> SchemaFormat {
+	SchemaFormat(Format::Png)
 }
 
 fn asset2_docs(operation: TransformOperation) -> TransformOperation {
@@ -132,7 +153,10 @@ fn asset2_docs(operation: TransformOperation) -> TransformOperation {
 #[debug_handler(state = AssetState)]
 async fn asset2(
 	VersionQuery(version_key): VersionQuery,
-	Query(AssetQuery { path, format }): Query<AssetQuery>,
+	Query(AssetQuery {
+		path,
+		format: SchemaFormat(format),
+	}): Query<AssetQuery>,
 	State(Service { asset, .. }): State<Service>,
 ) -> Result<impl IntoApiResponse> {
 	// Perform the conversion.

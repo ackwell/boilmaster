@@ -1,13 +1,7 @@
 use std::str::FromStr;
 
-use schemars::{
-	gen::SchemaGenerator,
-	schema::{InstanceType, Schema, SchemaObject},
-};
 use serde::{de, Deserialize, Serialize};
-use strum::{EnumIter, IntoEnumIterator};
-
-use crate::utility::jsonschema::impl_jsonschema;
+use strum::EnumIter;
 
 use super::{convert, error::Error};
 
@@ -67,17 +61,4 @@ impl<'de> Deserialize<'de> for Format {
 		let raw = String::deserialize(deserializer)?;
 		raw.parse().map_err(de::Error::custom)
 	}
-}
-
-impl_jsonschema!(Format, format_schema);
-fn format_schema(_generator: &mut SchemaGenerator) -> Schema {
-	Schema::Object(SchemaObject {
-		instance_type: Some(InstanceType::String.into()),
-		enum_values: Some(
-			Format::iter()
-				.map(|format| serde_json::to_value(format).expect("should not fail"))
-				.collect(),
-		),
-		..Default::default()
-	})
 }
