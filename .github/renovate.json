@@ -3,5 +3,14 @@
 	"extends": [
 		"replacements:all",
 		"workarounds:all"
+	],
+	"packageRules": [
+		// Ignore absolutely everything by default
+		{
+			"matchPackageNames": [
+				"*"
+			],
+			"enabled": false
+		}
 	]
 }
