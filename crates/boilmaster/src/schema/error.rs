@@ -21,4 +21,17 @@ impl From<ironworks_schema::Error> for Error {
 	}
 }
 
+macro_rules! impl_to_failure {
+	($source:ty) => {
+		impl From<$source> for Error {
+			fn from(value: $source) -> Self {
+				Self::Failure(value.into())
+			}
+		}
+	};
+}
+
+impl_to_failure!(bm_data::Error);
+impl_to_failure!(ironworks::Error);
+
 pub type Result<T, E = Error> = std::result::Result<T, E>;

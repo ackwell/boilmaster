@@ -5,8 +5,6 @@ use bm_version::VersionKey;
 use ironworks_schema::exdschema;
 use serde::Deserialize;
 
-use crate::utility::anyhow::Anyhow;
-
 use super::{
 	error::{Error, Result},
 	provider::Source,
@@ -151,13 +149,7 @@ impl ExdSchema {
 	}
 
 	fn excel_version(&self, version_key: VersionKey) -> Result<String> {
-		let version = self
-			.data
-			.version(version_key)
-			.anyhow()?
-			.excel()
-			.version()
-			.anyhow()?;
+		let version = self.data.version(version_key)?.excel().version()?;
 
 		Ok(version)
 	}

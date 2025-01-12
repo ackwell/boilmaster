@@ -107,6 +107,18 @@ impl From<QueryRejection> for Error {
 	}
 }
 
+macro_rules! impl_to_failure {
+	($source:ty) => {
+		impl From<$source> for Error {
+			fn from(value: $source) -> Self {
+				Self::Other(value.into())
+			}
+		}
+	};
+}
+
+impl_to_failure!(ironworks::Error);
+
 /// General purpose error response structure.
 #[derive(Serialize, JsonSchema)]
 pub struct ErrorResponse {

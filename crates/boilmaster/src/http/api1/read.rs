@@ -20,11 +20,7 @@ use schemars::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-	http::service,
-	read, schema,
-	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
-};
+use crate::{http::service, read, schema, utility::jsonschema::impl_jsonschema};
 
 use super::{
 	error::{Error, Result},
@@ -261,7 +257,7 @@ impl RowReader {
 
 		// Check the kind of the sheet to determine if we should report a subrow id.
 		// TODO: this is theoretically wasteful, though IW will have cached it anyway.
-		let result_subrow_id = match self.excel.sheet(&sheet).anyhow()?.kind().anyhow()? {
+		let result_subrow_id = match self.excel.sheet(&sheet)?.kind()? {
 			exh::SheetKind::Subrows => Some(subrow_id),
 			_ => None,
 		};

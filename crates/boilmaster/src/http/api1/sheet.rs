@@ -17,11 +17,7 @@ use schemars::{
 };
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use crate::{
-	http::service::Service,
-	schema,
-	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
-};
+use crate::{http::service::Service, schema, utility::jsonschema::impl_jsonschema};
 
 use super::{
 	api::ApiState,
@@ -92,7 +88,7 @@ async fn list(
 ) -> Result<impl IntoApiResponse> {
 	let excel = data.version(version_key)?.excel();
 
-	let list = excel.list().anyhow()?;
+	let list = excel.list()?;
 	let mut names = list
 		.iter()
 		.map(|name| name.into_owned())
