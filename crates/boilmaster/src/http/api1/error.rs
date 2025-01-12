@@ -8,7 +8,7 @@ use axum::{
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{asset, read, schema, search};
+use crate::{asset, read, search};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -61,9 +61,9 @@ impl From<read::Error> for Error {
 	}
 }
 
-impl From<schema::Error> for Error {
-	fn from(error: schema::Error) -> Self {
-		use schema::Error as SE;
+impl From<bm_schema::Error> for Error {
+	fn from(error: bm_schema::Error) -> Self {
+		use bm_schema::Error as SE;
 		match error {
 			SE::UnknownSource(..) | SE::InvalidVersion(..) => Self::Invalid(error.to_string()),
 			SE::Failure(inner) => Self::Other(inner),

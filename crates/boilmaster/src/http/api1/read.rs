@@ -20,7 +20,7 @@ use schemars::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{http::service, read, schema, utility::jsonschema::impl_jsonschema};
+use crate::{http::service, read, utility::jsonschema::impl_jsonschema};
 
 use super::{
 	error::{Error, Result},
@@ -76,7 +76,7 @@ struct RowReaderQuery {
 
 #[derive(Deserialize)]
 #[repr(transparent)]
-struct SchemaSpecifier(schema::Specifier);
+struct SchemaSpecifier(bm_schema::Specifier);
 
 impl_jsonschema!(SchemaSpecifier, specifier_jsonschema);
 fn specifier_jsonschema(_generator: &mut SchemaGenerator) -> Schema {
@@ -136,7 +136,7 @@ impl RowResult {
 pub struct RowReader {
 	read: service::Read,
 	pub excel: Arc<excel::Excel>,
-	pub schema_specifier: schema::CanonicalSpecifier,
+	pub schema_specifier: bm_schema::CanonicalSpecifier,
 	schema: Box<dyn ironworks_schema::Schema + Send>,
 	pub language: excel::Language,
 	fields: read::Filter,

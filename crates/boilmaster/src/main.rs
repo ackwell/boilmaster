@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use boilmaster::{asset, http, read, schema, search, tracing};
+use boilmaster::{asset, http, read, search, tracing};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -17,7 +17,7 @@ struct Config {
 	http: http::Config,
 	read: read::Config,
 	version: bm_version::Config,
-	schema: schema::Config,
+	schema: bm_schema::Config,
 	search: search::Config,
 }
 
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
 	let asset = Arc::new(asset::Service::new(data.clone()));
 	let read = Arc::new(read::Read::new(config.read));
 	let schema = Arc::new(
-		schema::Provider::new(config.schema, data.clone())
+		bm_schema::Provider::new(config.schema, data.clone())
 			.context("failed to create schema provider")?,
 	);
 	let search = Arc::new(

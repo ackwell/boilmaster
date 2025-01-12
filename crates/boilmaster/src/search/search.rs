@@ -18,8 +18,6 @@ use tokio::select;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::schema;
-
 use super::{
 	error::{Error, Result},
 	internal_query::{pre, Normalizer},
@@ -43,7 +41,7 @@ pub struct SearchRequestQuery {
 	pub query: pre::Node,
 	pub language: excel::Language,
 	pub sheets: Option<HashSet<String>>,
-	pub schema: schema::CanonicalSpecifier,
+	pub schema: bm_schema::CanonicalSpecifier,
 }
 
 #[derive(Debug)]
@@ -61,11 +59,11 @@ pub struct Search {
 	provider: Arc<sqlite::Provider>,
 
 	data: Arc<Data>,
-	schema: Arc<schema::Provider>,
+	schema: Arc<bm_schema::Provider>,
 }
 
 impl Search {
-	pub fn new(config: Config, data: Arc<Data>, schema: Arc<schema::Provider>) -> Result<Self> {
+	pub fn new(config: Config, data: Arc<Data>, schema: Arc<bm_schema::Provider>) -> Result<Self> {
 		Ok(Self {
 			ready: false.into(),
 			provider: Arc::new(sqlite::Provider::new(config.sqlite, data.clone())?),

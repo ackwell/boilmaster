@@ -1,6 +1,6 @@
 [package]
-name = "bm_data"
-description = "Versioned data access for boilmaster"
+name = "bm_schema"
+description = "Excel schema management for boilmaster"
 version = "0.0.0"
 publish = false
 
@@ -9,10 +9,15 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+bm_data = { path = "../bm_data" }
 bm_version = { path = "../bm_version" }
 
+ironworks_schema = { git = "https://github.com/ackwell/ironworks.git" }
+
 anyhow.workspace = true
+futures.workspace = true
 ironworks.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

@@ -63,6 +63,6 @@ impl_to_failure!(serde_json::Error);
 impl_to_failure!(std::io::Error);
 impl_to_failure!(tokio::task::JoinError);
 impl_to_failure!(bm_data::Error);
-impl_to_failure!(crate::schema::Error);
+impl_to_failure!(bm_schema::Error);
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

@@ -17,7 +17,7 @@ use schemars::{
 };
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use crate::{http::service::Service, schema, utility::jsonschema::impl_jsonschema};
+use crate::{http::service::Service, utility::jsonschema::impl_jsonschema};
 
 use super::{
 	api::ApiState,
@@ -210,7 +210,7 @@ fn rows_schema(_generator: &mut SchemaGenerator) -> Schema {
 struct SheetResponse {
 	/// The canonical specifier for the schema used in this response.
 	#[schemars(with = "String")]
-	schema: schema::CanonicalSpecifier,
+	schema: bm_schema::CanonicalSpecifier,
 
 	/// Array of rows retrieved by the query.
 	rows: Vec<RowResult>,
@@ -222,7 +222,7 @@ fn sheet_docs(operation: TransformOperation) -> TransformOperation {
 		.description("Read information about one or more rows and their related data.")
 		.response_with::<200, Json<SheetResponse>, _>(|response| {
 			response.example(SheetResponse {
-				schema: schema::CanonicalSpecifier {
+				schema: bm_schema::CanonicalSpecifier {
 					source: "source".into(),
 					version: "version".into(),
 				},
@@ -305,7 +305,7 @@ struct RowPath {
 struct RowResponse {
 	/// The canonical specifier for the schema used in this response.
 	#[schemars(with = "String")]
-	schema: schema::CanonicalSpecifier,
+	schema: bm_schema::CanonicalSpecifier,
 
 	#[serde(flatten)]
 	row: RowResult,
@@ -319,7 +319,7 @@ fn row_docs(operation: TransformOperation) -> TransformOperation {
 		)
 		.response_with::<200, Json<RowResponse>, _>(|response| {
 			response.example(RowResponse {
-				schema: schema::CanonicalSpecifier {
+				schema: bm_schema::CanonicalSpecifier {
 					source: "source".into(),
 					version: "version".into(),
 				},

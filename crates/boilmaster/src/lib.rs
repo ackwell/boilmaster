@@ -4,7 +4,6 @@
 pub mod asset;
 pub mod http;
 pub mod read;
-pub mod schema;
 pub mod search;
 pub mod tracing;
 mod utility;

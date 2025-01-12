@@ -15,7 +15,6 @@ use uuid::Uuid;
 
 use crate::{
 	http::service::Service,
-	schema,
 	search::{SearchRequest as InnerSearchRequest, SearchRequestQuery},
 };
 
@@ -91,7 +90,7 @@ struct SearchResponse {
 
 	/// The canonical specifier for the schema used in this response.
 	#[schemars(with = "String")]
-	schema: schema::CanonicalSpecifier,
+	schema: bm_schema::CanonicalSpecifier,
 
 	/// Array of results found by the query, sorted by their relevance.
 	results: Vec<SearchResult>,
@@ -122,7 +121,7 @@ fn search_docs(operation: TransformOperation) -> TransformOperation {
 		.response_with::<200, Json<SearchResponse>, _>(|response| {
 			response.example(SearchResponse {
 				next: Some(Uuid::from_str("bbe61a5e-7d22-41ec-9f5a-711c967c5624").expect("static")),
-				schema: schema::CanonicalSpecifier{
+				schema: bm_schema::CanonicalSpecifier{
 					source: "source".into(),
 					version: "version".into()
 				},

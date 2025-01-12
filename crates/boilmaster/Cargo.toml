@@ -10,6 +10,7 @@ license.workspace = true
 
 [dependencies]
 bm_data = { path = "../bm_data" }
+bm_schema = { path = "../bm_schema" }
 bm_version = { path = "../bm_version" }
 
 aho-corasick = "1.1.3"
