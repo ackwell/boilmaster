@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::Result;
 use figment::value::magic::RelativePathBuf;
-use fs4::FileExt;
+use fs4::fs_std::FileExt;
 use futures::future::{join_all, try_join_all};
 use nonempty::NonEmpty;
 use serde::{Deserialize, Serialize};
