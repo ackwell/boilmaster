@@ -10,12 +10,19 @@
 		"* 0-9 * * 6"
 	],
 	"packageRules": [
+		{
+			"matchPackageNames": [
+				"*"
+			],
+			"enabled": false
+		},
 		// Group all rust package updates
 		{
 			"matchManagers": [
 				"cargo"
 			],
-			"groupName": "cargo"
+			"groupName": "cargo",
+			"enabled": true
 		},
 		// Disable updates for cargo updates that aren't semver-major
 		{
