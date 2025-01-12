@@ -10,6 +10,7 @@
 		"* 0-9 * * 6"
 	],
 	"packageRules": [
+		// Disable renovate by default - we'll opt-in ecosystems as appropriate.
 		{
 			"matchPackageNames": [
 				"*"
