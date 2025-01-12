@@ -1,4 +1,4 @@
-use crate::version::VersionKey;
+use bm_version::VersionKey;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

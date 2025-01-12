@@ -1,10 +1,11 @@
 use std::{borrow::Cow, sync::Arc};
 
 use anyhow::anyhow;
+use bm_version::VersionKey;
 use ironworks_schema::exdschema;
 use serde::Deserialize;
 
-use crate::{data, utility::anyhow::Anyhow, version::VersionKey};
+use crate::{data, utility::anyhow::Anyhow};
 
 use super::{
 	error::{Error, Result},

@@ -8,13 +8,11 @@ use axum::{
 	routing::get,
 	Form, Router,
 };
+use bm_version::VersionKey;
 use maud::{html, Render};
 use serde::Deserialize;
 
-use crate::{
-	http::{http::HttpState, service::Service},
-	version::VersionKey,
-};
+use crate::http::{http::HttpState, service::Service};
 
 use super::{base::BaseTemplate, error::Result};
 

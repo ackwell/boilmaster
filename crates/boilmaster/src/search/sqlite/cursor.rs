@@ -1,11 +1,10 @@
 use std::time::Duration;
 
+use bm_version::VersionKey;
 use mini_moka::sync as moka;
 use sea_query::SelectStatement;
 use serde::Deserialize;
 use uuid::Uuid;
-
-use crate::version::VersionKey;
 
 #[derive(Debug, Clone)]
 pub struct Cursor {

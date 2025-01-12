@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
+use bm_version::VersionKey;
 use image::{ImageBuffer, Pixel, Rgb};
 use ironworks::Ironworks;
 
-use crate::{data, version::VersionKey};
+use crate::data;
 
 use super::{
 	error::{Error, Result},

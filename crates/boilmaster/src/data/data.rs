@@ -4,14 +4,13 @@ use std::{
 };
 
 use anyhow::Context;
+use bm_version::{VersionKey, VersionMessage};
 use ironworks::{excel::Excel, sqpack::SqPack, zipatch, Ironworks};
 use tokio::{
 	select,
 	sync::{broadcast, watch},
 };
 use tokio_util::sync::CancellationToken;
-
-use crate::version::{self, VersionKey, VersionMessage};
 
 use super::error::{Error, Result};
 
@@ -50,7 +49,11 @@ impl Data {
 		self.channel.subscribe()
 	}
 
-	pub async fn start(&self, cancel: CancellationToken, version: &version::Manager) -> Result<()> {
+	pub async fn start(
+		&self,
+		cancel: CancellationToken,
+		version: &bm_version::Manager,
+	) -> Result<()> {
 		// Grab a receiver for version info early, so any information while we prepare is not lost.
 		let mut receiver = version.subscribe();
 
@@ -77,7 +80,7 @@ impl Data {
 
 	fn hydrate_versions(
 		&self,
-		version: &version::Manager,
+		version: &bm_version::Manager,
 		versions: Vec<VersionKey>,
 		on_known: OnKnown,
 	) -> Result<()> {
@@ -116,7 +119,11 @@ impl Data {
 		Ok(())
 	}
 
-	fn prepare_version(&self, manager: &version::Manager, version_key: VersionKey) -> Result<()> {
+	fn prepare_version(
+		&self,
+		manager: &bm_version::Manager,
+		version_key: VersionKey,
+	) -> Result<()> {
 		// Preparation only happens when we're told that a version exists, so anything going wrong _here_ is a hefty failure.
 		let version = manager
 			.version(version_key)

@@ -11,11 +11,12 @@ use axum::{
 	http::request::Parts,
 	RequestPartsExt,
 };
+use bm_version::VersionKey;
 use ironworks::{excel, file::exh, sestring::format::Input};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{http::service, read, schema, utility::anyhow::Anyhow, version::VersionKey};
+use crate::{http::service, read, schema, utility::anyhow::Anyhow};
 
 use super::{
 	error::{Error, Result},

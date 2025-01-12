@@ -5,10 +5,11 @@ use axum::{
 	http::request::Parts,
 	RequestPartsExt,
 };
+use bm_version::VersionKey;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::{http::service::Service, version::VersionKey};
+use crate::http::service::Service;
 
 use super::error::Error;
 

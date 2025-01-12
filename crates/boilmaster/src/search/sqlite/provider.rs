@@ -5,6 +5,7 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
+use bm_version::VersionKey;
 use figment::value::magic::RelativePathBuf;
 use futures::future::try_join_all;
 use ironworks::excel::Sheet;
@@ -21,7 +22,6 @@ use crate::{
 		internal_query::post,
 		search::SearchResult,
 	},
-	version::VersionKey,
 };
 
 use super::{cursor, database::Database};

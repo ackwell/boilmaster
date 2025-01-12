@@ -1,12 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
+use bm_version::VersionKey;
 use futures::future::join_all;
 use ironworks_schema::Schema;
 use serde::Deserialize;
 use tokio::{select, time};
 use tokio_util::sync::CancellationToken;
 
-use crate::{data, version::VersionKey};
+use crate::data;
 
 use super::{
 	error::{Error, Result},

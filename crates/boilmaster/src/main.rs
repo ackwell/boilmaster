@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use boilmaster::{asset, data, http, read, schema, search, tracing, version};
+use boilmaster::{asset, data, http, read, schema, search, tracing};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -16,7 +16,7 @@ struct Config {
 	// tracing: tracing::Config, - read individually.
 	http: http::Config,
 	read: read::Config,
-	version: version::Config,
+	version: bm_version::Config,
 	schema: schema::Config,
 	search: search::Config,
 }
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
 		.context("failed to extract config")?;
 
 	let version = Arc::new(
-		version::Manager::new(config.version).context("failed to create version manager")?,
+		bm_version::Manager::new(config.version).context("failed to create version manager")?,
 	);
 	let data = Arc::new(data::Data::new());
 	let asset = Arc::new(asset::Service::new(data.clone()));
