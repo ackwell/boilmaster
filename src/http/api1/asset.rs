@@ -56,9 +56,9 @@ pub fn router(config: Config, state: ApiState) -> ApiRouter {
 
 	ApiRouter::new()
 		.api_route("/", get_with(asset2, asset2_docs))
-		.api_route("/map/:territory/:index", get_with(map, map_docs))
+		.api_route("/map/{territory}/{index}", get_with(map, map_docs))
 		// Fall back to the old asset endpoint for compatibility.
-		.route("/*path", axum::routing::get(asset1))
+		.route("/{*path}", axum::routing::get(asset1))
 		.layer(middleware::from_fn_with_state(state.clone(), cache_layer))
 		.with_state(state)
 }

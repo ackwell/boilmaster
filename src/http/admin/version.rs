@@ -21,13 +21,13 @@ use super::{base::BaseTemplate, error::Result};
 pub fn router(state: HttpState) -> Router {
 	Router::new()
 		.route(
-			"/:version_key",
+			"/{version_key}",
 			get(get_version)
 				.post(post_version)
 				.with_state(state.clone()),
 		)
 		.route(
-			"/:version_key/delete",
+			"/{version_key}/delete",
 			get(delete_instructions).with_state(state),
 		)
 }

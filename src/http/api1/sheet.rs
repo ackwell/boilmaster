@@ -57,7 +57,7 @@ pub fn router(config: Config, api_state: ApiState) -> ApiRouter {
 	ApiRouter::new()
 		.api_route("/", get_with(list, list_docs).with_state(api_state.clone()))
 		.api_route(
-			"/:sheet",
+			"/{sheet}",
 			get_with(sheet, sheet_docs).with_state(RowsState {
 				services: api_state.services.clone(),
 				reader_config: config.list,
@@ -66,7 +66,7 @@ pub fn router(config: Config, api_state: ApiState) -> ApiRouter {
 			}),
 		)
 		.api_route(
-			"/:sheet/:row",
+			"/{sheet}/{row}",
 			get_with(row, row_docs).with_state(RowsState {
 				services: api_state.services,
 				reader_config: config.entry,
