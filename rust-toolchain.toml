@@ -1,3 +1,6 @@
 [toolchain]
-# NOTE: Update README with this version when changing.
+# NOTE: This must be maintained in sync with other locations:
+# - /Cargo.toml
+# - /Dockerfile
+# - /README.md
 channel = "1.82.0"
