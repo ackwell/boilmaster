@@ -13,10 +13,18 @@ use axum::{
 };
 use bm_version::VersionKey;
 use ironworks::{excel, file::exh, sestring::format::Input};
-use schemars::JsonSchema;
+use schemars::{
+	gen::SchemaGenerator,
+	schema::{InstanceType, Schema, SchemaObject, StringValidation},
+	JsonSchema,
+};
 use serde::{Deserialize, Serialize};
 
-use crate::{http::service, read, schema, utility::anyhow::Anyhow};
+use crate::{
+	http::service,
+	read, schema,
+	utility::{anyhow::Anyhow, jsonschema::impl_jsonschema},
+};
 
 use super::{
 	error::{Error, Result},
@@ -61,13 +69,32 @@ struct RowReaderQuery {
 	language: Option<read::LanguageString>,
 
 	/// Schema that row data should be read with.
-	schema: Option<schema::Specifier>,
+	schema: Option<SchemaSpecifier>,
 
 	/// Data fields to read for selected rows.
 	fields: Option<FilterString>,
 
 	/// Data fields to read for selected rows' transient row, if any is present.
 	transient: Option<FilterString>,
+}
+
+#[derive(Deserialize)]
+#[repr(transparent)]
+struct SchemaSpecifier(schema::Specifier);
+
+impl_jsonschema!(SchemaSpecifier, specifier_jsonschema);
+fn specifier_jsonschema(_generator: &mut SchemaGenerator) -> Schema {
+	Schema::Object(SchemaObject {
+		instance_type: Some(InstanceType::String.into()),
+		string: Some(
+			StringValidation {
+				pattern: Some("^.+(@.+)?$".into()),
+				..Default::default()
+			}
+			.into(),
+		),
+		..Default::default()
+	})
 }
 
 // TODO: ideally this structure is equivalent to the relation metadata from read:: - to the point honestly it probably _should_ be that. yet another thing to consider when reworking read::.
@@ -148,7 +175,8 @@ where
 		let excel = data.version(version_key)?.excel();
 
 		// TODO: should this be a bit like versionquery for the schema shit?
-		let schema_specifier = schema_provider.canonicalize(query.schema, version_key)?;
+		let schema_specifier =
+			schema_provider.canonicalize(query.schema.map(|nt| nt.0), version_key)?;
 
 		let language = query
 			.language
