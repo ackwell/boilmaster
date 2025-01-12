@@ -1,18 +1,16 @@
 use std::{collections::HashSet, sync::OnceLock};
 
 use aho_corasick::AhoCorasick;
+use bm_read::LanguageString;
 use ironworks::excel::Language;
 use sea_query::{
 	Alias, ColumnRef, Condition, DynIden, Expr, Func, Iden, IntoColumnRef, IntoCondition, LikeExpr,
 	Order, Query, SelectStatement, SimpleExpr, TableRef, UnionType,
 };
 
-use crate::{
-	read::LanguageString,
-	search::{
-		error::{Error, Result},
-		internal_query::post,
-	},
+use crate::search::{
+	error::{Error, Result},
+	internal_query::post,
 };
 
 use super::schema::{column_name, table_name, KnownColumn};

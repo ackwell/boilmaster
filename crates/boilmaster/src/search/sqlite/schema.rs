@@ -1,7 +1,6 @@
+use bm_read::LanguageString;
 use ironworks::{excel::Language, file::exh};
 use sea_query::{Alias, ColumnType, Iden};
-
-use crate::read::LanguageString;
 
 pub fn table_name(sheet_name: &str, language: Language) -> Alias {
 	let language_string = LanguageString::from(language);

@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{anyhow, Context};
 use bb8::{Pool, PooledConnection};
+use bm_read::LanguageString;
 use ironworks::excel::{Excel, Sheet};
 use itertools::Itertools;
 use sea_query::{Iden, Quote, SqliteQueryBuilder};
@@ -15,13 +16,10 @@ use sea_query_rusqlite::RusqliteBinder;
 use tokio::task;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-	read::LanguageString,
-	search::{
-		error::{Error, Result},
-		internal_query::post,
-		search::SearchResult,
-	},
+use crate::search::{
+	error::{Error, Result},
+	internal_query::post,
+	search::SearchResult,
 };
 
 use super::{

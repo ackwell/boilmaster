@@ -8,7 +8,7 @@ use axum::{
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{read, search};
+use crate::search;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -48,9 +48,9 @@ impl From<bm_data::Error> for Error {
 	}
 }
 
-impl From<read::Error> for Error {
-	fn from(error: read::Error) -> Self {
-		use read::Error as RE;
+impl From<bm_read::Error> for Error {
+	fn from(error: bm_read::Error) -> Self {
+		use bm_read::Error as RE;
 		match error {
 			RE::NotFound(..) => Self::NotFound(error.to_string()),
 			RE::FilterSchemaMismatch(..) | RE::SchemaGameMismatch(..) | RE::InvalidLanguage(..) => {

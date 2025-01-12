@@ -19,6 +19,7 @@ opt-level = 3
 anyhow = "1.0.55"
 futures = "0.3.25"
 ironworks = { git = "https://github.com/ackwell/ironworks.git" }
+ironworks_schema = { git = "https://github.com/ackwell/ironworks.git" }
 serde = "1.0.137"
 thiserror = "2.0.3"
 tokio = "1.32.0"

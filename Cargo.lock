@@ -355,6 +355,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bm_read"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "either",
+ "ironworks",
+ "ironworks_schema",
+ "serde",
+ "thiserror 2.0.3",
+ "tracing",
+]
+
+[[package]]
 name = "bm_schema"
 version = "0.0.0"
 dependencies = [
@@ -402,6 +415,7 @@ dependencies = [
  "bb8",
  "bm_asset",
  "bm_data",
+ "bm_read",
  "bm_schema",
  "bm_version",
  "console-subscriber",

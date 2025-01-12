@@ -1,13 +1,11 @@
 use std::{marker::PhantomData, os::raw::c_int, sync::Arc};
 
+use bm_read::LanguageString;
 use ironworks::{excel, file::exh};
 use rusqlite::{types::ToSqlOutput, vtab, Connection, ToSql};
 use sea_query::{Alias, ColumnDef, SqliteQueryBuilder, Table};
 
-use crate::{
-	read::LanguageString,
-	search::sqlite::schema::{column_name, column_type},
-};
+use crate::search::sqlite::schema::{column_name, column_type};
 
 use super::schema::KnownColumn;
 

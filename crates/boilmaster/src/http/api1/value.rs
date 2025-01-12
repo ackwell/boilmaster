@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use bm_read as read;
 use ironworks::{excel, sestring};
 use schemars::{
 	gen::SchemaGenerator,
@@ -7,7 +8,7 @@ use schemars::{
 };
 use serde::ser::{Error as SerError, Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
-use crate::{read, utility::jsonschema::impl_jsonschema};
+use crate::utility::jsonschema::impl_jsonschema;
 
 use super::string;
 

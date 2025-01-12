@@ -14,7 +14,7 @@ use nom::{
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
 
-use crate::{read, search::query};
+use crate::search::query;
 
 use super::error;
 
@@ -147,7 +147,7 @@ fn struct_specifier(input: &str) -> ParseResult<query::FieldSpecifier> {
 // TODO: this is duplicated with filter - share?
 fn language(input: &str) -> ParseResult<excel::Language> {
 	map_res(alphanumeric1, |str: &str| {
-		str.parse::<read::LanguageString>()
+		str.parse::<bm_read::LanguageString>()
 			.map(excel::Language::from)
 	})(input)
 }

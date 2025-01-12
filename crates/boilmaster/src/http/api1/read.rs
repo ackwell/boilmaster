@@ -11,6 +11,7 @@ use axum::{
 	http::request::Parts,
 	RequestPartsExt,
 };
+use bm_read as read;
 use bm_version::VersionKey;
 use ironworks::{excel, file::exh, sestring::format::Input};
 use schemars::{
@@ -20,7 +21,7 @@ use schemars::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{http::service, read, utility::jsonschema::impl_jsonschema};
+use crate::{http::service, utility::jsonschema::impl_jsonschema};
 
 use super::{
 	error::{Error, Result},

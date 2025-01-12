@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt, str::FromStr};
 
+use bm_read as read;
 use ironworks::excel;
 use nom::{
 	branch::alt,
@@ -12,8 +13,6 @@ use nom::{
 };
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
-
-use crate::read;
 
 use super::error;
 
