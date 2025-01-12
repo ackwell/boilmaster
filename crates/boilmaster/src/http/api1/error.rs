@@ -8,7 +8,7 @@ use axum::{
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{asset, read, search};
+use crate::{read, search};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -25,9 +25,9 @@ pub enum Error {
 	Other(#[from] anyhow::Error),
 }
 
-impl From<asset::Error> for Error {
-	fn from(error: asset::Error) -> Self {
-		use asset::Error as AE;
+impl From<bm_asset::Error> for Error {
+	fn from(error: bm_asset::Error) -> Self {
+		use bm_asset::Error as AE;
 		match error {
 			AE::NotFound(..) => Self::NotFound(error.to_string()),
 			AE::UnsupportedSource(..) | AE::InvalidConversion(..) | AE::UnknownFormat(..) => {

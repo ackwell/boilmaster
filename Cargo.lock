@@ -326,6 +326,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "bm_asset"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "bm_data",
+ "bm_version",
+ "image",
+ "image_dds",
+ "ironworks",
+ "itertools 0.14.0",
+ "serde",
+ "strum",
+ "thiserror 2.0.3",
+]
+
+[[package]]
 name = "bm_data"
 version = "0.0.0"
 dependencies = [
@@ -384,6 +400,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "bb8",
+ "bm_asset",
  "bm_data",
  "bm_schema",
  "bm_version",

@@ -1,0 +1,23 @@
+[package]
+name = "bm_asset"
+description = "Asset composition & conversion for boilmaster"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bm_data = { path = "../bm_data" }
+bm_version = { path = "../bm_version" }
+
+image_dds = { version = "0.7.0", default-features = false }
+image = { version = "0.25.1", default-features = false }
+itertools = "0.14.0"
+strum = "0.26.2"
+
+anyhow.workspace = true
+ironworks.workspace = true
+serde.workspace = true
+thiserror.workspace = true

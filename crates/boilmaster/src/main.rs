@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use boilmaster::{asset, http, read, search, tracing};
+use boilmaster::{http, read, search, tracing};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
 		bm_version::Manager::new(config.version).context("failed to create version manager")?,
 	);
 	let data = Arc::new(bm_data::Data::new());
-	let asset = Arc::new(asset::Service::new(data.clone()));
+	let asset = Arc::new(bm_asset::Service::new(data.clone()));
 	let read = Arc::new(read::Read::new(config.read));
 	let schema = Arc::new(
 		bm_schema::Provider::new(config.schema, data.clone())

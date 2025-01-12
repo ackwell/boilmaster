@@ -20,6 +20,7 @@ use axum_extra::{
 	headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch},
 	TypedHeader,
 };
+use bm_asset::Format;
 use reqwest::StatusCode;
 use schemars::{
 	gen::SchemaGenerator,
@@ -30,7 +31,7 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{asset::Format, http::service::Service, utility::jsonschema::impl_jsonschema};
+use crate::{http::service::Service, utility::jsonschema::impl_jsonschema};
 
 use super::{
 	api::ApiState,
