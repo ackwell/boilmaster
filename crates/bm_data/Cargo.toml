@@ -12,7 +12,7 @@ license.workspace = true
 bm_version = { path = "../bm_version" }
 
 anyhow.workspace = true
-ironworks.workspace = true
+ironworks = { workspace = true, features = ["excel", "sqpack", "zipatch"] }
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

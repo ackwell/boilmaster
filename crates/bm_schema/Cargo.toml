@@ -15,7 +15,7 @@ bm_version = { path = "../bm_version" }
 anyhow.workspace = true
 futures.workspace = true
 ironworks.workspace = true
-ironworks_schema.workspace = true
+ironworks_schema = { workspace = true, features = ["exdschema"] }
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
