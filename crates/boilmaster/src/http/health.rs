@@ -1,5 +1,6 @@
-use axum::{debug_handler, extract::State, response::IntoResponse, routing::get, Router};
-use reqwest::StatusCode;
+use axum::{
+	debug_handler, extract::State, http::StatusCode, response::IntoResponse, routing::get, Router,
+};
 
 use super::{http::HttpState, service::Service};
 

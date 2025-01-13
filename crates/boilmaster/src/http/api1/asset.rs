@@ -12,7 +12,7 @@ use aide::{
 use axum::{
 	debug_handler,
 	extract::{FromRef, OriginalUri, Request, State},
-	http::header,
+	http::{header, StatusCode},
 	middleware,
 	response::{IntoResponse, Response},
 };
@@ -21,7 +21,6 @@ use axum_extra::{
 	TypedHeader,
 };
 use bm_asset::Format;
-use reqwest::StatusCode;
 use schemars::{
 	gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject},
@@ -29,7 +28,6 @@ use schemars::{
 };
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
 
 use crate::http::service::Service;
 

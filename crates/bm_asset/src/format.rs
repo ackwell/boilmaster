@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use serde::{de, Deserialize, Serialize};
-use strum::EnumIter;
+use strum::{EnumIter, IntoEnumIterator};
 
 use super::{convert, error::Error};
 
@@ -13,6 +13,10 @@ pub enum Format {
 }
 
 impl Format {
+	pub fn iter() -> impl Iterator<Item = Format> {
+		<Self as IntoEnumIterator>::iter()
+	}
+
 	pub fn extension(&self) -> &str {
 		match self {
 			Self::Jpeg => "jpg",
