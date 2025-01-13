@@ -9,9 +9,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-either = "1.8.0"
 
 anyhow.workspace = true
+either.workspace = true
 ironworks.workspace = true
 ironworks_schema.workspace = true
 serde.workspace = true

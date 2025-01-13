@@ -12,6 +12,7 @@ license.workspace = true
 bm_asset = { path = "../bm_asset" }
 bm_data = { path = "../bm_data" }
 bm_read = { path = "../bm_read" }
+bm_search = { path = "../bm_search" }
 bm_schema = { path = "../bm_schema" }
 bm_version = { path = "../bm_version" }
 

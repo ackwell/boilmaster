@@ -9,14 +9,12 @@ use axum::{
 	extract::{FromRef, State},
 	Json,
 };
+use bm_search::{SearchRequest as InnerSearchRequest, SearchRequestQuery};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-	http::service::Service,
-	search::{SearchRequest as InnerSearchRequest, SearchRequestQuery},
-};
+use crate::http::service::Service;
 
 use super::{
 	api::ApiState,

@@ -385,6 +385,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "bm_search"
+version = "0.0.0"
+dependencies = [
+ "aho-corasick",
+ "anyhow",
+ "bb8",
+ "bm_data",
+ "bm_read",
+ "bm_schema",
+ "bm_version",
+ "either",
+ "figment",
+ "futures",
+ "ironworks",
+ "ironworks_schema",
+ "itertools 0.14.0",
+ "mini-moka",
+ "rusqlite",
+ "sea-query",
+ "sea-query-rusqlite",
+ "serde",
+ "thiserror 2.0.3",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "bm_version"
 version = "0.0.0"
 dependencies = [
@@ -417,6 +446,7 @@ dependencies = [
  "bm_data",
  "bm_read",
  "bm_schema",
+ "bm_search",
  "bm_version",
  "console-subscriber",
  "derivative",

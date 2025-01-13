@@ -5,9 +5,7 @@ use ironworks::{excel, file::exh};
 use rusqlite::{types::ToSqlOutput, vtab, Connection, ToSql};
 use sea_query::{Alias, ColumnDef, SqliteQueryBuilder, Table};
 
-use crate::search::sqlite::schema::{column_name, column_type};
-
-use super::schema::KnownColumn;
+use super::schema::{column_name, column_type, KnownColumn};
 
 pub fn load_module(connection: &Connection, excel: Arc<excel::Excel>) -> rusqlite::Result<()> {
 	let module = vtab::read_only_module::<'_, IronworksTable>();

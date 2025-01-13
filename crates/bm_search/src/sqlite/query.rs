@@ -8,7 +8,7 @@ use sea_query::{
 	Order, Query, SelectStatement, SimpleExpr, TableRef, UnionType,
 };
 
-use crate::search::{
+use crate::{
 	error::{Error, Result},
 	internal_query::post,
 };

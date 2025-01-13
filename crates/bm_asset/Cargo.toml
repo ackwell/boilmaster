@@ -14,10 +14,10 @@ bm_version = { path = "../bm_version" }
 
 image_dds = { version = "0.7.0", default-features = false }
 image = { version = "0.25.1", default-features = false }
-itertools = "0.14.0"
 strum = "0.26.2"
 
 anyhow.workspace = true
 ironworks.workspace = true
+itertools.workspace = true
 serde.workspace = true
 thiserror.workspace = true

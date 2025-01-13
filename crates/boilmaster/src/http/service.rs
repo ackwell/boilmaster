@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use crate::search;
-
 pub type Asset = Arc<bm_asset::Service>;
 pub type Data = Arc<bm_data::Data>;
 pub type Read = Arc<bm_read::Read>;
 pub type Schema = Arc<bm_schema::Provider>;
-pub type Search = Arc<search::Search>;
+pub type Search = Arc<bm_search::Search>;
 pub type Version = Arc<bm_version::Manager>;
 
 #[derive(Clone)]

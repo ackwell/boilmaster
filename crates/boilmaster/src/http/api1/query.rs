@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use bm_search::query;
 use ironworks::excel;
 use nom::{
 	branch::alt,
@@ -13,8 +14,6 @@ use nom::{
 };
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
-
-use crate::search::query;
 
 use super::error;
 

@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 use uuid::Uuid;
 
-use crate::search::{
+use crate::{
 	error::{Error, Result},
 	internal_query::post,
 	search::SearchResult,

@@ -1,7 +1,7 @@
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 
-use crate::search::error::{Error, MismatchError, Result};
+use crate::error::{Error, MismatchError, Result};
 
 use super::{field, post, pre};
 

@@ -16,7 +16,7 @@ use sea_query_rusqlite::RusqliteBinder;
 use tokio::task;
 use tokio_util::sync::CancellationToken;
 
-use crate::search::{
+use crate::{
 	error::{Error, Result},
 	internal_query::post,
 	search::SearchResult,

@@ -8,8 +8,6 @@ use axum::{
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::search;
-
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
 	#[error("not found: {0}")]
@@ -71,9 +69,9 @@ impl From<bm_schema::Error> for Error {
 	}
 }
 
-impl From<search::Error> for Error {
-	fn from(error: search::Error) -> Self {
-		use search::Error as SE;
+impl From<bm_search::Error> for Error {
+	fn from(error: bm_search::Error) -> Self {
+		use bm_search::Error as SE;
 		match error {
 			SE::NotReady => Self::Unavailable(error.to_string()),
 			SE::FieldType(..)
