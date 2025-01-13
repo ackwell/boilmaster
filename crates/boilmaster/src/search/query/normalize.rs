@@ -1,12 +1,9 @@
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 
-use crate::{
-	search::error::{Error, MismatchError, Result},
-	utility::field,
-};
+use crate::search::error::{Error, MismatchError, Result};
 
-use super::{post, pre};
+use super::{field, post, pre};
 
 #[derive(Clone)]
 struct Context<'a> {
