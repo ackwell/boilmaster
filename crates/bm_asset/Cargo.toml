@@ -12,12 +12,11 @@ license.workspace = true
 bm_data = { path = "../bm_data" }
 bm_version = { path = "../bm_version" }
 
-image_dds = { version = "0.7.0", default-features = false }
-image = { version = "0.25.1", default-features = false }
-strum = "0.26.2"
-
 anyhow.workspace = true
+image.workspace = true
+image_dds.workspace = true
 ironworks.workspace = true
 itertools.workspace = true
 serde.workspace = true
+strum.workspace = true
 thiserror.workspace = true
