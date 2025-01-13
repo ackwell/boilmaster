@@ -8,9 +8,7 @@ use schemars::{
 };
 use serde::ser::{Error as SerError, Serialize, SerializeMap, SerializeSeq, SerializeStruct};
 
-use crate::utility::jsonschema::impl_jsonschema;
-
-use super::string;
+use super::{jsonschema::impl_jsonschema, string};
 
 #[derive(Debug)]
 pub struct ValueString(

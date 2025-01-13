@@ -21,12 +21,13 @@ use schemars::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{http::service, utility::jsonschema::impl_jsonschema};
+use crate::http::service;
 
 use super::{
 	error::{Error, Result},
 	extract::{Query, VersionQuery},
 	filter::FilterString,
+	jsonschema::impl_jsonschema,
 	string::build_input,
 	value::ValueString,
 };

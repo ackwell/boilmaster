@@ -31,12 +31,13 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{http::service::Service, utility::jsonschema::impl_jsonschema};
+use crate::http::service::Service;
 
 use super::{
 	api::ApiState,
 	error::Result,
 	extract::{Path, Query, VersionQuery},
+	jsonschema::impl_jsonschema,
 };
 
 // NOTE: Bump this if changing any behavior that impacts output binary data for assets, to ensure ETag is cache-broken.

@@ -3,6 +3,7 @@ mod asset;
 mod error;
 mod extract;
 mod filter;
+mod jsonschema;
 mod query;
 mod read;
 mod search;

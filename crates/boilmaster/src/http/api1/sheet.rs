@@ -17,12 +17,13 @@ use schemars::{
 };
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use crate::{http::service::Service, utility::jsonschema::impl_jsonschema};
+use crate::http::service::Service;
 
 use super::{
 	api::ApiState,
 	error::{Error, Result},
 	extract::{Path, Query, VersionQuery},
+	jsonschema::impl_jsonschema,
 	read::{RowReader, RowReaderConfig, RowReaderState, RowResult},
 };
 
