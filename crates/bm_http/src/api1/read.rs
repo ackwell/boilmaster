@@ -21,7 +21,7 @@ use schemars::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::http::service;
+use crate::service;
 
 use super::{
 	error::{Error, Result},

@@ -1,7 +1,7 @@
 use axum::{middleware, Router};
 use serde::Deserialize;
 
-use crate::http::http::HttpState;
+use crate::http::HttpState;
 
 use super::{
 	auth::{basic_auth, BasicAuth},

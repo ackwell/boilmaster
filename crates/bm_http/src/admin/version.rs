@@ -12,7 +12,7 @@ use bm_version::VersionKey;
 use maud::{html, Render};
 use serde::Deserialize;
 
-use crate::http::{http::HttpState, service::Service};
+use crate::{http::HttpState, service::Service};
 
 use super::{base::BaseTemplate, error::Result};
 

@@ -14,7 +14,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::http::service::Service;
+use crate::service::Service;
 
 use super::{
 	api::ApiState,

@@ -354,6 +354,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "bm_http"
+version = "0.0.0"
+dependencies = [
+ "aho-corasick",
+ "aide",
+ "anyhow",
+ "axum",
+ "axum-extra",
+ "bm_asset",
+ "bm_data",
+ "bm_read",
+ "bm_schema",
+ "bm_search",
+ "bm_version",
+ "either",
+ "git-version",
+ "ironworks",
+ "ironworks_schema",
+ "maud",
+ "mime",
+ "nom",
+ "pretty_assertions",
+ "regex",
+ "schemars",
+ "seahash",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.3",
+ "tokio",
+ "tokio-util",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "bm_read"
 version = "0.0.0"
 dependencies = [
@@ -442,6 +478,7 @@ dependencies = [
  "axum-extra",
  "bm_asset",
  "bm_data",
+ "bm_http",
  "bm_read",
  "bm_schema",
  "bm_search",

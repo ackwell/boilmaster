@@ -29,7 +29,7 @@ use schemars::{
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 
-use crate::http::service::Service;
+use crate::service::Service;
 
 use super::{
 	api::ApiState,

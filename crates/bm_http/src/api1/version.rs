@@ -4,7 +4,7 @@ use aide::{
 };
 use axum::{debug_handler, extract::State, Json};
 
-use crate::http::service::Service;
+use crate::service::Service;
 
 use super::api::ApiState;
 

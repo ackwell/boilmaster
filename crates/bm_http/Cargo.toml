@@ -1,6 +1,6 @@
 [package]
-name = "boilmaster"
-description = "Web service for Final Fantasy XIV game data and asset discovery"
+name = "bm_http"
+description = "HTTP endpoints for boilmaster."
 version = "0.0.0"
 publish = false
 
@@ -11,7 +11,6 @@ license.workspace = true
 [dependencies]
 bm_asset = { path = "../bm_asset" }
 bm_data = { path = "../bm_data" }
-bm_http = { path = "../bm_http" }
 bm_read = { path = "../bm_read" }
 bm_schema = { path = "../bm_schema" }
 bm_search = { path = "../bm_search" }
@@ -22,12 +21,9 @@ anyhow.workspace = true
 aide = { workspace = true, features = ["axum", "macros"] }
 axum = { workspace = true, features = ["macros"] }
 axum-extra = { workspace = true, features = ["typed-header"] }
-console-subscriber.workspace = true
 either.workspace = true
-figment = { workspace = true, features = ["env", "toml"] }
-futures.workspace = true
 git-version.workspace = true
-ironworks = { workspace = true, features = ["excel"] }
+ironworks = { workspace = true }
 ironworks_schema.workspace = true
 maud = { workspace = true, features = ["axum"] }
 mime.workspace = true
@@ -38,11 +34,10 @@ seahash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
+tokio = { workspace = true }
 tokio-util.workspace = true
 tower-http = { workspace = true, features = ["cors", "trace"] }
 tracing.workspace = true
-tracing-subscriber = { workspace = true, features = ["json"] }
 uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]

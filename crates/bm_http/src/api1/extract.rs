@@ -9,7 +9,7 @@ use bm_version::VersionKey;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::http::service::Service;
+use crate::service::Service;
 
 use super::error::Error;
 

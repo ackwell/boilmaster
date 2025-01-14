@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use boilmaster::{http, tracing};
+use boilmaster::tracing;
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Deserialize)]
 struct Config {
 	// tracing: tracing::Config, - read individually.
-	http: http::Config,
+	http: bm_http::Config,
 	read: bm_read::Config,
 	version: bm_version::Config,
 	schema: bm_schema::Config,
@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
 		search
 			.start(shutdown_token.child_token())
 			.map(|result| result.context("search service")),
-		http::serve(
+		bm_http::serve(
 			shutdown_token,
 			config.http,
 			asset,
