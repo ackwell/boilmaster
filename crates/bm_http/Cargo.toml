@@ -1,0 +1,44 @@
+[package]
+name = "bm_http"
+description = "HTTP endpoints for boilmaster."
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bm_asset = { path = "../bm_asset" }
+bm_data = { path = "../bm_data" }
+bm_read = { path = "../bm_read" }
+bm_schema = { path = "../bm_schema" }
+bm_search = { path = "../bm_search" }
+bm_version = { path = "../bm_version" }
+
+aho-corasick.workspace = true
+anyhow.workspace = true
+aide = { workspace = true, features = ["axum", "macros"] }
+axum = { workspace = true, features = ["macros"] }
+axum-extra = { workspace = true, features = ["typed-header"] }
+either.workspace = true
+git-version.workspace = true
+ironworks = { workspace = true }
+ironworks_schema.workspace = true
+maud = { workspace = true, features = ["axum"] }
+mime.workspace = true
+nom.workspace = true
+regex.workspace = true
+schemars = { workspace = true, features = ["preserve_order", "uuid1"] }
+seahash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true }
+tokio-util.workspace = true
+tower-http = { workspace = true, features = ["cors", "trace"] }
+tracing.workspace = true
+uuid = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"

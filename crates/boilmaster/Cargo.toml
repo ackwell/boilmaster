@@ -1,0 +1,28 @@
+[package]
+name = "boilmaster"
+description = "Web service for Final Fantasy XIV game data and asset discovery"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bm_asset = { path = "../bm_asset" }
+bm_data = { path = "../bm_data" }
+bm_http = { path = "../bm_http" }
+bm_read = { path = "../bm_read" }
+bm_schema = { path = "../bm_schema" }
+bm_search = { path = "../bm_search" }
+bm_version = { path = "../bm_version" }
+
+anyhow.workspace = true
+console-subscriber.workspace = true
+figment = { workspace = true, features = ["env", "toml"] }
+futures.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["json"] }

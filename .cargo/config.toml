@@ -2,15 +2,8 @@
 rustflags = ["--cfg", "tokio_unstable"]
 
 [env]
-CARGO_MANIFEST_DIR = { value = "../", relative = true }
 # Tables in our dataset like CharaMakeType have more columns than are supported by sqlite by default.
 LIBSQLITE3_FLAGS = { value = "-DSQLITE_MAX_COLUMN=5000", force = true }
-
-[profile.dev]
-opt-level = 1
-
-[profile.dev.package."*"]
-opt-level = 3
 
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"

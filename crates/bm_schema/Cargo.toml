@@ -1,0 +1,23 @@
+[package]
+name = "bm_schema"
+description = "Excel schema management for boilmaster"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bm_data = { path = "../bm_data" }
+bm_version = { path = "../bm_version" }
+
+anyhow.workspace = true
+futures.workspace = true
+ironworks.workspace = true
+ironworks_schema = { workspace = true, features = ["exdschema"] }
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true

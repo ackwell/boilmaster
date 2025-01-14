@@ -1,0 +1,39 @@
+[package]
+name = "bm_search"
+description = "Excel search service for boilmaster"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bm_data = { path = "../bm_data" }
+bm_read = { path = "../bm_read" }
+bm_schema = { path = "../bm_schema" }
+bm_version = { path = "../bm_version" }
+
+aho-corasick.workspace = true
+anyhow.workspace = true
+bb8.workspace = true
+either.workspace = true
+figment.workspace = true
+futures.workspace = true
+ironworks.workspace = true
+ironworks_schema.workspace = true
+itertools.workspace = true
+mini-moka.workspace = true
+rusqlite = { workspace = true, features = ["bundled", "vtab"] }
+sea-query = { workspace = true, features = [
+  "backend-sqlite",
+  "derive",
+  "thread-safe",
+] }
+sea-query-rusqlite.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["v4", "fast-rng"] }
