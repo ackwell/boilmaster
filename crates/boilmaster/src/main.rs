@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use boilmaster::tracing;
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
@@ -10,6 +9,8 @@ use futures::FutureExt;
 use serde::Deserialize;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
+
+mod tracing;
 
 #[derive(Debug, Deserialize)]
 struct Config {
