@@ -46,6 +46,7 @@ checksum = "0d4787eac8d785c99d76058a086b151006f5a872bc8adea8364108a39a518ac2"
 dependencies = [
  "aide-macros",
  "axum",
+ "axum-extra",
  "bytes",
  "cfg-if",
  "http",
@@ -296,7 +297,7 @@ dependencies = [
  "image",
  "image_dds",
  "ironworks",
- "itertools 0.14.0",
+ "itertools",
  "serde",
  "strum",
  "thiserror 2.0.3",
@@ -324,13 +325,16 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-extra",
- "bb8",
- "derivative",
+ "bm_asset",
+ "bm_data",
+ "bm_read",
+ "bm_schema",
+ "bm_search",
+ "bm_version",
  "either",
  "git-version",
  "ironworks",
  "ironworks_schema",
- "itertools",
  "maud",
  "mime",
  "nom",
@@ -394,7 +398,7 @@ dependencies = [
  "futures",
  "ironworks",
  "ironworks_schema",
- "itertools 0.14.0",
+ "itertools",
  "mini-moka",
  "rusqlite",
  "sea-query",
@@ -438,7 +442,6 @@ dependencies = [
  "bm_schema",
  "bm_search",
  "bm_version",
- "console-subscriber",
  "figment",
  "futures",
  "serde",
@@ -876,7 +879,6 @@ checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
 dependencies = [
  "futures-channel",
  "futures-core",
- "futures-executor",
  "futures-io",
  "futures-sink",
  "futures-task",
@@ -900,32 +902,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
 
 [[package]]
-name = "futures-executor"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f"
-dependencies = [
- "futures-core",
- "futures-task",
- "futures-util",
-]
-
-[[package]]
 name = "futures-io"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
-
-[[package]]
-name = "futures-macro"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.89",
-]
 
 [[package]]
 name = "futures-sink"
@@ -945,16 +925,11 @@ version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
- "futures-channel",
  "futures-core",
- "futures-io",
- "futures-macro",
  "futures-sink",
  "futures-task",
- "memchr",
  "pin-project-lite",
  "pin-utils",
- "slab",
 ]
 
 [[package]]
@@ -2096,27 +2071,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "prost"
-version = "0.13.4"
+name = "pulldown-cmark"
+version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c0fef6c4230e4ccf618a35c59d7ede15dea37de8427500f50aff708806e42ec"
+checksum = "57206b407293d2bcd3af849ce869d52068623f19e1b5ff8e8778e3309439682b"
 dependencies = [
- "bytes",
- "prost-derive",
+ "bitflags 2.6.0",
+ "memchr",
+ "unicase",
 ]
 
 [[package]]
-name = "prost-derive"
-version = "0.13.4"
+name = "quick-error"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "157c5a9d7ea5c2ed2d9fb8f495b64759f7816c7eaea54ba3978f0d63000162e3"
+checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
+
+[[package]]
+name = "quote"
+version = "1.0.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e4dccaaaf89514f546c693ddc140f729f958c247918a13380cccc6078391acc"
 dependencies = [
- "anyhow",
- "itertools 0.13.0",
  "proc-macro2",
- "quote",
- "syn 2.0.89",
-]
 ]
 
 [[package]]
@@ -2842,7 +2819,6 @@ dependencies = [
  "signal-hook-registry",
  "socket2",
  "tokio-macros",
- "tracing",
  "windows-sys 0.52.0",
 ]
 

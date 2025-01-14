@@ -18,7 +18,7 @@ bm_search = { path = "../bm_search" }
 bm_version = { path = "../bm_version" }
 
 anyhow.workspace = true
-console-subscriber.workspace = true
+# console-subscriber.workspace = true
 figment = { workspace = true, features = ["env", "toml"] }
 futures.workspace = true
 serde.workspace = true
