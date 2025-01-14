@@ -471,11 +471,7 @@ dependencies = [
 name = "boilmaster"
 version = "0.0.0"
 dependencies = [
- "aho-corasick",
- "aide",
  "anyhow",
- "axum",
- "axum-extra",
  "bm_asset",
  "bm_data",
  "bm_http",
@@ -484,28 +480,13 @@ dependencies = [
  "bm_search",
  "bm_version",
  "console-subscriber",
- "either",
  "figment",
  "futures",
- "git-version",
- "ironworks",
- "ironworks_schema",
- "maud",
- "mime",
- "nom",
- "pretty_assertions",
- "regex",
- "schemars",
- "seahash",
  "serde",
- "serde_json",
- "thiserror 2.0.3",
  "tokio",
  "tokio-util",
- "tower-http",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
