@@ -1,0 +1,24 @@
+[package]
+name = "bm_version"
+description = "Version and patch file management for boilmaster."
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+figment.workspace = true
+fs4.workspace = true
+futures = { workspace = true, features = ["alloc"] }
+graphql_client.workspace = true
+nonempty = { workspace = true, features = ["serialize"] }
+reqwest = { workspace = true, features = ["json"] }
+seahash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros"] }
+tokio-util.workspace = true
+tracing.workspace = true

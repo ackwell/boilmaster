@@ -1,0 +1,18 @@
+[package]
+name = "bm_read"
+description = "Excel reading for boilmaster"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+either.workspace = true
+ironworks = { workspace = true, features = ["excel"] }
+ironworks_schema.workspace = true
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+tracing.workspace = true

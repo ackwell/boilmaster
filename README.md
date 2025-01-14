@@ -8,6 +8,7 @@ Web service for Final Fantasy XIV game data and asset discovery.
 
 **Requirements**
 
+<!-- NOTE: See /rust-toolchain.toml when updating. -->
 - [Rust](https://www.rust-lang.org/tools/install) >= 1.82.0
 
 ```bash
