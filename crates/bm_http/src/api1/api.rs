@@ -59,13 +59,13 @@ pub fn router(config: Config, state: HttpState) -> Router {
 			version::router(state).with_path_items(|item| item.tag("versions")),
 		)
 		.finish_api_with(&mut openapi, api_docs)
-		.layer(CorsLayer::permissive())
 		.route(
 			OPENAPI_JSON_ROUTE,
 			get(openapi_json).with_state(OpenApiState {
 				openapi: Arc::new(openapi),
 			}),
 		)
+		.layer(CorsLayer::permissive())
 		.route("/docs", get(scalar))
 }
 
