@@ -17,7 +17,7 @@ fn versions_docs(operation: TransformOperation) -> TransformOperation {
 		.summary("list versions")
 		.description("List valid version names accepted by the `version` query parameter.")
 		.response_with::<200, Json<Vec<&'static str>>, _>(|response| {
-			response.example(vec!["latest", "6.58", "6.58x1"])
+			response.example(vec!["latest", "7.0", "7.01"])
 		})
 }
 
