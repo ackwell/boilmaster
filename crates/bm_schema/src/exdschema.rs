@@ -139,7 +139,8 @@ impl ExdSchema {
 				.provider
 				.specifier_v2_ver(&self.excel_version(version_key)?)?,
 
-			["ver", version] => self.provider.specifier_v2_ver(version)?,
+			// Removing for now: This is expecting consumers to provide a valid _excel_ version, not a boilmaster-understood version. Just confusing, revisit this.
+			// ["ver", version] => self.provider.specifier_v2_ver(version)?,
 
 			// Unknown prefix, fail soft.
 			[_, _] => return Err(Error::InvalidVersion(schema_version.into())),
