@@ -1,6 +1,5 @@
 use aide::OperationIo;
 use axum::{
-	async_trait,
 	extract::{FromRef, FromRequestParts},
 	http::request::Parts,
 	RequestPartsExt,
@@ -25,7 +24,6 @@ struct VersionQueryParams {
 #[aide(input_with = "Query<VersionQueryParams>")]
 pub struct VersionQuery(pub VersionKey);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for VersionQuery
 where
 	S: Send + Sync,

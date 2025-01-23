@@ -6,7 +6,6 @@ use std::{
 use aide::OperationIo;
 use anyhow::anyhow;
 use axum::{
-	async_trait,
 	extract::{FromRef, FromRequestParts},
 	http::request::Parts,
 	RequestPartsExt,
@@ -183,7 +182,6 @@ pub struct RowReader {
 }
 
 // todo maybe an extra bit of state requirements on this for the filters? that would allow the filters to be wired up per-handler i think. not sure how that aligns with existing state though
-#[async_trait]
 impl<S> FromRequestParts<S> for RowReader
 where
 	S: Send + Sync,

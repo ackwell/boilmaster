@@ -18,7 +18,13 @@ bm_version = { path = "../bm_version" }
 
 aho-corasick.workspace = true
 anyhow.workspace = true
-aide = { workspace = true, features = ["axum", "macros"] }
+aide = { workspace = true, features = [
+  "axum",
+  "axum-json",
+  "axum-query",
+  "axum-extra-headers",
+  "macros",
+] }
 axum = { workspace = true, features = ["macros"] }
 axum-extra = { workspace = true, features = ["typed-header"] }
 either.workspace = true

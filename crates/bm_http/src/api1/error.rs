@@ -166,7 +166,7 @@ impl OperationOutput for Error {
 	type Inner = ErrorResponse;
 
 	fn inferred_responses(
-		ctx: &mut aide::gen::GenContext,
+		ctx: &mut aide::generate::GenContext,
 		operation: &mut aide::openapi::Operation,
 	) -> Vec<(Option<u16>, AideResponse)> {
 		let Some(mut error_response) = Json::<ErrorResponse>::operation_response(ctx, operation)
