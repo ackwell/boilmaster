@@ -4,11 +4,9 @@
 		"replacements:all",
 		"workarounds:all"
 	],
-	// Open PRs at the start of the weekend.
 	"timezone": "Australia/Sydney",
-	"schedule": [
-		"* 0-9 * * 6"
-	],
+	// NOTE: Docs mention "every 4 hours", but it's more like "every 3 days" - disabling scheduling so stuff actually comes through.
+	// "schedule": ["* 0-9 * * 6"],
 	"packageRules": [
 		// Disable renovate by default - we'll opt-in ecosystems as appropriate.
 		{

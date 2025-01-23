@@ -75,7 +75,7 @@ struct SearchQuery {
 	cursor: Option<Uuid>,
 
 	/// Maximum number of rows to return. To paginate, provide the cursor token
-	/// provided in `next` to the `cursor` paramter.
+	/// provided in `next` to the `cursor` parameter.
 	limit: Option<usize>,
 }
 
