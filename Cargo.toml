@@ -35,6 +35,7 @@ image_dds = { version = "0.7.0", default-features = false }
 ironworks = { git = "https://github.com/ackwell/ironworks.git" }
 ironworks_schema = { git = "https://github.com/ackwell/ironworks.git" }
 itertools = "0.14.0"
+# Pending release for axum^0.8
 # maud =  "0.26.0"
 maud = { git = "https://github.com/lambda-fairy/maud.git" }
 mime = "0.3.17"
