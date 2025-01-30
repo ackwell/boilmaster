@@ -73,12 +73,38 @@ pub fn router(config: Config, api_state: ApiState) -> ApiRouter {
 		)
 }
 
+/// Response structure for the list endpoint.
+#[derive(Serialize, JsonSchema)]
+struct ListResponse {
+	/// Array of sheets known to the API.
+	sheets: Vec<SheetMetadata>,
+}
+
+/// Metadata about a single sheet.
+#[derive(Serialize, JsonSchema)]
+struct SheetMetadata {
+	/// The name of the sheet.
+	name: String,
+}
+
 fn list_docs(operation: TransformOperation) -> TransformOperation {
 	operation
 		.summary("list sheets")
-		.description("List known excel sheet names that can be read by the API.")
-		.response_with::<200, Json<Vec<&'static str>>, _>(|response| {
-			response.example(vec!["Action", "Item", "Status"])
+		.description("List known excel sheets that can be read by the API.")
+		.response_with::<200, Json<ListResponse>, _>(|response| {
+			response.example(ListResponse {
+				sheets: vec![
+					SheetMetadata {
+						name: "Action".into(),
+					},
+					SheetMetadata {
+						name: "Item".into(),
+					},
+					SheetMetadata {
+						name: "Status".into(),
+					},
+				],
+			})
 		})
 }
 
@@ -86,7 +112,7 @@ fn list_docs(operation: TransformOperation) -> TransformOperation {
 async fn list(
 	VersionQuery(version_key): VersionQuery,
 	State(Service { data, .. }): State<Service>,
-) -> Result<impl IntoApiResponse> {
+) -> Result<Json<ListResponse>> {
 	let excel = data.version(version_key)?.excel();
 
 	let list = excel.list()?;
@@ -96,7 +122,12 @@ async fn list(
 		.collect::<Vec<_>>();
 	names.sort();
 
-	Ok(Json(names))
+	let metadata = names
+		.into_iter()
+		.map(|name| SheetMetadata { name })
+		.collect();
+
+	Ok(Json(ListResponse { sheets: metadata }))
 }
 
 /// Path variables accepted by the sheet endpoint.
