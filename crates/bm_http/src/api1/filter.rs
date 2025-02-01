@@ -8,7 +8,7 @@ use nom::{
 	character::complete::{alphanumeric1, char},
 	combinator::{all_consuming, consumed, cut, eof, map, map_res, value, verify},
 	multi::{many0, separated_list0, separated_list1},
-	sequence::{delimited, preceded, tuple},
+	sequence::{delimited, preceded},
 	Finish, Parser,
 };
 use schemars::JsonSchema;
@@ -195,7 +195,8 @@ impl FromStr for FilterString {
 
 	fn from_str(input: &str) -> Result<Self, Self::Err> {
 		// TODO: Consider using VerboseError or similar?
-		let (_, filter) = all_consuming(filter)(input)
+		let (_, filter) = all_consuming(filter)
+			.parse(input)
 			.finish()
 			.map_err(|error| error::Error::Invalid(error.to_string()))?;
 
@@ -247,21 +248,24 @@ fn filter(input: &str) -> IResult<&str, FilterStringInner> {
 			separated_list0(char(','), cut(path)),
 			FilterStringInner::Paths,
 		),
-	))(input)
+	))
+	.parse(input)
 }
 
 fn path(input: &str) -> IResult<&str, Path> {
 	map(separated_list1(char('.'), path_part), |parts| {
 		parts.into_iter().flatten().collect()
-	})(input)
+	})
+	.parse(input)
 }
 
 fn path_part(input: &str) -> IResult<&str, Vec<Entry>> {
-	map(tuple((key, many0(index))), |(key, mut maybe_index)| {
+	map((key, many0(index)), |(key, mut maybe_index)| {
 		let mut parts = vec![key];
 		parts.append(&mut maybe_index);
 		parts
-	})(input)
+	})
+	.parse(input)
 }
 
 fn key(input: &str) -> IResult<&str, Entry> {
@@ -279,10 +283,11 @@ fn key(input: &str) -> IResult<&str, Entry> {
 		)),
 	);
 
-	let (rest, (field, (decorator_input, decorators))) = tuple((
+	let (rest, (field, (decorator_input, decorators))) = (
 		verify(escaped_key, |t: &str| !t.is_empty()),
 		consumed(many0(decorator)),
-	))(input)?;
+	)
+		.parse(input)?;
 
 	let mut language = None;
 	let mut read_as = None;
@@ -322,7 +327,7 @@ fn set_option_once<T>(option: &mut Option<T>, value: T) -> Result<(), &'static s
 }
 
 fn index(input: &str) -> IResult<&str, Entry> {
-	value(Entry::Index, tag("[]"))(input)
+	value(Entry::Index, tag("[]")).parse(input)
 }
 
 #[derive(Debug, Clone)]
@@ -341,12 +346,14 @@ fn decorator(input: &str) -> IResult<&str, Decorator> {
 			map(call("lang", language), Decorator::Language),
 			map(call("as", read_as), Decorator::As),
 		)),
-	)(input)
+	)
+	.parse(input)
 }
 
-fn call<'a, O, F>(name: &'a str, arguments: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
+fn call<'a, O, E, F>(name: &'a str, arguments: F) -> impl Parser<&'a str, Output = O, Error = E>
 where
-	F: Parser<&'a str, O, ParseError<&'a str>>,
+	E: nom::error::ParseError<&'a str>,
+	F: Parser<&'a str, Output = O, Error = E>,
 {
 	preceded(tag(name), delimited(char('('), cut(arguments), char(')')))
 }
@@ -356,14 +363,16 @@ fn language(input: &str) -> IResult<&str, excel::Language> {
 		string
 			.parse::<read::LanguageString>()
 			.map(excel::Language::from)
-	})(input)
+	})
+	.parse(input)
 }
 
 fn read_as(input: &str) -> IResult<&str, read::As> {
 	alt((
 		value(read::As::Raw, tag("raw")),
 		value(read::As::Html, tag("html")),
-	))(input)
+	))
+	.parse(input)
 }
 
 #[cfg(test)]
