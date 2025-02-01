@@ -9,8 +9,8 @@ use nom::{
 	combinator::{all_consuming, cut, map, map_res, not, opt, success, value as nom_value},
 	multi::separated_list1,
 	number::complete::double,
-	sequence::{delimited, preceded, terminated, tuple},
-	Finish, IResult,
+	sequence::{delimited, preceded, terminated},
+	Finish, IResult, Parser,
 };
 use schemars::JsonSchema;
 use serde::{de, Deserialize};
@@ -81,7 +81,8 @@ impl FromStr for QueryString {
 
 	fn from_str(input: &str) -> Result<Self, Self::Err> {
 		// Root level of a query is an implicit group
-		let (_rest, group) = all_consuming(group)(input)
+		let (_rest, group) = all_consuming(group)
+			.parse(input)
 			.finish()
 			.map_err(|error| error::Error::Invalid(error.to_string()))?;
 
@@ -95,14 +96,15 @@ fn node(input: &str) -> ParseResult<query::Node> {
 	alt((
 		map(delimited(char('('), group, char(')')), query::Node::Group),
 		map(leaf, query::Node::Leaf),
-	))(input)
+	))
+	.parse(input)
 }
 
 fn group(input: &str) -> ParseResult<query::Group> {
-	map(
-		separated_list1(multispace1, tuple((occur, node))),
-		|clauses| query::Group { clauses },
-	)(input)
+	map(separated_list1(multispace1, (occur, node)), |clauses| {
+		query::Group { clauses }
+	})
+	.parse(input)
 }
 
 fn occur(input: &str) -> ParseResult<query::Occur> {
@@ -110,12 +112,13 @@ fn occur(input: &str) -> ParseResult<query::Occur> {
 		nom_value(query::Occur::Must, char('+')),
 		nom_value(query::Occur::MustNot, char('-')),
 		success(query::Occur::Should),
-	))(input)
+	))
+	.parse(input)
 }
 
 fn leaf(input: &str) -> ParseResult<query::Leaf> {
 	map(
-		tuple((struct_specifier, opt(array_specifier), operation)),
+		(struct_specifier, opt(array_specifier), operation),
 		|(struct_field, maybe_array_field, operation)| {
 			let operation = match maybe_array_field {
 				None => operation,
@@ -130,17 +133,19 @@ fn leaf(input: &str) -> ParseResult<query::Leaf> {
 				operation,
 			}
 		},
-	)(input)
+	)
+	.parse(input)
 }
 
 fn struct_specifier(input: &str) -> ParseResult<query::FieldSpecifier> {
 	map(
-		tuple((
+		(
 			alphanumeric1, // TODO: should this be an escaped transform?
 			opt(preceded(char('@'), cut(language))),
-		)),
+		),
 		|(str, language)| query::FieldSpecifier::Struct(str.into(), language),
-	)(input)
+	)
+	.parse(input)
 }
 
 // TODO: this is duplicated with filter - share?
@@ -148,14 +153,16 @@ fn language(input: &str) -> ParseResult<excel::Language> {
 	map_res(alphanumeric1, |str: &str| {
 		str.parse::<bm_read::LanguageString>()
 			.map(excel::Language::from)
-	})(input)
+	})
+	.parse(input)
 }
 
 fn array_specifier(input: &str) -> ParseResult<query::FieldSpecifier> {
 	map(
 		delimited(char('['), opt(map_res(digit1, str::parse)), char(']')),
 		|index: Option<u32>| query::FieldSpecifier::Array(index),
-	)(input)
+	)
+	.parse(input)
 }
 
 fn operation(input: &str) -> ParseResult<query::Operation> {
@@ -167,7 +174,8 @@ fn operation(input: &str) -> ParseResult<query::Operation> {
 		preceded(char('>'), cut(map(number, query::Operation::Gt))),
 		preceded(tag("<="), cut(map(number, query::Operation::Lte))),
 		preceded(char('<'), cut(map(number, query::Operation::Lt))),
-	))(input)
+	))
+	.parse(input)
 }
 
 fn value(input: &str) -> ParseResult<query::Value> {
@@ -175,11 +183,12 @@ fn value(input: &str) -> ParseResult<query::Value> {
 		map(boolean, query::Value::Boolean),
 		map(number, query::Value::Number),
 		map(string, query::Value::String),
-	))(input)
+	))
+	.parse(input)
 }
 
 fn boolean(input: &str) -> ParseResult<bool> {
-	alt((nom_value(true, tag("true")), nom_value(false, tag("false"))))(input)
+	alt((nom_value(true, tag("true")), nom_value(false, tag("false")))).parse(input)
 }
 
 fn number(input: &str) -> ParseResult<query::Number> {
@@ -193,13 +202,15 @@ fn number(input: &str) -> ParseResult<query::Number> {
 			not(one_of(".eE")),
 		),
 		map(double, query::Number::F64),
-	))(input)
+	))
+	.parse(input)
 }
 
 fn i64(input: &str) -> ParseResult<i64> {
 	map_res(preceded(char('-'), digit1), |value| -> anyhow::Result<_> {
 		Ok(-i64::try_from(str::parse::<u64>(value)?)?)
-	})(input)
+	})
+	.parse(input)
 }
 
 fn string(input: &str) -> ParseResult<String> {
@@ -215,7 +226,8 @@ fn string(input: &str) -> ParseResult<String> {
 			)),
 		),
 		char('"'),
-	)(input)
+	)
+	.parse(input)
 }
 
 fn operation_relation(node: query::Node) -> query::Operation {
