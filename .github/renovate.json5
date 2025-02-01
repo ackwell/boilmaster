@@ -1,12 +1,15 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"extends": [
+		"group:monorepos",
+		"group:recommended",
 		"replacements:all",
 		"workarounds:all"
 	],
 	"timezone": "Australia/Sydney",
 	// NOTE: Docs mention "every 4 hours", but it's more like "every 3 days" - disabling scheduling so stuff actually comes through.
 	// "schedule": ["* 0-9 * * 6"],
+	"dependencyDashboard": true,
 	"packageRules": [
 		// Disable renovate by default - we'll opt-in ecosystems as appropriate.
 		{
@@ -15,15 +18,7 @@
 			],
 			"enabled": false
 		},
-		// Group all rust package updates
-		{
-			"matchManagers": [
-				"cargo"
-			],
-			"groupName": "cargo",
-			"enabled": true
-		},
-		// Disable updates for cargo updates that aren't semver-major
+		// Group cargo updates that aren't semver-major.
 		{
 			"matchManagers": [
 				"cargo"
@@ -31,7 +26,8 @@
 			"matchUpdateTypes": [
 				"patch"
 			],
-			"enabled": false
+			"enabled": true,
+			"groupName": "cargo"
 		},
 		{
 			"matchManagers": [
@@ -41,7 +37,30 @@
 				"minor"
 			],
 			"matchCurrentVersion": ">=1",
-			"enabled": false
+			"enabled": true,
+			"groupName": "cargo"
+		},
+		// Semver-major cargo updates should go through the dashboard. 
+		{
+			"matchManagers": [
+				"cargo"
+			],
+			"matchUpdateTypes": [
+				"major"
+			],
+			"enabled": true,
+			"dependencyDashboardApproval": true
+		},
+		{
+			"matchManagers": [
+				"cargo"
+			],
+			"matchUpdateTypes": [
+				"minor"
+			],
+			"matchCurrentVersion": "<1",
+			"enabled": true,
+			"dependencyDashboardApproval": true
 		}
 	]
 }
