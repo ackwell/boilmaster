@@ -1667,8 +1667,9 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "maud"
-version = "0.26.0"
-source = "git+https://github.com/lambda-fairy/maud.git#99ff3de32470d1160508e97650c7617830acbbdc"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8156733e27020ea5c684db5beac5d1d611e1272ab17901a49466294b84fc217e"
 dependencies = [
  "axum-core",
  "http",
@@ -1678,8 +1679,9 @@ dependencies = [
 
 [[package]]
 name = "maud_macros"
-version = "0.26.0"
-source = "git+https://github.com/lambda-fairy/maud.git#99ff3de32470d1160508e97650c7617830acbbdc"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7261b00f3952f617899bc012e3dbd56e4f0110a038175929fa5d18e5a19913ca"
 dependencies = [
  "proc-macro2",
  "proc-macro2-diagnostics",
