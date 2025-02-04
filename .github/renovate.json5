@@ -18,6 +18,15 @@
 			],
 			"enabled": false
 		},
+		// Enable cargo
+		{
+			"matchManagers": [
+				"cargo"
+			],
+			"enabled": true,
+			// Encode the minor-major behavior in the branch topic for cargo deps.
+			"branchTopic": "{{{depNameSanitized}}}-{{{newMajor}}}{{#unless newMajor}}.{{{newMinor}}}{{/unless}}.x{{#if isLockfileUpdate}}-lockfile{{/if}}"
+		},
 		// Group cargo updates that aren't semver-major.
 		{
 			"matchManagers": [
@@ -26,7 +35,6 @@
 			"matchUpdateTypes": [
 				"patch"
 			],
-			"enabled": true,
 			"groupName": "cargo"
 		},
 		{
@@ -37,7 +45,6 @@
 				"minor"
 			],
 			"matchCurrentVersion": ">=1",
-			"enabled": true,
 			"groupName": "cargo"
 		},
 		// Semver-major cargo updates should go through the dashboard. 
@@ -48,7 +55,6 @@
 			"matchUpdateTypes": [
 				"major"
 			],
-			"enabled": true,
 			"dependencyDashboardApproval": true
 		},
 		{
@@ -59,7 +65,6 @@
 				"minor"
 			],
 			"matchCurrentVersion": "<1",
-			"enabled": true,
 			"dependencyDashboardApproval": true
 		}
 	]
