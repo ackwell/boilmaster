@@ -3,7 +3,8 @@ use std::sync::Arc;
 use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
 use axum::{
 	debug_handler,
-	extract::{FromRef, NestedPath, State},
+	extract::{FromRef, State},
+	http::Uri,
 	response::IntoResponse,
 	routing::get,
 	Json, Router,
@@ -11,7 +12,7 @@ use axum::{
 use git_version::git_version;
 use maud::{html, DOCTYPE};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
 use crate::{http::HttpState, service::Service};
@@ -123,34 +124,13 @@ struct OpenApiState {
 	openapi: Arc<openapi::OpenApi>,
 }
 
-// We want to avoid cloning the OpenApi struct, but need runtime information to
-// know the location of the API routes within the routing heirachy. As such, we're
-// overriding the `servers` here by including it after the flattened base.
-#[derive(Serialize)]
-struct OpenApiOverrides<'a> {
-	#[serde(flatten)]
-	base: &'a openapi::OpenApi,
-
-	servers: &'a [openapi::Server],
+#[debug_handler]
+async fn openapi_json(State(openapi): State<Arc<openapi::OpenApi>>) -> impl IntoResponse {
+	Json(openapi.as_ref()).into_response()
 }
 
 #[debug_handler]
-async fn openapi_json(
-	nested_path: NestedPath,
-	State(openapi): State<Arc<openapi::OpenApi>>,
-) -> impl IntoResponse {
-	Json(OpenApiOverrides {
-		base: &*openapi,
-		servers: &[openapi::Server {
-			url: nested_path.as_str().to_string(),
-			..Default::default()
-		}],
-	})
-	.into_response()
-}
-
-#[debug_handler]
-async fn scalar(nested_path: NestedPath) -> impl IntoResponse {
+async fn scalar(uri: Uri) -> impl IntoResponse {
 	html! {
 		(DOCTYPE)
 		html {
@@ -160,7 +140,19 @@ async fn scalar(nested_path: NestedPath) -> impl IntoResponse {
 				meta name="viewport" content="width=device-width, initial-scale=1";
 			}
 			body {
-				script id="api-reference" data-url={ (nested_path.as_str()) (OPENAPI_JSON_ROUTE) } {}
+				script id="api-reference" data-url={ "." (OPENAPI_JSON_ROUTE) } {}
+				// This script sets the configuration with a new server url based on
+				// what the browser can see - this ensures that regardless of what
+				// reverse proxies may be doing, the urls will be relative to the API's
+				// mount point. I take no responsibility for any further fuckery.
+				script {
+					"var route = '" (uri) "';"
+					r#"
+					var serverUrl = location.origin + location.pathname.replace(new RegExp(route + '$'), '');
+					var configuration = { servers: [{ url: serverUrl }] };
+					document.getElementById('api-reference').dataset.configuration = JSON.stringify(configuration);
+					"#
+				}
 				script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference" {}
 			}
 		}
