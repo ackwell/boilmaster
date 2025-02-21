@@ -22,7 +22,7 @@ use axum_extra::{
 };
 use bm_asset::Format;
 use schemars::{
-	gen::SchemaGenerator,
+	r#gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject},
 	JsonSchema,
 };

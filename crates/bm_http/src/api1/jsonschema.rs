@@ -10,7 +10,7 @@ macro_rules! impl_jsonschema {
 			}
 
 			fn json_schema(
-				generator: &mut ::schemars::gen::SchemaGenerator,
+				generator: &mut ::schemars::r#gen::SchemaGenerator,
 			) -> ::schemars::schema::Schema {
 				$fn(generator)
 			}

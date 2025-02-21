@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use bm_read as read;
 use ironworks::{excel, sestring};
 use schemars::{
-	gen::SchemaGenerator,
+	r#gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject},
 };
 use serde::ser::{Error as SerError, Serialize, SerializeMap, SerializeSeq, SerializeStruct};

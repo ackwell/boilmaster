@@ -14,7 +14,7 @@ use bm_read as read;
 use bm_version::VersionKey;
 use ironworks::{excel, file::exh, sestring::format::Input};
 use schemars::{
-	gen::SchemaGenerator,
+	r#gen::SchemaGenerator,
 	schema::{InstanceType, Metadata, Schema, SchemaObject, StringValidation},
 	JsonSchema,
 };

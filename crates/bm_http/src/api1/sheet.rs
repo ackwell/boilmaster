@@ -11,7 +11,7 @@ use axum::{
 };
 use either::Either;
 use schemars::{
-	gen::SchemaGenerator,
+	r#gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject, StringValidation},
 	JsonSchema,
 };
