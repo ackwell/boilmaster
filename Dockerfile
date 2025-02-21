@@ -1,7 +1,7 @@
 ARG target=""
 # Setup chef
 # NOTE: See /rust-toolchain.toml when updating.
-FROM --platform=$BUILDPLATFORM rust:1.82.0-slim-bookworm AS base
+FROM --platform=$BUILDPLATFORM rust:1.85.0-slim-bookworm AS base
 
 RUN apt-get update && apt-get install pkg-config libssl-dev git -y
 

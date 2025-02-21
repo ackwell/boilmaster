@@ -3,4 +3,4 @@
 # - /Cargo.toml
 # - /Dockerfile
 # - /README.md
-channel = "1.82.0"
+channel = "1.85.0"
