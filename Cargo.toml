@@ -32,8 +32,10 @@ git-version = "0.3.9"
 graphql_client = "0.14.0"
 image = { version = "0.25.1", default-features = false }
 image_dds = { version = "0.7.0", default-features = false }
-ironworks = { git = "https://github.com/ackwell/ironworks.git" }
-ironworks_schema = { git = "https://github.com/ackwell/ironworks.git" }
+# ironworks = { git = "https://github.com/ackwell/ironworks.git" }
+ironworks = { path = "../ironworks/ironworks" }
+# ironworks_schema = { git = "https://github.com/ackwell/ironworks.git" }
+ironworks_schema = { path = "../ironworks/schema" }
 itertools = "0.14.0"
 maud = "0.27.0"
 mime = "0.3.17"
