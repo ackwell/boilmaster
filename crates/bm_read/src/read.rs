@@ -1,11 +1,11 @@
 use std::{
 	borrow::Cow,
-	collections::{hash_map, HashMap, HashSet},
+	collections::{HashMap, HashSet, hash_map},
 	iter,
 	ops::Range,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use ironworks::{excel, file::exh};
 use ironworks_schema as schema;
 use serde::Deserialize;
@@ -385,7 +385,7 @@ fn read_node_struct(
 		other => {
 			return Err(Error::FilterSchemaMismatch(
 				context.mismatch_error(format!("expected struct filter, got {other:?}")),
-			))
+			));
 		}
 	};
 

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use figment::{
-	providers::{Env, Format, Toml},
 	Figment,
+	providers::{Env, Format, Toml},
 };
 use futures::FutureExt;
 use serde::Deserialize;

@@ -2,9 +2,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
 use axum::{
+	Router,
 	extract::{FromRef, MatchedPath},
 	http::Request,
-	Router,
 };
 use serde::Deserialize;
 use tokio::net::TcpListener;

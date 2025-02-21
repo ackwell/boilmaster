@@ -1,13 +1,12 @@
 use std::{collections::HashSet, str::FromStr};
 
 use aide::{
-	axum::{routing::get_with, ApiRouter, IntoApiResponse},
+	axum::{ApiRouter, IntoApiResponse, routing::get_with},
 	transform::TransformOperation,
 };
 use axum::{
-	debug_handler,
+	Json, debug_handler,
 	extract::{FromRef, State},
-	Json,
 };
 use bm_search::{SearchRequest as InnerSearchRequest, SearchRequestQuery};
 use schemars::JsonSchema;
@@ -115,13 +114,15 @@ struct SearchResult {
 fn search_docs(operation: TransformOperation) -> TransformOperation {
 	operation
 		.summary("execute a search query")
-		.description("Fetch information about rows and their related data that match the provided search query.")
+		.description(
+			"Fetch information about rows and their related data that match the provided search query.",
+		)
 		.response_with::<200, Json<SearchResponse>, _>(|response| {
 			response.example(SearchResponse {
 				next: Some(Uuid::from_str("bbe61a5e-7d22-41ec-9f5a-711c967c5624").expect("static")),
-				schema: bm_schema::CanonicalSpecifier{
+				schema: bm_schema::CanonicalSpecifier {
 					source: "source".into(),
-					version: "version".into()
+					version: "version".into(),
 				},
 				results: vec![SearchResult {
 					score: 1.413,

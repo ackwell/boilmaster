@@ -5,8 +5,8 @@ use anyhow::Context;
 use ironworks::{
 	excel::Excel,
 	sestring::{
-		format::{format, Color, ColorUsage, Input, Write},
 		Error as SeStringError, SeString,
+		format::{Color, ColorUsage, Input, Write, format},
 	},
 };
 

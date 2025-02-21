@@ -3,6 +3,7 @@ use std::str::FromStr;
 use bm_search::query;
 use ironworks::excel;
 use nom::{
+	Finish, IResult, Parser,
 	branch::alt,
 	bytes::complete::{escaped_transform, is_not, tag},
 	character::complete::{alphanumeric1, char, digit1, multispace1, one_of},
@@ -10,10 +11,9 @@ use nom::{
 	multi::separated_list1,
 	number::complete::double,
 	sequence::{delimited, preceded, terminated},
-	Finish, IResult, Parser,
 };
 use schemars::JsonSchema;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 
 use super::error;
 

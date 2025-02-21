@@ -1,4 +1,4 @@
-use maud::{html, Markup, Render, DOCTYPE};
+use maud::{DOCTYPE, Markup, Render, html};
 
 pub struct BaseTemplate {
 	pub title: String,

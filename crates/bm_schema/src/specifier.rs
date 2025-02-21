@@ -1,6 +1,6 @@
 use std::{convert::Infallible, str::FromStr};
 
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 
 // TODO: will probably need eq/hash so i can use these as cache keys?
 #[derive(Debug, Clone)]

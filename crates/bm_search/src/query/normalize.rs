@@ -373,7 +373,7 @@ impl<'a> Normalizer<'a> {
 		let targets = match context.schema {
 			// Relations digging into schema structural features can be forwarded through to node normalisation.
 			schema::Node::Struct(..) | schema::Node::Array { .. } => {
-				return self.normalize_node(&relation.query, context)
+				return self.normalize_node(&relation.query, context);
 			}
 
 			schema::Node::Scalar(schema::Scalar::Reference(targets)) => targets,
@@ -389,7 +389,7 @@ impl<'a> Normalizer<'a> {
 				return Err(Error::SchemaGameMismatch(context.mismatch(format!(
 					"cross-sheet references must have a single source (found {})",
 					other.len()
-				))))
+				))));
 			}
 		};
 
@@ -517,7 +517,7 @@ fn scalar_operation(
 		[] | [..] => {
 			return Err(Error::QueryGameMismatch(
 				context.mismatch("operations must target a single field"),
-			))
+			));
 		}
 	};
 

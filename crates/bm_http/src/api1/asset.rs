@@ -5,26 +5,26 @@ use std::{
 };
 
 use aide::{
-	axum::{routing::get_with, ApiRouter, IntoApiResponse},
+	axum::{ApiRouter, IntoApiResponse, routing::get_with},
 	openapi,
 	transform::TransformOperation,
 };
 use axum::{
 	debug_handler,
 	extract::{FromRef, OriginalUri, Request, State},
-	http::{header, StatusCode},
+	http::{StatusCode, header},
 	middleware,
 	response::{IntoResponse, Response},
 };
 use axum_extra::{
-	headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch},
 	TypedHeader,
+	headers::{CacheControl, ContentType, ETag, HeaderMapExt, IfNoneMatch},
 };
 use bm_asset::Format;
 use schemars::{
+	JsonSchema,
 	r#gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject},
-	JsonSchema,
 };
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};

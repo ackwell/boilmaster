@@ -8,10 +8,10 @@ use tokio::{select, time};
 use tokio_util::sync::CancellationToken;
 
 use super::{
+	Specifier,
 	error::{Error, Result},
 	exdschema,
 	specifier::CanonicalSpecifier,
-	Specifier,
 };
 
 pub trait Source: Send + Sync {
@@ -20,7 +20,7 @@ pub trait Source: Send + Sync {
 	fn update(&self) -> Result<()>;
 
 	fn canonicalize(&self, schema_version: Option<&str>, version_key: VersionKey)
-		-> Result<String>;
+	-> Result<String>;
 
 	fn version(&self, version: &str) -> Result<Box<dyn Schema + Send>>;
 }

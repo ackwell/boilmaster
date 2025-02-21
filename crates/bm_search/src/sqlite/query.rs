@@ -13,7 +13,7 @@ use crate::{
 	internal_query::post,
 };
 
-use super::schema::{column_name, table_name, KnownColumn};
+use super::schema::{KnownColumn, column_name, table_name};
 
 #[derive(Iden)]
 enum KnownResolveColumn {

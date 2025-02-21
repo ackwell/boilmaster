@@ -1,21 +1,20 @@
 use std::{num::ParseIntError, str::FromStr};
 
 use aide::{
-	axum::{routing::get_with, ApiRouter, IntoApiResponse},
+	axum::{ApiRouter, IntoApiResponse, routing::get_with},
 	transform::TransformOperation,
 };
 use axum::{
-	debug_handler,
+	Json, debug_handler,
 	extract::{FromRef, State},
-	Json,
 };
 use either::Either;
 use schemars::{
+	JsonSchema,
 	r#gen::SchemaGenerator,
 	schema::{InstanceType, Schema, SchemaObject, StringValidation},
-	JsonSchema,
 };
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 use crate::service::Service;
 

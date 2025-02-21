@@ -1,13 +1,12 @@
 use anyhow::Context;
 use axum::{
-	debug_handler,
+	Router, debug_handler,
 	extract::{OriginalUri, State},
 	response::IntoResponse,
 	routing::get,
-	Router,
 };
 use bm_version::VersionKey;
-use maud::{html, Render};
+use maud::{Render, html};
 
 use crate::{http::HttpState, service::Service};
 

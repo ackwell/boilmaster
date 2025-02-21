@@ -3,16 +3,16 @@ use std::{collections::HashMap, fmt, str::FromStr};
 use bm_read as read;
 use ironworks::excel;
 use nom::{
+	Finish, Parser,
 	branch::alt,
 	bytes::complete::{escaped_transform, is_not, tag},
 	character::complete::{alphanumeric1, char},
 	combinator::{all_consuming, consumed, cut, eof, map, map_res, value, verify},
 	multi::{many0, separated_list0, separated_list1},
 	sequence::{delimited, preceded},
-	Finish, Parser,
 };
 use schemars::JsonSchema;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 
 use super::error;
 

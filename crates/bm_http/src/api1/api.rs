@@ -2,15 +2,14 @@ use std::sync::Arc;
 
 use aide::{axum::ApiRouter, openapi, transform::TransformOpenApi};
 use axum::{
-	debug_handler,
+	Json, Router, debug_handler,
 	extract::{FromRef, State},
 	http::Uri,
 	response::IntoResponse,
 	routing::get,
-	Json, Router,
 };
 use git_version::git_version;
-use maud::{html, DOCTYPE};
+use maud::{DOCTYPE, html};
 use regex::Regex;
 use serde::Deserialize;
 use tower_http::cors::CorsLayer;

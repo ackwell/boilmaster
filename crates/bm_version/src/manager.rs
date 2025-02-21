@@ -1,5 +1,5 @@
 use std::{
-	collections::{hash_map::Entry, BTreeMap, HashMap},
+	collections::{BTreeMap, HashMap, hash_map::Entry},
 	fs,
 	io::{self, Read},
 	path::{Path, PathBuf},
@@ -446,7 +446,7 @@ fn open_config_read(path: impl AsRef<Path>) -> Result<Option<fs::File>> {
 			return match error.kind() {
 				io::ErrorKind::NotFound => Ok(None),
 				_ => Err(error.into()),
-			}
+			};
 		}
 	};
 

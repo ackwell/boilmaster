@@ -1,8 +1,8 @@
 use aide::OperationIo;
 use axum::{
+	RequestPartsExt,
 	extract::{FromRef, FromRequestParts},
 	http::request::Parts,
-	RequestPartsExt,
 };
 use bm_version::VersionKey;
 use schemars::JsonSchema;
