@@ -450,6 +450,8 @@ fn open_config_read(path: impl AsRef<Path>) -> Result<Option<fs::File>> {
 		}
 	};
 
+	// TODO: Replace with stdlib impl in 1.87
+	#[allow(unstable_name_collisions)]
 	file.lock_shared()?;
 
 	Ok(Some(file))
