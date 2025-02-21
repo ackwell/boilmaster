@@ -99,6 +99,7 @@ impl Database {
 	}
 
 	pub fn build_cursor(&self, queries: Vec<(String, post::Node)>) -> Result<DatabaseCursor> {
+		// TODO: look into reusing statement/rows from search() for this. Rows are bound to the lifetime of the statement, which is bound to the lifetime of the connection, so it's possibly either not doable, or a pain in the ass for lifetimes, but if i can make it work, it'd allow for much, much cheaper pagination.
 		Ok(DatabaseCursor {
 			statement: resolve_queries(queries)?,
 			offset: 0,
