@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 use strum::{EnumIter, IntoEnumIterator};
 
 use super::{convert, error::Error};

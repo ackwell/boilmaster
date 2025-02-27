@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use bm_version::{VersionKey, VersionMessage};
-use ironworks::{excel::Excel, sqpack::SqPack, zipatch, Ironworks};
+use ironworks::{Ironworks, excel::Excel, sqpack::SqPack, zipatch};
 use tokio::{
 	select,
 	sync::{broadcast, watch},

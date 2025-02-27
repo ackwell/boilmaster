@@ -1,10 +1,10 @@
-use axum::{middleware, Router};
+use axum::{Router, middleware};
 use serde::Deserialize;
 
 use crate::http::HttpState;
 
 use super::{
-	auth::{basic_auth, BasicAuth},
+	auth::{BasicAuth, basic_auth},
 	version, versions,
 };
 

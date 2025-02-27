@@ -6,7 +6,7 @@ use std::{
 };
 
 use seahash::SeaHasher;
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 
 use super::version::Version;
 

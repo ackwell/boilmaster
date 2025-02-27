@@ -12,4 +12,4 @@ mod string;
 mod value;
 mod version;
 
-pub use api::{router, Config};
+pub use api::{Config, router};

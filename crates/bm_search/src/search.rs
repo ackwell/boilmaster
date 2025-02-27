@@ -2,8 +2,8 @@ use std::{
 	borrow::Cow,
 	collections::HashSet,
 	sync::{
-		atomic::{AtomicBool, Ordering},
 		Arc,
+		atomic::{AtomicBool, Ordering},
 	},
 };
 
@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use super::{
 	error::{Error, Result},
-	internal_query::{pre, Normalizer},
+	internal_query::{Normalizer, pre},
 	sqlite,
 };
 

@@ -1,12 +1,11 @@
 [workspace]
 members = ["crates/*"]
-# TODO: Update to 3 when targeting 1.84+ (probably 1.85 with new edition)
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 # NOTE: See /rust-toolchain.toml when updating.
-rust-version = "1.82"
+rust-version = "1.85"
 license = "AGPL-3.0-or-later"
 
 [profile.dev]
@@ -43,7 +42,7 @@ nonempty = "0.11.0"
 regex = "1.10.5"
 reqwest = "0.12.3"
 rusqlite = "0.32.1"
-schemars = "0.8.21"
+schemars = "0.8.22"
 sea-query = { version = "0.32", default-features = false }
 sea-query-rusqlite = "0.7.0"
 seahash = "4.1.0"

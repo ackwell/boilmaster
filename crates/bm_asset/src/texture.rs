@@ -3,7 +3,7 @@ use std::io::Cursor;
 use anyhow::Context;
 use image::{DynamicImage, ImageBuffer, ImageFormat};
 use image_dds::Surface;
-use ironworks::{file::tex, Ironworks};
+use ironworks::{Ironworks, file::tex};
 use itertools::Itertools;
 
 use super::error::{Error, Result};
@@ -41,7 +41,7 @@ pub fn read(ironworks: &Ironworks, path: &str) -> Result<DynamicImage> {
 			return Err(Error::UnsupportedSource(
 				path.into(),
 				format!("unhandled texture format {other:?}"),
-			))
+			));
 		}
 	};
 

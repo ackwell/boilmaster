@@ -1,5 +1,5 @@
 use axum::{
-	debug_handler, extract::State, http::StatusCode, response::IntoResponse, routing::get, Router,
+	Router, debug_handler, extract::State, http::StatusCode, response::IntoResponse, routing::get,
 };
 
 use super::{http::HttpState, service::Service};

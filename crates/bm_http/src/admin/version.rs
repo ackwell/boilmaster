@@ -2,14 +2,13 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use axum::{
-	debug_handler,
+	Form, Router, debug_handler,
 	extract::{OriginalUri, Path, State},
 	response::{IntoResponse, Redirect},
 	routing::get,
-	Form, Router,
 };
 use bm_version::VersionKey;
-use maud::{html, Render};
+use maud::{Render, html};
 use serde::Deserialize;
 
 use crate::{http::HttpState, service::Service};

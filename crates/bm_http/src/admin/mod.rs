@@ -5,4 +5,4 @@ mod error;
 mod version;
 mod versions;
 
-pub use admin::{router, Config};
+pub use admin::{Config, router};

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use bm_version::VersionKey;
 use image::{ImageBuffer, Pixel, Rgb};
 use ironworks::Ironworks;

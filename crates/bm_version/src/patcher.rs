@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, Result};
 use figment::value::magic::RelativePathBuf;
 use serde::Deserialize;
-use tokio::sync::{broadcast, Semaphore};
+use tokio::sync::{Semaphore, broadcast};
 
 use super::{thaliak, version};
 

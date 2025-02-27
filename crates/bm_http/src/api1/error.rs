@@ -1,9 +1,9 @@
-use aide::{openapi::Response as AideResponse, transform::TransformResponse, OperationOutput};
+use aide::{OperationOutput, openapi::Response as AideResponse, transform::TransformResponse};
 use axum::{
+	Json,
 	extract::rejection::{PathRejection, QueryRejection},
 	http::StatusCode,
 	response::{IntoResponse, Response as AxumResponse},
-	Json,
 };
 use schemars::JsonSchema;
 use serde::Serialize;

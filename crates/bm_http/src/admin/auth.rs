@@ -1,12 +1,12 @@
 use axum::{
 	extract::{Request, State},
-	http::{header, StatusCode},
+	http::{StatusCode, header},
 	middleware::Next,
 	response::{IntoResponse, Response},
 };
 use axum_extra::{
-	headers::{authorization::Basic, Authorization},
 	TypedHeader,
+	headers::{Authorization, authorization::Basic},
 };
 use serde::Deserialize;
 

@@ -1,9 +1,9 @@
 use std::{collections::HashMap, fmt, str::FromStr};
 
-use serde::{de, Deserialize};
-use tracing::{metadata::LevelFilter, Subscriber};
+use serde::{Deserialize, de};
+use tracing::{Subscriber, metadata::LevelFilter};
 use tracing_subscriber::{
-	filter, layer::SubscriberExt, registry::LookupSpan, util::SubscriberInitExt, Layer,
+	Layer, filter, layer::SubscriberExt, registry::LookupSpan, util::SubscriberInitExt,
 };
 
 #[derive(Debug, Deserialize)]

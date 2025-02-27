@@ -4,4 +4,4 @@ mod health;
 mod http;
 mod service;
 
-pub use http::{serve, Config};
+pub use http::{Config, serve};

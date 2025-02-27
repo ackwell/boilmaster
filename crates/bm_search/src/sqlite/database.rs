@@ -1,12 +1,12 @@
 use std::{
 	path::PathBuf,
 	sync::{
-		atomic::{AtomicBool, Ordering},
 		Arc,
+		atomic::{AtomicBool, Ordering},
 	},
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use bb8::{Pool, PooledConnection};
 use bm_read::LanguageString;
 use ironworks::excel::{Excel, Sheet};

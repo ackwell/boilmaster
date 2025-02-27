@@ -2,10 +2,10 @@ use std::{marker::PhantomData, os::raw::c_int, sync::Arc};
 
 use bm_read::LanguageString;
 use ironworks::{excel, file::exh};
-use rusqlite::{types::ToSqlOutput, vtab, Connection, ToSql};
+use rusqlite::{Connection, ToSql, types::ToSqlOutput, vtab};
 use sea_query::{Alias, ColumnDef, SqliteQueryBuilder, Table};
 
-use super::schema::{column_name, column_type, KnownColumn};
+use super::schema::{KnownColumn, column_name, column_type};
 
 pub fn load_module(connection: &Connection, excel: Arc<excel::Excel>) -> rusqlite::Result<()> {
 	let module = vtab::read_only_module::<'_, IronworksTable>();
