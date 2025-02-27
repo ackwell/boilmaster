@@ -1,6 +1,5 @@
 [workspace]
 members = ["crates/*"]
-# TODO: Update to 3 when targeting 1.84+ (probably 1.85 with new edition)
 resolver = "3"
 
 [workspace.package]
@@ -32,8 +31,8 @@ git-version = "0.3.9"
 graphql_client = "0.14.0"
 image = { version = "0.25.1", default-features = false }
 image_dds = { version = "0.7.0", default-features = false }
-ironworks = { git = "https://github.com/ackwell/ironworks.git", branch = "rust-2024" }
-ironworks_schema = { git = "https://github.com/ackwell/ironworks.git", branch = "rust-2024" }
+ironworks = { git = "https://github.com/ackwell/ironworks.git" }
+ironworks_schema = { git = "https://github.com/ackwell/ironworks.git" }
 itertools = "0.14.0"
 maud = "0.27.0"
 mime = "0.3.17"
