@@ -73,8 +73,7 @@ default = "exdschema"
 interval = 3600       # 1 hour
 
 [schema.exdschema]
-# TODO: update default to `2:ver:request` once exds2 is mainline.
-default = "HEAD"
+default = "2:ver:request"
 remote = "https://github.com/xivdev/EXDSchema.git"
 directory = "exdschema"
 
