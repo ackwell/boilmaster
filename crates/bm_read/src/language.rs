@@ -25,6 +25,7 @@ impl fmt::Display for LanguageString {
 			Language::ChineseSimplified => "chs",
 			Language::ChineseTraditional => "cht",
 			Language::Korean => "kr",
+			_ => &format!("unk{}", u8::from(self.0)),
 		};
 		formatter.write_str(string)
 	}
@@ -55,7 +56,11 @@ impl FromStr for LanguageString {
 			"chs" => Language::ChineseSimplified,
 			"cht" => Language::ChineseTraditional,
 			"kr" => Language::Korean,
-			_ => return Err(Error::InvalidLanguage(string.into())),
+			other => other
+				.strip_prefix("unk")
+				.and_then(|id| id.parse::<u8>().ok())
+				.map(Language::Unknown)
+				.ok_or_else(|| Error::InvalidLanguage(string.into()))?,
 		};
 
 		Ok(Self(language))
