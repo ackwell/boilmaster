@@ -83,7 +83,7 @@ impl<'a> Normalizer<'a> {
 		let mut columns = sheet_data.columns()?;
 		match sheet_schema.order {
 			schema::Order::Index => (),
-			schema::Order::Offset => columns.sort_by_key(|column| column.offset()),
+			schema::Order::Offset => columns.sort_by_key(|column| column.offset),
 		}
 
 		// Check if the ambient language is valid for this sheet, trying to fall
@@ -333,7 +333,7 @@ impl<'a> Normalizer<'a> {
 			}
 
 			pre::Operation::Match(string) => scalar_operation(
-				|column| column.kind() == exh::ColumnKind::String,
+				|column| column.kind == exh::ColumnKind::String,
 				|| post::Operation::Match(string.clone()),
 				context,
 			),
@@ -483,7 +483,7 @@ impl<'a> Normalizer<'a> {
 fn is_column_numeric(column: &exh::ColumnDefinition) -> bool {
 	// NOTE: This is written to be comprehensive to ensure it does not drift if column kinds are updated.
 	use exh::ColumnKind as CK;
-	match column.kind() {
+	match column.kind {
 		CK::Int8
 		| CK::UInt8
 		| CK::Int16
@@ -524,7 +524,7 @@ fn scalar_operation(
 	if !filter(column) {
 		return Err(Error::QuerySchemaMismatch(context.mismatch(format!(
 			"{:?} columns are invalid for this operation",
-			column.kind()
+			column.kind
 		))));
 	}
 

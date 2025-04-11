@@ -125,7 +125,7 @@ fn get_sorted_columns(
 	match schema.order {
 		schema::Order::Index => (),
 		// NOTE: It's important to maintain the sort order here for PackedBool ordering
-		schema::Order::Offset => columns.sort_by_key(|column| column.offset()),
+		schema::Order::Offset => columns.sort_by_key(|column| column.offset),
 	};
 
 	Ok(columns)
@@ -483,8 +483,8 @@ fn iterate_struct_fields<'s, 'c>(
 			(
 				Cow::<str>::Owned(format!(
 					"unknown{}{}",
-					column.offset(),
-					unknown_suffix(column.kind())
+					column.offset,
+					unknown_suffix(column.kind)
 				)),
 				&schema::Node::Scalar(schema::Scalar::Default),
 				&columns[offset..offset + 1],

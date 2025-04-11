@@ -14,12 +14,12 @@ pub enum KnownColumn {
 }
 
 pub fn column_name(column: &exh::ColumnDefinition) -> Alias {
-	let offset = column.offset();
+	let offset = column.offset;
 
 	// For packed bool columns, offset alone is not enough to disambiguate a
 	// field - add a suffix of the packed bit position.
 	use exh::ColumnKind as CK;
-	let suffix = match column.kind() {
+	let suffix = match column.kind {
 		CK::PackedBool0 => "_0",
 		CK::PackedBool1 => "_1",
 		CK::PackedBool2 => "_2",
@@ -36,7 +36,7 @@ pub fn column_name(column: &exh::ColumnDefinition) -> Alias {
 
 pub fn column_type(column: &exh::ColumnDefinition) -> ColumnType {
 	use exh::ColumnKind as CK;
-	match column.kind() {
+	match column.kind {
 		// Using text for this because we have absolutely no idea how large any given string is going to be.
 		CK::String => ColumnType::Text,
 
