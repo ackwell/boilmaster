@@ -62,7 +62,6 @@ impl Write for HtmlWriter {
 	}
 
 	fn set_style(&mut self, style: Style, enabled: bool) -> Result<(), SeStringError> {
-		tracing::debug!("{style:?} -> {enabled:?}");
 		let tag = match style {
 			Style::Bold => "strong",
 			Style::Italic => "em",
