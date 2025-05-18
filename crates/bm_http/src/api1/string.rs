@@ -6,7 +6,7 @@ use ironworks::{
 	excel::Excel,
 	sestring::{
 		Error as SeStringError, SeString,
-		format::{Color, ColorUsage, Input, Write, format},
+		format::{Color, ColorUsage, Input, Style, Write, format},
 	},
 };
 
@@ -49,15 +49,35 @@ struct HtmlWriter {
 
 impl Write for HtmlWriter {
 	fn write_str(&mut self, str: &str) -> Result<(), SeStringError> {
-		// Probaly overkill for this but it'll be nice if I add more replacements.
+		// Probably overkill for this but it'll be nice if I add more replacements.
 		static PATTERN: OnceLock<AhoCorasick> = OnceLock::new();
 		let pattern = PATTERN.get_or_init(|| {
-			AhoCorasick::new(["\n"]).expect("pattern construction should not fail")
+			AhoCorasick::new(["\n", "\u{00A0}"]).expect("pattern construction should not fail")
 		});
 
-		let output = pattern.replace_all(str, &["<br>"]);
+		let output = pattern.replace_all(str, &["<br>", "&nbsp;"]);
 
 		self.buffer.push_str(&output);
+		Ok(())
+	}
+
+	fn set_style(&mut self, style: Style, enabled: bool) -> Result<(), SeStringError> {
+		tracing::debug!("{style:?} -> {enabled:?}");
+		let tag = match style {
+			Style::Bold => "strong",
+			Style::Italic => "em",
+
+			// The others we're ignoring for now.
+			_ => return Ok(()),
+		};
+
+		let close = match enabled {
+			true => "",
+			false => "/",
+		};
+
+		self.buffer.push_str(&format!(r#"<{close}{tag}>"#));
+
 		Ok(())
 	}
 
