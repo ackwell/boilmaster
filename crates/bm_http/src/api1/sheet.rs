@@ -289,9 +289,16 @@ async fn sheet(
 
 		// None were provided, iterate over the sheet itself.
 		// TODO: Currently, read:: does _all_ the row fetching itself, which means that we're effectively iterating the sheet here _just_ to get the row IDs, then re-fetching in the read:: code. This... probably isn't too problematic, but worth considering how to approach more betterer. If read:: can be modified to take a row, then the Some() case above can be specailised to the read-row logic and this case can be simplified.
-		None => Either::Right(sheet.into_iter().map(|row| RowSpecifier {
-			row_id: row.row_id(),
-			subrow_id: row.subrow_id(),
+		None => Either::Right(sheet.into_iter().filter_map(|row| match row {
+			Err(error) => {
+				// TODO: This is pretty horrid, but good enough for the sake of surfacing without more changes.
+				tracing::error!("got error while iterating sheet: {error}");
+				None
+			}
+			Ok(row) => Some(RowSpecifier {
+				row_id: row.row_id(),
+				subrow_id: row.subrow_id(),
+			}),
 		})),
 	};
 

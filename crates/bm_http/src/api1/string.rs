@@ -21,6 +21,8 @@ pub fn build_input(excel: &Excel) -> Result<Input> {
 		.context("failed to read UIColor sheet")?;
 
 	for row in sheet.into_iter() {
+		let row = row?;
+
 		let [r, g, b, a] = row
 			.field(0)
 			.ok()

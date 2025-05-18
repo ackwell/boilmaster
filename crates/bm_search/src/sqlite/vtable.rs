@@ -157,12 +157,12 @@ impl Index {
 }
 
 impl Iterator for Index {
-	type Item = excel::Row;
+	type Item = Result<excel::Row, ironworks::Error>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::Scan(sheet_iterator) => sheet_iterator.next(),
-			Self::RowId(row_id_index) => row_id_index.next(),
+			Self::RowId(row_id_index) => row_id_index.next().map(Ok),
 			Self::Never => None,
 		}
 	}
@@ -263,13 +263,16 @@ unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 			return Err(module_error("iterator was not initialised before next"));
 		};
 
-		self.next = iterator.next();
+		self.next = iterator
+			.next()
+			.transpose()
+			.map_err(|error| module_error(error))?;
 
 		Ok(())
 	}
 
 	fn eof(&self) -> bool {
-		// NOTE: this assumes that, given .filter will set up the iterator and call next, and next will only set None if it's EOF, that next being none _is_ eof.
+		// NOTE: This assumes that, given .filter will set up the iterator and call next, and next will only set None if it's EOF, that next being none _is_ EOF.
 		self.next.is_none()
 	}
 
