@@ -139,6 +139,17 @@ impl Provider {
 			next_version = active_versions.first().cloned()
 		}
 
+		// WORKAROUND: Around patches, when the patch servers are down, thaliak
+		// blindly marks almost the entire patch chain as inactive, slash breaks the
+		// chain. This doesn't last for long, but completely breaks any `latest`s
+		// present at the time it occurs. To avoid this, we're failing out if
+		// there's 1 or fewer patches in the chain - the only time this would ever
+		// genuinely occur is on expansion release, and (as so far) no expansion
+		// release has actually had just one patch file.
+		if patches.len() <= 1 {
+			anyhow::bail!("Thaliak returned a single-patch chain for {repository}");
+		}
+
 		// Ironworks expects patches to be specified oldest-first - building down
 		// from latest is the opposite of that, obviously, so fix that up.
 		patches.reverse();
