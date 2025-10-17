@@ -37,13 +37,10 @@ fn versions_docs(operation: TransformOperation) -> TransformOperation {
 			response.example(VersionsResponse {
 				versions: vec![
 					VersionMetadata {
-						names: vec!["latest".into()],
+						names: vec!["7.01".into(), "latest".into()],
 					},
 					VersionMetadata {
 						names: vec!["7.0".into()],
-					},
-					VersionMetadata {
-						names: vec!["7.01".into()],
 					},
 				],
 			})
@@ -52,12 +49,13 @@ fn versions_docs(operation: TransformOperation) -> TransformOperation {
 
 #[debug_handler(state = ApiState)]
 async fn versions(State(Service { version, .. }): State<Service>) -> Json<VersionsResponse> {
-	let mut names = version.all_names();
-	names.sort_unstable();
+	let version_keys = version.keys();
 
-	let metadata = names
+	let metadata = version_keys
 		.into_iter()
-		.map(|name| VersionMetadata { names: vec![name] })
+		// Given the list of keys is from the version manager, we should never hit a
+		// None here - but be safe just in case.
+		.filter_map(|key| version.names(key).map(|names| VersionMetadata { names }))
 		.collect();
 
 	Json(VersionsResponse { versions: metadata })

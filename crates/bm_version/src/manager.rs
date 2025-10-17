@@ -116,16 +116,6 @@ impl Manager {
 			.copied()
 	}
 
-	/// Get a list of all known version names.
-	pub fn all_names(&self) -> Vec<String> {
-		self.names
-			.read()
-			.expect("poisoned")
-			.keys()
-			.cloned()
-			.collect()
-	}
-
 	/// Get a list of names for a given version key.
 	pub fn names(&self, key: VersionKey) -> Option<Vec<String>> {
 		// Make sure the version is actually known to exist, to distinguish between an unknown key and a key with no names.
@@ -133,6 +123,8 @@ impl Manager {
 			return None;
 		}
 
+		// TODO: This is really naive and pretty wasteful. Reconsider how these are
+		// stored so I don't have to filter the entire list every time.
 		let names = self
 			.names
 			.read()
