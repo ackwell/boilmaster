@@ -1,8 +1,11 @@
+use std::str::FromStr;
+
 use aide::{
 	axum::{ApiRouter, routing::get_with},
 	transform::TransformOperation,
 };
 use axum::{Json, debug_handler, extract::State};
+use bm_version::VersionKey;
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -24,6 +27,10 @@ struct VersionsResponse {
 /// Metadata about a single version supported by the API.
 #[derive(Serialize, JsonSchema)]
 struct VersionMetadata {
+	/// Canonical key for this version.
+	#[schemars(with = "String")]
+	key: VersionKey,
+
 	/// Names associated with this version. Version names specified here are
 	/// accepted by the `version` query parameter throughout the API.
 	names: Vec<String>,
@@ -41,11 +48,13 @@ fn versions_docs(operation: TransformOperation) -> TransformOperation {
 			response.example(VersionsResponse {
 				versions: vec![
 					VersionMetadata {
-						names: vec!["7.01".into(), "latest".into()],
+						key: VersionKey::from_str("f815390159effefd").expect("static"),
+						names: vec!["7.0".into()],
 						patch: "unused".into(),
 					},
 					VersionMetadata {
-						names: vec!["7.0".into()],
+						key: VersionKey::from_str("2139246928a48a9a").expect("static"),
+						names: vec!["7.01".into(), "latest".into()],
 						patch: "unused".into(),
 					},
 				],
@@ -64,7 +73,7 @@ async fn versions(State(Service { version, .. }): State<Service>) -> Json<Versio
 			let names = version.names(key)?;
 			let data = version.version(key)?;
 			let patch = data.repositories.first()?.latest().name.clone();
-			Some(VersionMetadata { names, patch })
+			Some(VersionMetadata { key, names, patch })
 		})
 		.collect::<Vec<_>>();
 
