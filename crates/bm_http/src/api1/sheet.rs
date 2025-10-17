@@ -8,6 +8,7 @@ use axum::{
 	Json, debug_handler,
 	extract::{FromRef, State},
 };
+use bm_version::VersionKey;
 use either::Either;
 use schemars::{
 	JsonSchema,
@@ -16,7 +17,7 @@ use schemars::{
 };
 use serde::{Deserialize, Deserializer, Serialize, de};
 
-use crate::service::Service;
+use crate::{api1::read::Specifiers, service::Service};
 
 use super::{
 	api::ApiState,
@@ -239,9 +240,8 @@ fn rows_schema(_generator: &mut SchemaGenerator) -> Schema {
 /// Response structure for the sheet endpoint.
 #[derive(Serialize, JsonSchema)]
 struct SheetResponse {
-	/// The canonical specifier for the schema used in this response.
-	#[schemars(with = "String")]
-	schema: bm_schema::CanonicalSpecifier,
+	#[serde(flatten)]
+	specifiers: Specifiers,
 
 	/// Array of rows retrieved by the query.
 	rows: Vec<RowResult>,
@@ -253,9 +253,12 @@ fn sheet_docs(operation: TransformOperation) -> TransformOperation {
 		.description("Read information about one or more rows and their related data.")
 		.response_with::<200, Json<SheetResponse>, _>(|response| {
 			response.example(SheetResponse {
-				schema: bm_schema::CanonicalSpecifier {
-					source: "source".into(),
-					version: "version".into(),
+				specifiers: Specifiers {
+					schema: bm_schema::CanonicalSpecifier {
+						source: "source".into(),
+						version: "version".into(),
+					},
+					version: VersionKey::from_str("f815390159effefd").expect("static"),
 				},
 				rows: vec![RowResult::example(1), RowResult::example(2)],
 			})
@@ -322,7 +325,7 @@ async fn sheet(
 	let rows = sheet_iterator.collect::<Result<Vec<_>>>()?;
 
 	let response = SheetResponse {
-		schema: reader.schema_specifier,
+		specifiers: reader.specifiers,
 		rows,
 	};
 
@@ -341,9 +344,8 @@ struct RowPath {
 /// Response structure for the row endpoint.
 #[derive(Serialize, JsonSchema)]
 struct RowResponse {
-	/// The canonical specifier for the schema used in this response.
-	#[schemars(with = "String")]
-	schema: bm_schema::CanonicalSpecifier,
+	#[serde(flatten)]
+	specifiers: Specifiers,
 
 	#[serde(flatten)]
 	row: RowResult,
@@ -357,9 +359,12 @@ fn row_docs(operation: TransformOperation) -> TransformOperation {
 		)
 		.response_with::<200, Json<RowResponse>, _>(|response| {
 			response.example(RowResponse {
-				schema: bm_schema::CanonicalSpecifier {
-					source: "source".into(),
-					version: "version".into(),
+				specifiers: Specifiers {
+					schema: bm_schema::CanonicalSpecifier {
+						source: "source".into(),
+						version: "version".into(),
+					},
+					version: VersionKey::from_str("f815390159effefd").expect("static"),
 				},
 				row: RowResult::example(1),
 			})
@@ -380,7 +385,7 @@ async fn row(
 	)?;
 
 	Ok(Json(RowResponse {
-		schema: reader.schema_specifier,
+		specifiers: reader.specifiers,
 		row,
 	}))
 }
