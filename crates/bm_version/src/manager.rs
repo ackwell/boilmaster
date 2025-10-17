@@ -63,6 +63,9 @@ pub struct Manager {
 }
 
 impl Manager {
+	// TODO: This probably shouldn't be hardcoded.
+	pub const DEFAULT_NAME: &str = TAG_LATEST;
+
 	pub fn new(config: Config) -> Result<Self> {
 		let directory = config.directory.relative();
 		fs::create_dir_all(&directory)?;
@@ -106,14 +109,9 @@ impl Manager {
 			.collect()
 	}
 
-	/// Resolve a version name to its key, if the name is known. If no version is
-	/// specified. the version marked as latest will be returned.
-	pub fn resolve(&self, name: Option<&str>) -> Option<VersionKey> {
-		self.names
-			.read()
-			.expect("poisoned")
-			.get(name.unwrap_or(TAG_LATEST))
-			.copied()
+	/// Resolve a version name to its key, if the name is known.
+	pub fn resolve(&self, name: &str) -> Option<VersionKey> {
+		self.names.read().expect("poisoned").get(name).copied()
 	}
 
 	/// Get a list of names for a given version key.
