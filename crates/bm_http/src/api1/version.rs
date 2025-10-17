@@ -27,6 +27,10 @@ struct VersionMetadata {
 	/// Names associated with this version. Version names specified here are
 	/// accepted by the `version` query parameter throughout the API.
 	names: Vec<String>,
+
+	// Used for sorting.
+	#[serde(skip)]
+	patch: String,
 }
 
 fn versions_docs(operation: TransformOperation) -> TransformOperation {
@@ -38,9 +42,11 @@ fn versions_docs(operation: TransformOperation) -> TransformOperation {
 				versions: vec![
 					VersionMetadata {
 						names: vec!["7.01".into(), "latest".into()],
+						patch: "unused".into(),
 					},
 					VersionMetadata {
 						names: vec!["7.0".into()],
+						patch: "unused".into(),
 					},
 				],
 			})
@@ -49,14 +55,20 @@ fn versions_docs(operation: TransformOperation) -> TransformOperation {
 
 #[debug_handler(state = ApiState)]
 async fn versions(State(Service { version, .. }): State<Service>) -> Json<VersionsResponse> {
-	let version_keys = version.keys();
-
-	let metadata = version_keys
+	let mut metadata = version
+		.keys()
 		.into_iter()
 		// Given the list of keys is from the version manager, we should never hit a
 		// None here - but be safe just in case.
-		.filter_map(|key| version.names(key).map(|names| VersionMetadata { names }))
-		.collect();
+		.filter_map(|key| {
+			let names = version.names(key)?;
+			let data = version.version(key)?;
+			let patch = data.repositories.first()?.latest().name.clone();
+			Some(VersionMetadata { names, patch })
+		})
+		.collect::<Vec<_>>();
+
+	metadata.sort_unstable_by(|a, b| a.patch.cmp(&b.patch));
 
 	Json(VersionsResponse { versions: metadata })
 }
