@@ -4,7 +4,7 @@ use axum::{
 	extract::{FromRef, FromRequestParts},
 	http::request::Parts,
 };
-use bm_version::VersionKey;
+use bm_version::{Manager, VersionKey};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -39,15 +39,25 @@ where
 
 		let Service { version, .. } = Service::from_ref(state);
 
-		let version_name = params.version.as_deref();
-		let version_key = version.resolve(version_name).ok_or_else(|| {
-			Error::Invalid(format!(
-				"unknown version \"{}\"",
-				version_name.unwrap_or("(none)")
-			))
-		})?;
+		let value = params.version.as_deref().unwrap_or(Manager::DEFAULT_NAME);
 
-		Ok(Self(version_key))
+		// For backwards compatibilty, we check for a matching name first. There's
+		// minimal chance that a name will collide with a key.
+		if let Some(version_key) = version.resolve(value) {
+			return Ok(Self(version_key));
+		}
+
+		// Try parsing the value as a version key. Keys are just hex (which isn't
+		// numbers), so we need to double check it's actually a version key before
+		// succeeding.
+		if let Ok(version_key) = value.parse::<VersionKey>() {
+			if let Some(_version) = version.version(version_key) {
+				return Ok(Self(version_key));
+			}
+		}
+
+		// Fall through to a failure
+		Err(Error::Invalid(format!("unknown version \"{}\"", value)))
 	}
 }
 

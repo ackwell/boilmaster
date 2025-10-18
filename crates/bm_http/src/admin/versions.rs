@@ -37,7 +37,7 @@ async fn versions(
 		let patch = version
 			.repositories
 			.first()
-			.map(|repository| repository.patches.last().name.clone())
+			.map(|repository| repository.latest().name.clone())
 			.unwrap_or_else(|| "(NONE)".into());
 
 		Ok(VersionInfo {

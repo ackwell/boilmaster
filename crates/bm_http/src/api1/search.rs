@@ -9,6 +9,7 @@ use axum::{
 	extract::{FromRef, State},
 };
 use bm_search::{SearchRequest as InnerSearchRequest, SearchRequestQuery};
+use bm_version::VersionKey;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,7 +21,7 @@ use super::{
 	error::{Error, Result},
 	extract::{Query, VersionQuery},
 	query::QueryString,
-	read::{RowReader, RowReaderConfig, RowReaderState, RowResult},
+	read::{RowReader, RowReaderConfig, RowReaderState, RowResult, Specifiers},
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -85,9 +86,8 @@ struct SearchResponse {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	next: Option<Uuid>,
 
-	/// The canonical specifier for the schema used in this response.
-	#[schemars(with = "String")]
-	schema: bm_schema::CanonicalSpecifier,
+	#[serde(flatten)]
+	specifiers: Specifiers,
 
 	/// Array of results found by the query, sorted by their relevance.
 	results: Vec<SearchResult>,
@@ -120,9 +120,12 @@ fn search_docs(operation: TransformOperation) -> TransformOperation {
 		.response_with::<200, Json<SearchResponse>, _>(|response| {
 			response.example(SearchResponse {
 				next: Some(Uuid::from_str("bbe61a5e-7d22-41ec-9f5a-711c967c5624").expect("static")),
-				schema: bm_schema::CanonicalSpecifier {
-					source: "source".into(),
-					version: "version".into(),
+				specifiers: Specifiers {
+					schema: bm_schema::CanonicalSpecifier {
+						source: "source".into(),
+						version: "version".into(),
+					},
+					version: VersionKey::from_str("f815390159effefd").expect("static"),
 				},
 				results: vec![SearchResult {
 					score: 1.413,
@@ -171,7 +174,7 @@ async fn search(
 				query: search_query.into(),
 				language: reader.language,
 				sheets: Some(sheets),
-				schema: reader.schema_specifier.clone(),
+				schema: reader.specifiers.schema.clone(),
 			})
 		}
 	};
@@ -197,7 +200,7 @@ async fn search(
 
 	Ok(Json(SearchResponse {
 		next: next_cursor,
-		schema: reader.schema_specifier,
+		specifiers: reader.specifiers,
 		results: http_results,
 	}))
 }

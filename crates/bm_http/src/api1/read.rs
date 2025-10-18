@@ -173,12 +173,23 @@ impl RowResult {
 pub struct RowReader {
 	read: service::Read,
 	pub excel: Arc<excel::Excel>,
-	pub schema_specifier: bm_schema::CanonicalSpecifier,
+	pub specifiers: Specifiers,
 	schema: Box<dyn ironworks_schema::Schema + Send>,
 	pub language: excel::Language,
 	fields: read::Filter,
 	transient: Option<read::Filter>,
 	string_input: Arc<Input>,
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct Specifiers {
+	/// The canonical specifier for the schema used in this response.
+	#[schemars(with = "String")]
+	pub schema: bm_schema::CanonicalSpecifier,
+
+	/// The canonical specifier for the version used in this response.
+	#[schemars(with = "String")]
+	pub version: bm_version::VersionKey,
 }
 
 // todo maybe an extra bit of state requirements on this for the filters? that would allow the filters to be wired up per-handler i think. not sure how that aligns with existing state though
@@ -238,7 +249,10 @@ where
 		Ok(Self {
 			read,
 			excel,
-			schema_specifier,
+			specifiers: Specifiers {
+				schema: schema_specifier,
+				version: version_key,
+			},
 			schema,
 			language,
 			fields,
