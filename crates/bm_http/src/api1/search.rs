@@ -143,7 +143,7 @@ async fn search(
 	Query(query): Query<SearchQuery>,
 	State(Service { search, .. }): State<Service>,
 	State(config): State<LimitConfig>,
-	reader: RowReader,
+	mut reader: RowReader,
 ) -> Result<impl IntoApiResponse> {
 	// Resolve search request into something the search service understands.
 	// TODO: seperate fn?

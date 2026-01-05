@@ -187,6 +187,7 @@ fn rowspecifier_schema(_generator: &mut SchemaGenerator) -> Schema {
 	})
 }
 
+// TODO: request some pagination structure to get all subrows for a given row. tempting to make it part of the rows: specifier thing.
 /// Query parameters accepted by the sheet endpoint.
 #[derive(Deserialize, JsonSchema)]
 struct SheetQuery {
@@ -270,7 +271,7 @@ async fn sheet(
 	Path(path): Path<SheetPath>,
 	Query(query): Query<SheetQuery>,
 	State(config): State<LimitConfig>,
-	reader: RowReader,
+	mut reader: RowReader,
 ) -> Result<impl IntoApiResponse> {
 	// Get a reference to the sheet we'll be reading from.
 	// TODO: should this be in super::error as a default extract? minus the sheet specialised case, that is
@@ -375,7 +376,7 @@ fn row_docs(operation: TransformOperation) -> TransformOperation {
 async fn row(
 	Path(path): Path<RowPath>,
 	State(config): State<LimitConfig>,
-	reader: RowReader,
+	mut reader: RowReader,
 ) -> Result<Json<RowResponse>> {
 	let row = reader.read_row(
 		&path.sheet,

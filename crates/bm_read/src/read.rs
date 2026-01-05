@@ -63,7 +63,10 @@ impl Read {
 
 		filter: &Filter,
 		depth: u8,
-	) -> Result<Value> {
+	) -> Result<(Value, u32)> {
+		// TODO: This is incredibly kludgy, and should be replaced/refactored as part of a filter resolution step. As-is, we have to read too much before working out if it actually was too much. It shouldn't need reading at all.
+		let mut rows_read = 0;
+
 		let value = read_sheet(ReaderContext {
 			read: self,
 
@@ -81,10 +84,15 @@ impl Read {
 			columns: &[],
 			depth,
 
+			rows_read: &mut rows_read,
+
 			path: &[],
 		})?;
 
-		Ok(value)
+		let fuck = rows_read;
+		tracing::warn!(fuck, "blah");
+
+		Ok((value, rows_read))
 	}
 }
 
@@ -214,6 +222,9 @@ fn read_scalar_reference(
 					},
 				)])),
 				rows: &mut *context.rows,
+
+				rows_read: &mut *context.rows_read,
+
 				..context
 			})?;
 
@@ -259,6 +270,9 @@ fn read_scalar_reference(
 			other => other,
 		}?;
 
+		// TODO: HELL
+		*context.rows_read += 1;
+
 		let row_id = row_data.row_id();
 		let subrow_id = row_data.subrow_id();
 
@@ -269,6 +283,8 @@ fn read_scalar_reference(
 
 			rows: &mut HashMap::from([(context.language, row_data)]),
 			depth: context.depth.max(1) - 1,
+
+			rows_read: &mut *context.rows_read,
 
 			..context
 		})?;
@@ -355,6 +371,8 @@ fn read_node_array(
 					columns,
 					rows: &mut context.rows,
 
+					rows_read: &mut *context.rows_read,
+
 					..context
 				},
 			);
@@ -434,6 +452,9 @@ fn read_node_struct(
 					columns,
 					rows: &mut context.rows,
 					path: &path,
+
+					rows_read: &mut *context.rows_read,
+
 					..context
 				},
 			)?;
@@ -552,6 +573,8 @@ struct ReaderContext<'a> {
 	rows: &'a mut HashMap<excel::Language, excel::Row>,
 	depth: u8,
 
+	rows_read: &'a mut u32,
+
 	path: &'a [&'a str],
 }
 
@@ -568,6 +591,9 @@ impl ReaderContext<'_> {
 		let row = match self.rows.entry(language) {
 			hash_map::Entry::Occupied(entry) => entry.into_mut(),
 			hash_map::Entry::Vacant(entry) => {
+				// TODO: HELL
+				*self.rows_read += 1;
+
 				entry.insert(self.excel.sheet(self.sheet)?.subrow_with_options(
 					self.row_id,
 					self.subrow_id,

@@ -179,6 +179,9 @@ pub struct RowReader {
 	fields: read::Filter,
 	transient: Option<read::Filter>,
 	string_input: Arc<Input>,
+
+	// TODO: Horrifying Hack. I'm not convinced the read module should be "smart" enough to handle cross-iteration caching, but I _do_ need to set up some degree of shared cache within a single row-read, and lifting that up to an iteration point is probably worthwhile so e.g. item0 doesn't get read N times.
+	rows_read: u32,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -258,33 +261,42 @@ where
 			fields,
 			transient,
 			string_input,
+
+			rows_read: 0,
 		})
 	}
 }
 
 impl RowReader {
+	pub fn track_rows_read_and_maybe_explode(&mut self, extra: u32) -> Result<()> {
+		// This is a horrific hardcoded hack.
+		self.rows_read += extra;
+		match self.rows_read > 20_000 {
+			true => Err(Error::Invalid("Fulfilling this request would require processing over 20,000 rows of data. Please limit the scope of the fields you are reading. If you're hitting this, consider joining the XIVAPI discord @ discord.gg/MFFVHWC - we may be able to help improve your query.".into())),
+			false => Ok(()),
+		}
+	}
+
 	// todo: should i move the depth somewhere else? it _is_ effectively static config
 	pub fn read_row(
-		&self,
+		&mut self,
 		sheet: &str,
 		row_id: u32,
 		subrow_id: u16,
 		depth: u8,
 	) -> Result<RowResult> {
-		let fields = ValueString(
-			self.read.read(
-				&self.excel,
-				self.schema.as_ref(),
-				sheet,
-				row_id,
-				subrow_id,
-				self.language,
-				&self.fields,
-				depth,
-			)?,
+		let (value, rows_read) = self.read.read(
+			&self.excel,
+			self.schema.as_ref(),
+			sheet,
+			row_id,
+			subrow_id,
 			self.language,
-			self.string_input.clone(),
-		);
+			&self.fields,
+			depth,
+		)?;
+		self.track_rows_read_and_maybe_explode(rows_read)?;
+		let fields = ValueString(value, self.language, self.string_input.clone());
 
 		// Try to read a transient row.
 		let transient = match self.transient.as_ref() {
@@ -299,7 +311,10 @@ impl RowReader {
 				filter,
 				depth,
 			) {
-				Ok(value) => Some(ValueString(value, self.language, self.string_input.clone())),
+				Ok((value, rows_read)) => {
+					self.track_rows_read_and_maybe_explode(rows_read)?;
+					Some(ValueString(value, self.language, self.string_input.clone()))
+				}
 				Err(read::Error::NotFound(_)) => None,
 				Err(error) => Err(error)?,
 			},
