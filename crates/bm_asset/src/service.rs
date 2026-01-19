@@ -59,6 +59,18 @@ impl Service {
 		let path = format!("ui/map/{territory}/{index}/{territory}{index}");
 		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgb8();
 
+		// NOTE: The presence of `m` alone is not enough to confirm that a map needs
+		// composition, ref. `f1h1/02`, which contains a fully pre-composed map, and
+		// a pure black `m`. To bodge around this, we're checking if the `d` texture
+		// is also present - if not, we shouldn't try composing.
+		match ironworks.file::<FileExists>(&format!("{path}d.tex")) {
+			Ok(_) => {}
+			Err(ironworks::Error::NotFound(ironworks::ErrorValue::Path(_))) => {
+				return Ok(buffer_map);
+			}
+			Err(error) => return Err(Error::Failure(error.into())),
+		}
+
 		let buffer_background = match texture::read(&ironworks, &format!("{path}m_m.tex")) {
 			// If the background texture wasn't found, we can assume the map texture is pre-composed.
 			Err(Error::NotFound(_)) => return Ok(buffer_map),
@@ -77,5 +89,17 @@ impl Service {
 		}
 
 		Ok(buffer_map)
+	}
+}
+
+// TODO: Ironworks doesn't currently expose a way to check if a file exists
+// without reading it into a file structure as well. We're working around this
+// by making it "read" nothing - successfully constructing this necessitates
+// that the file could be found.
+#[derive(Debug)]
+struct FileExists;
+impl ironworks::file::File for FileExists {
+	fn read(_stream: impl ironworks::FileStream) -> Result<Self, ironworks::Error> {
+		Ok(Self)
 	}
 }

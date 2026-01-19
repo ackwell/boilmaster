@@ -39,7 +39,7 @@ use super::{
 };
 
 // NOTE: Bump this if changing any behavior that impacts output binary data for assets, to ensure ETag is cache-broken.
-const ASSET_ETAG_VERSION: usize = 2;
+const ASSET_ETAG_VERSION: usize = 3;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
