@@ -89,9 +89,6 @@ impl Read {
 			path: &[],
 		})?;
 
-		let fuck = rows_read;
-		tracing::warn!(fuck, "blah");
-
 		Ok((value, rows_read))
 	}
 }
