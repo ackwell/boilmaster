@@ -13,7 +13,7 @@ RUN if [ "${arch}" = "aarch64-unknown-linux-gnu" ]; then \
     rustup target add ${arch}; \
     fi
 
-RUN cargo install cargo-chef --locked
+RUN cargo install cargo-chef@0.1.73 --locked
 
 # Setup recipe
 FROM base AS planner
