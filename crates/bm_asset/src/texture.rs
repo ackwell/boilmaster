@@ -28,6 +28,7 @@ pub fn read(ironworks: &Ironworks, path: &str) -> Result<DynamicImage> {
 		tex::Format::Bgra4Unorm => read_bgra4(texture)?,
 		tex::Format::Bgr5a1Unorm => read_bgr5a1(texture)?,
 		tex::Format::Bgra8Unorm => read_bgra8(texture)?,
+		tex::Format::Bgrx8Unorm => read_bgrx8(texture)?,
 
 		tex::Format::Bc1Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC1RgbaUnorm)?,
 		tex::Format::Bc2Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC2RgbaUnorm)?,
@@ -112,6 +113,20 @@ fn read_bgra8(texture: tex::Texture) -> Result<DynamicImage> {
 	let buffer = ImageBuffer::from_raw(texture.width().into(), texture.height().into(), data)
 		.context("failed to build image buffer")?;
 	Ok(DynamicImage::ImageRgba8(buffer))
+}
+
+fn read_bgrx8(texture: tex::Texture) -> Result<DynamicImage> {
+	let data = texture
+		.data()
+		.into_iter()
+		.tuples()
+		.flat_map(|(b, g, r, _x)| [r, g, b])
+		.copied()
+		.collect::<Vec<_>>();
+
+	let buffer = ImageBuffer::from_raw(texture.width().into(), texture.height().into(), data)
+		.context("failed to build image buffer")?;
+	Ok(DynamicImage::ImageRgb8(buffer))
 }
 
 fn read_texture_bc(
