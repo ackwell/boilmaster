@@ -39,6 +39,7 @@ pub fn read(ironworks: &Ironworks, path: &str) -> Result<DynamicImage> {
 		tex::Format::Bc7Unorm => read_texture_bc(texture, image_dds::ImageFormat::BC7RgbaUnorm)?,
 
 		other => {
+			tracing::warn!(format = ?other, "unhandled texture format");
 			return Err(Error::UnsupportedSource(
 				path.into(),
 				format!("unhandled texture format {other:?}"),
