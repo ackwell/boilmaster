@@ -212,6 +212,16 @@ fn example_index() -> &'static str {
 	"00"
 }
 
+#[derive(Deserialize, JsonSchema)]
+struct MapQuery {
+	#[serde(default = "default_map_format")]
+	format: SchemaFormat,
+}
+
+fn default_map_format() -> SchemaFormat {
+	SchemaFormat(Format::Jpeg)
+}
+
 fn map_docs(operation: TransformOperation) -> TransformOperation {
 	operation
 		.summary("compose a map")
@@ -219,9 +229,14 @@ fn map_docs(operation: TransformOperation) -> TransformOperation {
 			"Retrieve the specified map, composing it from split source files if necessary.",
 		)
 		.response_with::<200, Vec<u8>, _>(|mut response| {
-			let content = &mut response.inner().content;
-			content.clear();
-			content.insert(mime::IMAGE_JPEG.to_string(), openapi::MediaType::default());
+			response.inner().content = Format::iter()
+				.map(|format| {
+					(
+						format_mime(format).to_string(),
+						openapi::MediaType::default(),
+					)
+				})
+				.collect();
 			response
 		})
 		.response_with::<304, (), _>(|res| res.description("not modified"))
@@ -231,15 +246,21 @@ fn map_docs(operation: TransformOperation) -> TransformOperation {
 async fn map(
 	Path(MapPath { territory, index }): Path<MapPath>,
 	VersionQuery(version_key): VersionQuery,
+	Query(MapQuery {
+		format: SchemaFormat(format),
+	}): Query<MapQuery>,
 	State(Service { asset, .. }): State<Service>,
 ) -> Result<impl IntoApiResponse> {
-	let bytes = asset.map(version_key, &territory, &index)?;
+	let bytes = asset.map(version_key, &territory, &index, format)?;
 
 	let response = (
-		TypedHeader(ContentType::jpeg()),
+		TypedHeader(ContentType::from(format_mime(format))),
 		[(
 			header::CONTENT_DISPOSITION,
-			format!("inline; filename=\"{territory}_{index}.jpg\""),
+			format!(
+				"inline; filename=\"{territory}_{index}.{extension}\"",
+				extension = format.extension()
+			),
 		)],
 		bytes,
 	);

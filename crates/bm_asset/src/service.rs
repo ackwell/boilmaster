@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
 use bm_version::VersionKey;
-use image::{GenericImageView, ImageBuffer, Pixel, Rgb};
+use image::{GenericImageView, ImageBuffer, Pixel, Rgba};
 use ironworks::Ironworks;
 
 use super::{
@@ -37,17 +37,29 @@ impl Service {
 		converter.convert(&data_version, path, format)
 	}
 
-	pub fn map(&self, version: VersionKey, territory: &str, index: &str) -> Result<Vec<u8>> {
+	pub fn map(
+		&self,
+		version: VersionKey,
+		territory: &str,
+		index: &str,
+		format: Format,
+	) -> Result<Vec<u8>> {
 		let version = self
 			.data
 			.version(version)
 			.with_context(|| format!("data for {version} not ready"))?;
 
+		let output_format = match format {
+			Format::Jpeg => image::ImageFormat::Jpeg,
+			Format::Png => image::ImageFormat::Png,
+			Format::Webp => image::ImageFormat::WebP,
+		};
+
 		let ironworks = version.ironworks();
 
 		let image = self.compose_map(&ironworks, territory, index)?;
 
-		texture::write(image, image::ImageFormat::Jpeg)
+		texture::write(image, output_format)
 	}
 
 	fn compose_map(
@@ -55,9 +67,9 @@ impl Service {
 		ironworks: &Ironworks,
 		territory: &str,
 		index: &str,
-	) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
+	) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>> {
 		let path = format!("ui/map/{territory}/{index}/{territory}{index}");
-		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgb8();
+		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgba8();
 
 		let buffer_background = match texture::read(&ironworks, &format!("{path}m_m.tex")) {
 			// If the background texture wasn't found, we can assume the map texture is pre-composed.
@@ -74,7 +86,7 @@ impl Service {
 				{
 					return Ok(buffer_map);
 				}
-				image.into_rgb8()
+				image.into_rgba8()
 			}
 			Err(error) => Err(error)?,
 		};
