@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
 use bm_version::VersionKey;
-use image::{ImageBuffer, Pixel, Rgb};
+use image::{GenericImageView, ImageBuffer, Pixel, Rgb};
 use ironworks::Ironworks;
 
 use super::{
@@ -59,22 +59,23 @@ impl Service {
 		let path = format!("ui/map/{territory}/{index}/{territory}{index}");
 		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgb8();
 
-		// NOTE: The presence of `m` alone is not enough to confirm that a map needs
-		// composition, ref. `f1h1/02`, which contains a fully pre-composed map, and
-		// a pure black `m`. To bodge around this, we're checking if the `d` texture
-		// is also present - if not, we shouldn't try composing.
-		match ironworks.file::<FileExists>(&format!("{path}d.tex")) {
-			Ok(_) => {}
-			Err(ironworks::Error::NotFound(ironworks::ErrorValue::Path(_))) => {
-				return Ok(buffer_map);
-			}
-			Err(error) => return Err(Error::Failure(error.into())),
-		}
-
 		let buffer_background = match texture::read(&ironworks, &format!("{path}m_m.tex")) {
 			// If the background texture wasn't found, we can assume the map texture is pre-composed.
 			Err(Error::NotFound(_)) => return Ok(buffer_map),
-			Ok(image) => image.into_rgb8(),
+			Ok(image) => {
+				// Some maps have a fully black & transparent `m` texture and are pre-composited.
+				// A pixel from the center of the texture is checked since some maps have a transparent border.
+				let dimensions = image.dimensions();
+				if image
+					.get_pixel(dimensions.0 / 2, dimensions.1 / 2)
+					.channels()
+					.iter()
+					.all(|c| *c == 0)
+				{
+					return Ok(buffer_map);
+				}
+				image.into_rgb8()
+			}
 			Err(error) => Err(error)?,
 		};
 
