@@ -4,3 +4,4 @@
 # - /Dockerfile
 # - /README.md
 channel = "1.85.0"
+components = ["rust-analyzer"]
