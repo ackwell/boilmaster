@@ -216,29 +216,30 @@ impl Manager {
 		};
 		let key = VersionKey::from(&version);
 
-		let mut versions = self.versions.write().expect("poisoned");
+		// Workaround for https://github.com/rust-lang/rust-clippy/issues/6446
+		let changed = {
+			let mut versions = self.versions.write().expect("poisoned");
 
-		let changed = match versions.entry(key) {
-			// New version entry - mark it as latest and request an update.
-			Entry::Vacant(entry) => {
-				entry.insert(version.clone());
-				true
-			}
-
-			// Existing entry, check if the requisite patches have changed before saving.
-			Entry::Occupied(mut entry) => {
-				let old = entry.get();
-				version.ban_time = old.ban_time;
-
-				let changed = *old.repositories != version.repositories;
-				if changed {
+			match versions.entry(key) {
+				// New version entry - mark it as latest and request an update.
+				Entry::Vacant(entry) => {
 					entry.insert(version.clone());
+					true
 				}
-				changed
+
+				// Existing entry, check if the requisite patches have changed before saving.
+				Entry::Occupied(mut entry) => {
+					let old = entry.get();
+					version.ban_time = old.ban_time;
+
+					let changed = *old.repositories != version.repositories;
+					if changed {
+						entry.insert(version.clone());
+					}
+					changed
+				}
 			}
 		};
-
-		drop(versions);
 
 		// If there hasn't been any changes from this update, skip running updates beyond this point.
 		if !changed {

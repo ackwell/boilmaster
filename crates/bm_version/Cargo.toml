@@ -10,6 +10,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+either.workspace = true
 figment.workspace = true
 fs4.workspace = true
 futures = { workspace = true, features = ["alloc"] }
