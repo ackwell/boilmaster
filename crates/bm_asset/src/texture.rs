@@ -119,7 +119,7 @@ fn read_bgra8(texture: tex::Texture) -> Result<DynamicImage> {
 fn read_bgrx8(texture: tex::Texture) -> Result<DynamicImage> {
 	let data = texture
 		.data()
-		.into_iter()
+		.iter()
 		.tuples()
 		.flat_map(|(b, g, r, _x)| [r, g, b])
 		.copied()

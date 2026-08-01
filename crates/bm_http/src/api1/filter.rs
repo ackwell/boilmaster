@@ -77,7 +77,7 @@ impl FilterString {
 		}
 	}
 
-	pub fn to_filter(self, default_language: excel::Language) -> error::Result<read::Filter> {
+	pub fn into_filter(self, default_language: excel::Language) -> error::Result<read::Filter> {
 		let paths = match self.0 {
 			FilterStringInner::All => return Ok(read::Filter::All),
 			FilterStringInner::Paths(paths) => paths,
@@ -309,7 +309,7 @@ fn key(input: &str) -> IResult<&str, Entry> {
 		rest,
 		Entry::Key {
 			key: format!("{field}{decorator_input}"),
-			field: field.into(),
+			field,
 			language,
 			read_as,
 		},
@@ -387,7 +387,7 @@ mod test {
 			.parse::<FilterString>()
 			.expect("parse should not fail");
 		filter_string
-			.to_filter(excel::Language::English)
+			.into_filter(excel::Language::English)
 			.expect("conversion should not fail")
 	}
 

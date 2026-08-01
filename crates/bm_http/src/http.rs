@@ -28,6 +28,7 @@ pub struct HttpState {
 	pub services: service::Service,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn serve(
 	cancel: CancellationToken,
 	config: Config,

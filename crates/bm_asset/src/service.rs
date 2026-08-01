@@ -57,7 +57,7 @@ impl Service {
 		index: &str,
 	) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
 		let path = format!("ui/map/{territory}/{index}/{territory}{index}");
-		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgb8();
+		let mut buffer_map = texture::read(ironworks, &format!("{path}_m.tex"))?.into_rgb8();
 
 		// NOTE: The presence of `m` alone is not enough to confirm that a map needs
 		// composition, ref. `f1h1/02`, which contains a fully pre-composed map, and
@@ -71,7 +71,7 @@ impl Service {
 			Err(error) => return Err(Error::Failure(error.into())),
 		}
 
-		let buffer_background = match texture::read(&ironworks, &format!("{path}m_m.tex")) {
+		let buffer_background = match texture::read(ironworks, &format!("{path}m_m.tex")) {
 			// If the background texture wasn't found, we can assume the map texture is pre-composed.
 			Err(Error::NotFound(_)) => return Ok(buffer_map),
 			Ok(image) => image.into_rgb8(),

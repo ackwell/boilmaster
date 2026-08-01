@@ -128,7 +128,8 @@ impl Manager {
 			.read()
 			.expect("poisoned")
 			.iter()
-			.filter_map(|(name, inner_key)| (*inner_key == key).then(|| name.clone()))
+			.filter(|&(_name, inner_key)| (*inner_key == key))
+			.map(|(name, _inner_key)| name.clone())
 			.collect();
 
 		Some(names)
@@ -448,7 +449,11 @@ fn open_config_read(path: impl AsRef<Path>) -> Result<Option<fs::File>> {
 }
 
 fn open_config_write(path: impl AsRef<Path>) -> Result<fs::File> {
-	let file = fs::File::options().create(true).write(true).open(path)?;
+	let file = fs::File::options()
+		.create(true)
+		.write(true)
+		.truncate(true)
+		.open(path)?;
 	file.lock_exclusive()?;
 	file.set_len(0)?;
 	Ok(file)

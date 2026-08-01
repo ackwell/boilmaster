@@ -22,7 +22,7 @@ pub async fn basic_auth(
 	request: Request,
 	next: Next,
 ) -> Response {
-	let authenticated = authorization.map_or(false, |TypedHeader(auth)| {
+	let authenticated = authorization.is_some_and(|TypedHeader(auth)| {
 		auth.username() == expected.username && auth.password() == expected.password
 	});
 

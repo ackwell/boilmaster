@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)]
+
 mod data;
 mod error;
 

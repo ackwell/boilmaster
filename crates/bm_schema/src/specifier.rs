@@ -1,4 +1,4 @@
-use std::{convert::Infallible, str::FromStr};
+use std::{convert::Infallible, fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize, de};
 
@@ -9,9 +9,9 @@ pub struct CanonicalSpecifier {
 	pub version: String,
 }
 
-impl ToString for CanonicalSpecifier {
-	fn to_string(&self) -> String {
-		format!("{}@{}", self.source, self.version)
+impl fmt::Display for CanonicalSpecifier {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(formatter, "{}@{}", self.source, self.version)
 	}
 }
 

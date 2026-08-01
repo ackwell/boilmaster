@@ -71,8 +71,8 @@ impl Source for ExdSchema {
 	fn version(&self, version: &str) -> Result<Box<dyn ironworks_schema::Schema + Send>> {
 		// TODO: This is stupid, but it works. Would be preferable to avoid needing
 		// to re-fetch the specifier at all.
-		let specifier = if version.starts_with("2:rev:") {
-			self.provider.specifier_v2_rev(&version[6..])?
+		let specifier = if let Some(revision) = version.strip_prefix("2:rev:") {
+			self.provider.specifier_v2_rev(revision)?
 		} else {
 			let (revision, game_version) = version.split_once('-').ok_or_else(|| {
 				Error::Failure(anyhow!("invalid canonical version string: \"{version}\""))

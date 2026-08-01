@@ -71,7 +71,7 @@ impl Provider {
 		// an implementation detail of the DB.
 		let mut grouped = HashMap::<VersionKey, Vec<Sheet<String>>>::new();
 		for (version, sheet) in sheets {
-			grouped.entry(version).or_insert_with(Vec::new).push(sheet);
+			grouped.entry(version).or_default().push(sheet);
 		}
 
 		let pending_ingestions = grouped
