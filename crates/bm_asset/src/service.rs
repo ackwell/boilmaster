@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
 use bm_version::VersionKey;
-use image::{ImageBuffer, Pixel, Rgb};
+use image::{GenericImageView, ImageBuffer, Pixel, Rgba};
 use ironworks::Ironworks;
 
 use super::{
@@ -37,17 +37,29 @@ impl Service {
 		converter.convert(&data_version, path, format)
 	}
 
-	pub fn map(&self, version: VersionKey, territory: &str, index: &str) -> Result<Vec<u8>> {
+	pub fn map(
+		&self,
+		version: VersionKey,
+		territory: &str,
+		index: &str,
+		format: Format,
+	) -> Result<Vec<u8>> {
 		let version = self
 			.data
 			.version(version)
 			.with_context(|| format!("data for {version} not ready"))?;
 
+		let output_format = match format {
+			Format::Jpeg => image::ImageFormat::Jpeg,
+			Format::Png => image::ImageFormat::Png,
+			Format::Webp => image::ImageFormat::WebP,
+		};
+
 		let ironworks = version.ironworks();
 
 		let image = self.compose_map(&ironworks, territory, index)?;
 
-		texture::write(image, image::ImageFormat::Jpeg)
+		texture::write(image, output_format)
 	}
 
 	fn compose_map(
@@ -55,26 +67,27 @@ impl Service {
 		ironworks: &Ironworks,
 		territory: &str,
 		index: &str,
-	) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
+	) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>> {
 		let path = format!("ui/map/{territory}/{index}/{territory}{index}");
-		let mut buffer_map = texture::read(ironworks, &format!("{path}_m.tex"))?.into_rgb8();
-
-		// NOTE: The presence of `m` alone is not enough to confirm that a map needs
-		// composition, ref. `f1h1/02`, which contains a fully pre-composed map, and
-		// a pure black `m`. To bodge around this, we're checking if the `d` texture
-		// is also present - if not, we shouldn't try composing.
-		match ironworks.file::<FileExists>(&format!("{path}d.tex")) {
-			Ok(_) => {}
-			Err(ironworks::Error::NotFound(ironworks::ErrorValue::Path(_))) => {
-				return Ok(buffer_map);
-			}
-			Err(error) => return Err(Error::Failure(error.into())),
-		}
+		let mut buffer_map = texture::read(ironworks, &format!("{path}_m.tex"))?.into_rgba8();
 
 		let buffer_background = match texture::read(ironworks, &format!("{path}m_m.tex")) {
 			// If the background texture wasn't found, we can assume the map texture is pre-composed.
 			Err(Error::NotFound(_)) => return Ok(buffer_map),
-			Ok(image) => image.into_rgb8(),
+			Ok(image) => {
+				// Some maps have a fully black & transparent `m` texture and are pre-composited.
+				// A pixel from the center of the texture is checked since some maps have a transparent border.
+				let dimensions = image.dimensions();
+				if image
+					.get_pixel(dimensions.0 / 2, dimensions.1 / 2)
+					.channels()
+					.iter()
+					.all(|c| *c == 0)
+				{
+					return Ok(buffer_map);
+				}
+				image.into_rgba8()
+			}
 			Err(error) => Err(error)?,
 		};
 
