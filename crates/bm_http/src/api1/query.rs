@@ -124,7 +124,7 @@ fn leaf(input: &str) -> ParseResult<query::Leaf> {
 				None => operation,
 				Some(array_field) => operation_relation(query::Node::Leaf(query::Leaf {
 					field: Some(array_field),
-					operation: operation,
+					operation,
 				})),
 			};
 

@@ -235,7 +235,7 @@ where
 			.fields
 			.or_else(|| config.fields.get(&schema_specifier.source).cloned())
 			.ok_or_else(|| anyhow!("missing default fields for {}", schema_specifier.source))?
-			.to_filter(language)?;
+			.into_filter(language)?;
 
 		let transient_string = query
 			.transient
@@ -244,7 +244,7 @@ where
 
 		let transient = match transient_string.is_empty() {
 			true => None,
-			false => Some(transient_string.to_filter(language)?),
+			false => Some(transient_string.into_filter(language)?),
 		};
 
 		let schema = schema_provider.schema(schema_specifier.clone())?;

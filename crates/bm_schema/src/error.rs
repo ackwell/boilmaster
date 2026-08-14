@@ -15,7 +15,7 @@ impl From<ironworks_schema::Error> for Error {
 		use ironworks_schema::Error as SE;
 		use ironworks_schema::ErrorValue as SEV;
 		match error {
-			SE::NotFound(SEV::Version(version)) => Error::InvalidVersion(version.into()),
+			SE::NotFound(SEV::Version(version)) => Error::InvalidVersion(version),
 			other => Error::Failure(other.into()),
 		}
 	}

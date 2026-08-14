@@ -197,7 +197,7 @@ impl<'a> Normalizer<'a> {
 		let field = fields
 			.iter()
 			// TODO: this is _really_ wasteful. see TODO in the utility file w/r/t sanitizing schema preemptively
-			.find(|field| &field::sanitize_name(&field.name) == field_name)
+			.find(|field| field::sanitize_name(&field.name) == field_name)
 			.ok_or_else(|| Error::QuerySchemaMismatch(context.mismatch("field does not exist")))?;
 
 		// Get the requested language, falling back to the contextual language. We

@@ -105,9 +105,9 @@ fn iter_language_references<'a>(
 	sheet: &'a str,
 ) -> impl Iterator<Item = (Alias, TableRef)> + 'a {
 	languages.into_iter().map(move |language| {
-		let alias = table_alias(&alias, language);
+		let alias = table_alias(alias, language);
 		let reference = TableRef::TableAlias(
-			DynIden::new(table_name(&sheet, language)),
+			DynIden::new(table_name(sheet, language)),
 			DynIden::new(alias.clone()),
 		);
 		(alias, reference)
@@ -215,16 +215,16 @@ fn resolve_group(group: post::Group, context: &ResolveContext) -> Result<Resolve
 		.unwrap_or_else(|| Expr::value(0));
 
 	// If we have a MUST conditional, scope the scoring to require the MUSTs match first.
-	if must.len() > 0 {
+	if !must.is_empty() {
 		score = Expr::case(must.clone(), score).finally(0).into();
 	}
 
 	// NOTE: we're only adding if c.len=0 here because any number of SHOULDs do not effect the _filtering_ of a query if there's 1 or more MUSTs - only the scoring. which i don't have any idea how to do. well, that's a lie. but still.
-	if should.len() > 0 && must.len() == 0 {
+	if !should.is_empty() && must.is_empty() {
 		must = must.add(should)
 	}
 
-	if must_not.len() > 0 {
+	if !must_not.is_empty() {
 		must = must.add(must_not)
 	}
 
@@ -241,7 +241,7 @@ fn resolve_leaf(leaf: post::Leaf, context: &ResolveContext) -> Result<ResolveRes
 
 	let (column_definition, language) = leaf.field;
 	let column_ref = (
-		table_alias(&context.alias, language),
+		table_alias(context.alias, language),
 		column_name(&column_definition),
 	)
 		.into_column_ref();

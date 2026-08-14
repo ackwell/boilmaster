@@ -60,32 +60,34 @@ impl Patcher {
 		let repository_directory = patch_path
 			.parent()
 			.expect("patches should always be within a folder");
-		fs::create_dir_all(&repository_directory)
+		fs::create_dir_all(repository_directory)
 			.with_context(|| format!("failed to create directory {repository_directory:?}"))?;
 
-		let mut patch_states = self.patch_states.lock().expect("poisoned");
+		// Workaround for https://github.com/rust-lang/rust-clippy/issues/6446
+		let channel = {
+			let mut patch_states = self.patch_states.lock().expect("poisoned");
 
-		let patch = match patch_states.get(&patch_path) {
-			// Patch is already known to be available.
-			Some(State::Available(patch)) => patch.clone(),
+			match patch_states.get(&patch_path) {
+				// Patch is already known to be available, shortcut out.
+				Some(State::Available(patch)) => return Ok(patch.clone()),
 
-			// Another task has taken ownership of this patch. Subscribe to the
-			// notification channel, then release the lock to allow other tasks to
-			// work while waiting for the go-ahead.
-			Some(State::Pending(rx)) => {
-				let mut receiver = rx.resubscribe();
-				drop(patch_states);
-				receiver.recv().await?
+				// Another task has taken ownership of this patch. Subscribe to the
+				// notification channel, then release the lock to allow other tasks to
+				// work while waiting for the go-ahead.
+				Some(State::Pending(rx)) => either::Left(rx.resubscribe()),
+
+				// Patch isn't yet known, take ownership for validating/obtaining the patch.
+				None => {
+					let (tx, rx) = broadcast::channel(1);
+					patch_states.insert(patch_path.clone(), State::Pending(rx));
+					either::Right(tx)
+				}
 			}
+		};
 
-			// Patch isn't yet known, take ownership for validating/obtaining the patch.
-			None => {
-				// Set up a notification channel in case any other channel is interested
-				// in this patch, then release lock while handling the patch itself.
-				let (tx, rx) = broadcast::channel(1);
-				patch_states.insert(patch_path.clone(), State::Pending(rx));
-				drop(patch_states);
-
+		let patch = match channel {
+			either::Left(mut rx) => rx.recv().await?,
+			either::Right(tx) => {
 				let patch = self
 					.maybe_download_patch(thaliak_patch, patch_path.clone())
 					.await?;

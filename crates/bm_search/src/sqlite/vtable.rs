@@ -88,7 +88,7 @@ unsafe impl<'vtab> vtab::VTab<'vtab> for IronworksTable {
 			.col(ColumnDef::new(KnownColumn::SubrowId).integer());
 
 		for column in sheet_data.columns().map_err(module_error)? {
-			table.col(&mut ColumnDef::new_with_type(
+			table.col(ColumnDef::new_with_type(
 				column_name(&column),
 				column_type(&column),
 			));
@@ -140,7 +140,7 @@ unsafe impl<'vtab> vtab::VTab<'vtab> for IronworksTable {
 	}
 }
 
-impl<'vtab> vtab::CreateVTab<'vtab> for IronworksTable {
+impl vtab::CreateVTab<'_> for IronworksTable {
 	const KIND: vtab::VTabKind = vtab::VTabKind::Default;
 }
 
@@ -263,10 +263,7 @@ unsafe impl vtab::VTabCursor for IronworksTableCursor<'_> {
 			return Err(module_error("iterator was not initialised before next"));
 		};
 
-		self.next = iterator
-			.next()
-			.transpose()
-			.map_err(|error| module_error(error))?;
+		self.next = iterator.next().transpose().map_err(module_error)?;
 
 		Ok(())
 	}

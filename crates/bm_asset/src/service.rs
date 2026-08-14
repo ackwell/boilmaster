@@ -69,9 +69,9 @@ impl Service {
 		index: &str,
 	) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>> {
 		let path = format!("ui/map/{territory}/{index}/{territory}{index}");
-		let mut buffer_map = texture::read(&ironworks, &format!("{path}_m.tex"))?.into_rgba8();
+		let mut buffer_map = texture::read(ironworks, &format!("{path}_m.tex"))?.into_rgba8();
 
-		let buffer_background = match texture::read(&ironworks, &format!("{path}m_m.tex")) {
+		let buffer_background = match texture::read(ironworks, &format!("{path}m_m.tex")) {
 			// If the background texture wasn't found, we can assume the map texture is pre-composed.
 			Err(Error::NotFound(_)) => return Ok(buffer_map),
 			Ok(image) => {

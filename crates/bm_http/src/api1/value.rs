@@ -183,9 +183,9 @@ impl ValueReference<'_> {
 	where
 		S: serde::Serializer,
 	{
-		let mut fields = fields.into_iter().collect::<Vec<_>>();
+		let mut fields = fields.iter().collect::<Vec<_>>();
 
-		fields.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+		fields.sort_unstable_by(|a, b| a.0.cmp(b.0));
 
 		let mut map = serializer.serialize_map(Some(fields.len()))?;
 		for (name, value) in fields {

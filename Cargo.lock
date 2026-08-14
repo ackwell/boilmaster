@@ -411,6 +411,7 @@ name = "bm_version"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "either",
  "figment",
  "fs4",
  "futures",
