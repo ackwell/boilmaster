@@ -11,7 +11,7 @@ use figment::value::magic::RelativePathBuf;
 use serde::Deserialize;
 use tokio::sync::{Semaphore, broadcast};
 
-use super::{thaliak2, version};
+use super::{thaliak, version};
 
 enum State {
 	Pending(broadcast::Receiver<version::Patch>),
@@ -52,7 +52,7 @@ impl Patcher {
 	pub async fn to_local_patch(
 		&self,
 		repository: &str,
-		thaliak_patch: thaliak2::Patch,
+		thaliak_patch: thaliak::Patch,
 	) -> Result<version::Patch> {
 		let patch_path = self.patch_path(repository, &thaliak_patch.name);
 
@@ -110,7 +110,7 @@ impl Patcher {
 
 	async fn maybe_download_patch(
 		&self,
-		thaliak_patch: thaliak2::Patch,
+		thaliak_patch: thaliak::Patch,
 		patch_path: PathBuf,
 	) -> Result<version::Patch> {
 		let patch_name = thaliak_patch.name.clone();
@@ -137,7 +137,7 @@ impl Patcher {
 		Ok(patch)
 	}
 
-	fn should_fetch_patch(&self, patch: &thaliak2::Patch, path: &Path) -> Result<bool> {
+	fn should_fetch_patch(&self, patch: &thaliak::Patch, path: &Path) -> Result<bool> {
 		// If the file doesn't exist, we'll need to download it.
 		let metadata = match path.metadata() {
 			Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(true),
@@ -166,7 +166,7 @@ impl Patcher {
 }
 
 #[tracing::instrument(level = "info", skip_all, fields(url = patch.url))]
-async fn fetch_patch(client: reqwest::Client, patch: &thaliak2::Patch, path: &Path) -> Result<()> {
+async fn fetch_patch(client: reqwest::Client, patch: &thaliak::Patch, path: &Path) -> Result<()> {
 	tracing::info!("fetching patch");
 
 	// Create the target file before opening any connections.
