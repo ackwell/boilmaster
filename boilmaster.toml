@@ -63,6 +63,9 @@ f29a3eb2 = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000e" }
 859d0e24 = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000g" }
 1bf99b87 = { "2024.05.31.0000.0000" = "H2024.05.31.0000.0000i" }
 
+[version.thaliak2]
+base = "https://thaliak.xiv.dev/api/v2beta"
+
 [version.patch]
 directory = "patches"
 concurrency = 4

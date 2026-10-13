@@ -2,6 +2,7 @@ mod key;
 mod manager;
 mod patcher;
 mod thaliak;
+mod thaliak2;
 mod version;
 
 pub use {
