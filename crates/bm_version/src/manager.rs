@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
 	key::VersionKey,
-	patcher, thaliak, thaliak2,
+	patcher, thaliak2,
 	version::{Repository, Version},
 };
 
@@ -26,7 +26,6 @@ const TAG_LATEST: &str = "latest";
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-	thaliak: thaliak::Config,
 	thaliak2: thaliak2::Config,
 	patch: patcher::Config,
 
@@ -50,7 +49,6 @@ pub enum VersionMessage {
 }
 
 pub struct Manager {
-	thaliak: thaliak::Provider,
 	thaliak2: thaliak2::Provider,
 	patcher: patcher::Patcher,
 
@@ -76,7 +74,6 @@ impl Manager {
 		let (sender, _receiver) = broadcast::channel(10);
 
 		Ok(Self {
-			thaliak: thaliak::Provider::new(config.thaliak),
 			thaliak2: thaliak2::Provider::new(config.thaliak2),
 			patcher: patcher::Patcher::new(config.patch),
 
@@ -276,7 +273,7 @@ impl Manager {
 
 	async fn fetch_repository(&self, repository: &str) -> Result<Repository> {
 		// a failure to fetch the patch list for a repo is pretty unrecoverable i think?
-		let patch_list = self.thaliak.patch_list(repository.to_string()).await?;
+		let patch_list = self.thaliak2.patch_list(repository).await?;
 
 		// todo: is a failure here meaningful? i imagine retries and so on should be done at the patcher
 		// note: would use nonempty::map but i need asyncnessnessness
