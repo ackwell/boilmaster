@@ -13,7 +13,11 @@ use fs4::fs_std::FileExt;
 use futures::future::{join_all, try_join_all};
 use nonempty::NonEmpty;
 use serde::{Deserialize, Serialize};
-use tokio::{select, sync::broadcast, time};
+use tokio::{
+	select,
+	sync::{Semaphore, broadcast},
+	time,
+};
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -52,14 +56,16 @@ pub enum VersionMessage {
 }
 
 pub struct Manager {
-	default_source: source::Source,
 	thaliak: thaliak::Thaliak,
 	thaliak2: thaliak2::Thaliak2,
 	patcher: patcher::Patcher,
 
+	default_source: source::Source,
 	update_interval: u64,
 	directory: PathBuf,
 	repositories: Vec<String>,
+
+	update_semaphore: Semaphore,
 
 	versions: RwLock<HashMap<VersionKey, Version>>,
 	names: RwLock<HashMap<String, VersionKey>>,
@@ -79,14 +85,17 @@ impl Manager {
 		let (sender, _receiver) = broadcast::channel(10);
 
 		Ok(Self {
-			default_source: config.source,
 			thaliak: thaliak::Thaliak::new(config.thaliak),
 			thaliak2: thaliak2::Thaliak2::new(config.thaliak2),
 			patcher: patcher::Patcher::new(config.patch),
 
+			default_source: config.source,
 			update_interval: config.interval,
 			directory,
 			repositories: config.repositories,
+
+			// Running >1 update at once risks a race.
+			update_semaphore: Semaphore::new(1),
 
 			versions: Default::default(),
 			names: Default::default(),
@@ -181,14 +190,6 @@ impl Manager {
 		self.versions.read().expect("poisoned").get(&key).cloned()
 	}
 
-	pub async fn test_thaliak2(&self) -> Result<Vec<NonEmpty<source::Patch>>> {
-		let pending_lists = self
-			.repositories
-			.iter()
-			.map(|repository| self.thaliak2.patch_list(repository));
-		try_join_all(pending_lists).await
-	}
-
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
 		select! {
 			result = self.start_inner() => result,
@@ -213,9 +214,14 @@ impl Manager {
 		}
 	}
 
-	// TODO: There should only be one update pass running at a time - two would result in races.
 	#[tracing::instrument(skip(self))]
-	async fn update(&self, source: source::Source) -> Result<()> {
+	pub async fn update(&self, source: source::Source) -> Result<()> {
+		let permit = self
+			.update_semaphore
+			.acquire()
+			.await
+			.expect("semaphore should not be closed");
+
 		tracing::info!("checking for version updates");
 
 		// Get a fresh view of the repositories.
@@ -259,6 +265,7 @@ impl Manager {
 
 		// If there hasn't been any changes from this update, skip running updates beyond this point.
 		if !changed {
+			tracing::debug!("no version changes");
 			return Ok(());
 		}
 
@@ -283,6 +290,8 @@ impl Manager {
 		// There's a change to versions, broadcast as such.
 		// We don't care if anyone is actually listening on the channel.
 		let _ = self.channel.send(VersionMessage::Changed(key));
+
+		drop(permit);
 
 		Ok(())
 	}

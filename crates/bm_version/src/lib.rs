@@ -9,5 +9,6 @@ mod version;
 pub use {
 	key::VersionKey,
 	manager::{Config, Manager, VersionMessage},
+	source::Source as VersionSource,
 	version::{Patch, Repository, Version},
 };

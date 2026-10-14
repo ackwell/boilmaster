@@ -1,11 +1,11 @@
 use anyhow::Context;
 use axum::{
 	Router, debug_handler,
-	extract::{OriginalUri, State},
-	response::IntoResponse,
+	extract::{NestedPath, OriginalUri, Path, State},
+	response::{IntoResponse, Redirect},
 	routing::get,
 };
-use bm_version::VersionKey;
+use bm_version::{VersionKey, VersionSource};
 use maud::{Render, html};
 
 use crate::{http::HttpState, service::Service};
@@ -13,7 +13,10 @@ use crate::{http::HttpState, service::Service};
 use super::{base::BaseTemplate, error::Result};
 
 pub fn router(state: HttpState) -> Router {
-	Router::new().route("/", get(versions).with_state(state))
+	Router::new()
+		.route("/", get(versions))
+		.route("/update/{source}", get(update))
+		.with_state(state)
 }
 
 struct VersionInfo {
@@ -59,6 +62,14 @@ async fn versions(
 	Ok((BaseTemplate {
 		title: "versions".to_string(),
 		content: html! {
+			details.dropdown {
+				summary.outline role="button" { "Update" }
+				ul {
+					li { a href={ (uri) "/update/thaliak" } { "Thaliak v1" } }
+					li { a href={ (uri) "/update/thaliak2" } { "Thaliak v2" } }
+				}
+			}
+
 			table.striped {
 				thead {
 					tr {
@@ -101,4 +112,21 @@ async fn versions(
 		},
 	})
 	.render())
+}
+
+#[debug_handler(state = HttpState)]
+async fn update(
+	nested_path: NestedPath,
+	Path(version_source): Path<VersionSource>,
+	State(Service {
+		version: version_service,
+		..
+	}): State<Service>,
+) -> Result<impl IntoResponse> {
+	version_service
+		.update(version_source)
+		.await
+		.context("update failed")?;
+
+	Ok(Redirect::to(nested_path.as_str()))
 }
