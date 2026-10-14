@@ -177,6 +177,14 @@ impl Manager {
 		self.versions.read().expect("poisoned").get(&key).cloned()
 	}
 
+	pub async fn test_thaliak2(&self) -> Result<Vec<NonEmpty<thaliak2::Patch>>> {
+		let pending_lists = self
+			.repositories
+			.iter()
+			.map(|repository| self.thaliak2.patch_list(repository));
+		try_join_all(pending_lists).await
+	}
+
 	pub async fn start(&self, cancel: CancellationToken) -> Result<()> {
 		select! {
 			result = self.start_inner() => result,
