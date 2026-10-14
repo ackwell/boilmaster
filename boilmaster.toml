@@ -50,6 +50,7 @@ repositories = [
   "1bf99b87", # ex4 (ew)
   "6cfeab11", # ex5 (dt)
 ]
+source = "thaliak"
 
 [version.thaliak]
 endpoint = "https://thaliak.xiv.dev/graphql/2022-08-14"

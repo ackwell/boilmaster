@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
 	key::VersionKey,
-	patcher, thaliak, thaliak2,
+	patcher, source, thaliak, thaliak2,
 	version::{Repository, Version},
 };
 
@@ -26,6 +26,8 @@ const TAG_LATEST: &str = "latest";
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+	source: source::Source,
+
 	thaliak: thaliak::Config,
 	thaliak2: thaliak2::Config,
 	patch: patcher::Config,
@@ -50,8 +52,9 @@ pub enum VersionMessage {
 }
 
 pub struct Manager {
-	thaliak: thaliak::Provider,
-	thaliak2: thaliak2::Provider,
+	default_source: source::Source,
+	thaliak: thaliak::Thaliak,
+	thaliak2: thaliak2::Thaliak2,
 	patcher: patcher::Patcher,
 
 	update_interval: u64,
@@ -76,8 +79,9 @@ impl Manager {
 		let (sender, _receiver) = broadcast::channel(10);
 
 		Ok(Self {
-			thaliak: thaliak::Provider::new(config.thaliak),
-			thaliak2: thaliak2::Provider::new(config.thaliak2),
+			default_source: config.source,
+			thaliak: thaliak::Thaliak::new(config.thaliak),
+			thaliak2: thaliak2::Thaliak2::new(config.thaliak2),
 			patcher: patcher::Patcher::new(config.patch),
 
 			update_interval: config.interval,
@@ -177,7 +181,7 @@ impl Manager {
 		self.versions.read().expect("poisoned").get(&key).cloned()
 	}
 
-	pub async fn test_thaliak2(&self) -> Result<Vec<NonEmpty<thaliak2::Patch>>> {
+	pub async fn test_thaliak2(&self) -> Result<Vec<NonEmpty<source::Patch>>> {
 		let pending_lists = self
 			.repositories
 			.iter()
@@ -203,21 +207,22 @@ impl Manager {
 		loop {
 			interval.tick().await;
 
-			if let Err(error) = self.update().await {
+			if let Err(error) = self.update(self.default_source).await {
 				tracing::error!(?error, "update failed");
 			}
 		}
 	}
 
 	// TODO: There should only be one update pass running at a time - two would result in races.
-	async fn update(&self) -> Result<()> {
+	#[tracing::instrument(skip(self))]
+	async fn update(&self, source: source::Source) -> Result<()> {
 		tracing::info!("checking for version updates");
 
 		// Get a fresh view of the repositories.
 		let pending_repositories = self
 			.repositories
 			.iter()
-			.map(|repository| self.fetch_repository(repository));
+			.map(|repository| self.fetch_repository(source, repository));
 		let repositories = try_join_all(pending_repositories).await?;
 
 		// Build a version struct and it's associated key and save it to the versions map.
@@ -282,9 +287,16 @@ impl Manager {
 		Ok(())
 	}
 
-	async fn fetch_repository(&self, repository: &str) -> Result<Repository> {
+	async fn fetch_repository(
+		&self,
+		source: source::Source,
+		repository: &str,
+	) -> Result<Repository> {
 		// a failure to fetch the patch list for a repo is pretty unrecoverable i think?
-		let patch_list = self.thaliak.patch_list(repository.to_string()).await?;
+		let patch_list = match source {
+			source::Source::Thaliak => self.thaliak.patch_list(repository).await?,
+			source::Source::Thaliak2 => self.thaliak2.patch_list(repository).await?,
+		};
 
 		// todo: is a failure here meaningful? i imagine retries and so on should be done at the patcher
 		// note: would use nonempty::map but i need asyncnessnessness

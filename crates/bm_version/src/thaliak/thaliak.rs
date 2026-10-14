@@ -5,13 +5,7 @@ use graphql_client::{GraphQLQuery, Response};
 use nonempty::NonEmpty;
 use serde::Deserialize;
 
-#[derive(Debug)]
-pub struct Patch {
-	pub name: String,
-	pub url: String,
-	pub size: u64,
-	// TODO: hashes (needs fixes @ thaliak)
-}
+use crate::source;
 
 // TODO: As-is this query can only fetch one repository per request. May be possible to programatically merge multiple into one query with a more struct-driven query system like cynic.
 #[derive(GraphQLQuery)]
@@ -29,13 +23,13 @@ pub struct Config {
 	overrides: Option<HashMap<String, HashMap<String, String>>>,
 }
 
-pub struct Provider {
+pub struct Thaliak {
 	endpoint: String,
 	overrides: HashMap<String, HashMap<String, String>>,
 	client: reqwest::Client,
 }
 
-impl Provider {
+impl Thaliak {
 	pub fn new(config: Config) -> Self {
 		Self {
 			endpoint: config.endpoint,
@@ -45,9 +39,9 @@ impl Provider {
 	}
 
 	#[tracing::instrument(level = "debug", skip(self))]
-	pub async fn patch_list(&self, repository: String) -> Result<NonEmpty<Patch>> {
+	pub async fn patch_list(&self, repository: &str) -> Result<NonEmpty<source::Patch>> {
 		let query = RepositoryQuery::build_query(repository_query::Variables {
-			repository: repository.clone(),
+			repository: repository.to_string(),
 		});
 
 		let response = self
@@ -75,7 +69,7 @@ impl Provider {
 			.map(|version| (&version.version_string, version))
 			.collect::<HashMap<_, _>>();
 
-		let overrides = self.overrides.get(&repository);
+		let overrides = self.overrides.get(repository);
 
 		// TODO: this next_version handling effectively results in erroneous links causing empty or partial patch lists. consider if that's a problem. (it is)
 		let mut patches = vec![];
@@ -93,7 +87,7 @@ impl Provider {
 			};
 
 			// Record this patch.
-			patches.push(Patch {
+			patches.push(source::Patch {
 				name: version.version_string.clone(),
 				url: patch.url.clone(),
 				size: patch.size.try_into().unwrap(),

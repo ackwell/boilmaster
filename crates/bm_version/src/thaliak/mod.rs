@@ -1,3 +1,3 @@
-mod provider;
+mod thaliak;
 
-pub use provider::{Config, Patch, Provider};
+pub use thaliak::{Config, Thaliak};

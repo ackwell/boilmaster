@@ -1,6 +1,7 @@
 mod key;
 mod manager;
 mod patcher;
+mod source;
 mod thaliak;
 mod thaliak2;
 mod version;
